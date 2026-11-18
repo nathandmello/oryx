@@ -1,0 +1,78 @@
+# Git and GitHub operations
+
+The outer checkout is the shared system repository. `workspace/` is an independent private repository, ignored by the system.
+
+Keep each repository's history, branches, staging area, and remotes separate. Open the outer directory in Codex or Claude.
+
+## Choose the repository
+
+| Request | Target |
+| --- | --- |
+| Save, commit, sync, pull, or push my PM work | `workspace` |
+| Update the toolkit, system, skills, or templates | `system` |
+| Contribute a shared system improvement | `system`, on a contribution branch |
+| Check for system updates | `system fetch`; review before a pull |
+
+Interpret an unqualified save, sync, or push as private workspace work. If only system changes exist, report that and clarify the target.
+
+For mixed changes, keep commits separate. Authorisation for one target does not authorise the other.
+
+## Inspect and save
+
+Run `python3 tools/pm.py git workspace status` and `python3 tools/pm.py git system status` before a save or synchronisation.
+
+Read `workspace/settings.json`. Verify the actual Git root, branch, changed files, staged changes, and fetch and push URLs.
+
+Stage explicit paths with `git -C workspace add -- <paths>` for PM work. Use the outer root for system changes.
+
+Review the staged diff, then commit in that same repository. Preserve unrelated edits. Run the relevant checks before a commit.
+
+An instruction to commit authorises that commit. A push or sync instruction authorises its stated remote operation; retain other session limits.
+
+Report which repository was committed or synchronised and which changes remain local.
+
+## Connect a remote
+
+A fresh setup has no remotes. Obtain the intended owner, repository name, and visibility from the PM before external creation.
+
+Use an authorised GitHub connection to create or inspect the repository. The PM workspace destination must be private.
+
+Configure `origin` in the selected repository. Verify visibility and access before any private data push.
+
+Record the confirmed URL under `remotes.system` or `remotes.workspace` in private settings. Keep credentials in the credential manager.
+
+The destinations must differ. Match the remote URL to its confirmed setting before every network operation.
+
+Pass an explicit owner and repository to GitHub tools and CLI commands. Derive them from the confirmed target, never the current directory.
+
+Shared pull requests use system contribution branches. Private PM work remains in its private repository.
+
+## Pull and push
+
+Use `python3 tools/pm.py git <system|workspace> <fetch|pull|push>` for normal network operations.
+
+The wrapper verifies the repository and origin. It stops for missing settings, mismatched destinations, ambiguous tracking, or dirty files before pull or push.
+
+Push sends the current branch to the same branch on the confirmed origin. It does not push tags or other branches.
+
+Pull fetches that branch and permits a fast-forward update. Divergent branches need a reviewed reconciliation; keep the existing history.
+
+A system pull checks format compatibility first, then updates the private version setting. Save that settings change in the workspace when requested.
+
+A workspace pull stops if incoming settings change the required system version or expected destinations. Review the matching system release or remote change.
+
+Commit, merge, release, repository creation, publication, and changes to remotes remain subject to the PM's actual instruction.
+
+Never infer permission for force pushes, mirrors, bulk pushes, deletion, or history rewrites. Review those requests separately.
+
+## Boundaries and recovery
+
+Keep PM data, personal settings, and real customer examples inside the private workspace. Shared tests use fictional data.
+
+The checker rejects tracked `workspace/` entries, including Git links, in the system index. Ignore rules alone do not remove tracked files.
+
+Use explicit private paths when the agent searches or checks PM work. Root Git commands omit ignored records.
+
+Record system and workspace format versions together. Structural changes need a tested migration and a recovery point in the private repository.
+
+Keep migrations small. Add one when an actual format change needs it. Hook checks never fetch, pull, push, or migrate.

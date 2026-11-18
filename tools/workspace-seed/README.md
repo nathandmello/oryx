@@ -1,0 +1,11 @@
+# Private PM workspace
+
+This directory has its own Git history and private remote. The containing system repository ignores it.
+
+Open the containing PM Hub directory in Codex or Claude. Read its [constitution](../../AGENTS.md) and [Git rules](../../playbook/git.md).
+
+Read `settings.json` for the owner, delivery system, release, format, and expected remotes. Personal settings stay here.
+
+Company context, product context, and strategy remain uncaptured. Start those activities in separate sessions, in that order.
+
+Use [context](context/README.md) for the organisation and [products](products/README.md) for product work.
