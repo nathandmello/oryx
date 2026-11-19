@@ -17,7 +17,8 @@
     "unit": "Effort unit",
     "trade_off": "Trade-off",
     "planning_record": "Planning record",
-    "delivery": "Delivery reference"
+    "delivery": "Delivery reference",
+    "evidence_reviews": "Evidence review"
   },
   "sources": [
     "https://www.gov.uk/service-manual/agile-delivery/developing-a-roadmap",

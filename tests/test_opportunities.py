@@ -119,6 +119,12 @@ class InitiativeTests(unittest.TestCase):
         return {"type": "decision", "initiative": identifier or self.i, "action": action, "on": self.today,
                 "reason": "The PM confirmed the trade-off.", "source": "Product review notes", **values}
 
+    def ship_without_checklist(self, **values):
+        return self.decision("ship", review_on=self.today, exceptions={
+            "missing:checklist": {"authority": "Fixture incident PM",
+                                  "reason": "The incident commander verified rollback during the emergency drill."}
+        }, **values)
+
     def metric(self):
         return {"type": "metric", "metric": "renewal-rate", "name": "On-time renewal rate",
                 "definition": "Renewals on schedule divided by eligible renewals", "unit": "percent",
@@ -264,7 +270,7 @@ class InitiativeTests(unittest.TestCase):
         measure = {"type": "measurement", "initiative": self.i, "measurement": "release-review",
                    "metric": "renewal-rate", "value": "87 percent", "observed_on": self.today, "source": "Dashboard"}
         self.preview(measure, error="follow the verified release")
-        self.submit(self.decision("start-delivery", delivery=delivery), self.decision("ship", review_on=self.today), measure)
+        self.submit(self.decision("start-delivery", delivery=delivery), self.ship_without_checklist(), measure)
         report = self.trace()
         item = report["initiative"]
         self.assertEqual(item["id"], self.i)
@@ -567,7 +573,7 @@ class InitiativeTests(unittest.TestCase):
         self.cli("check", error="differs from the reviewed revision")
         self.cli("roadmap", error="differs from the reviewed revision")
         self.preview(self.decision("start-delivery", delivery="https://example.com/one"),
-                     self.decision("ship", review_on=self.today), error="differs from the reviewed revision")
+                     self.ship_without_checklist(), error="differs from the reviewed revision")
         self.assertTrue(self.trace()["review_issues"])
         self.submit(self.decision("reopen"))
         self.assertEqual(self.trace()["initiative"]["phase"], "under consideration")
@@ -755,7 +761,7 @@ class InitiativeTests(unittest.TestCase):
         self.apply(proposal)
         self.assertEqual(self.trace()["initiative"]["phase"], "delivery")
         self.assertEqual(json.loads(self.cli("roadmap")), [])
-        self.submit(self.decision("ship", review_on=self.today))
+        self.submit(self.ship_without_checklist())
         self.cli("check")
 
     def test_system_check_catches_drift_in_sourced_view_template(self):

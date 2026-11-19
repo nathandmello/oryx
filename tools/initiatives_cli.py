@@ -4,12 +4,13 @@ import json
 import sys
 
 from initiative_events import (DECISION_FIELDS, EVALUATION_FIELDS, FIELDS, HORIZONS, OPTIONAL_FIELDS,
-                               OUTCOME_STATUSES, PHASES, RESULTS, RISKS, TRANSITIONS)
+                               OUTCOME_STATUSES, PHASES, RESULTS, RISKS, SIGNAL_ACTIONS, SIGNAL_IMPACTS, TRANSITIONS)
 import experiment_drafts
 import initiative_areas
 import storage
 import initiative_store
 import initiative_views
+import metric_registry
 import workspace
 
 
@@ -55,7 +56,18 @@ def run(root, args):
             "optional_fields_by_type": OPTIONAL_FIELDS,
             "registry_metric": "Use type metric and its registry ID. For a revised snapshot, use a new metric ID plus registry_metric.",
             "intake_review": "Proposals compare new IDs against this product's history. The PM confirms distinct captures at apply.",
+            "signal_review": "Review new evidence against the active signed plan. Use the source locator as signal and quote the affected claim.",
             "extra_fields_by_decision": DECISION_FIELDS,
+            "ship_exceptions": "Optional object keyed by outstanding readiness ID. Each entry needs reason and authority. Review the generated readiness snapshot before signing.",
+            "outcome_evidence": {
+                "guardrail": "Safe bound by metric, unit, population, window basis and effective_on. Use lt, lte, gt or gte.",
+                "adopted_from": "For a historical threshold provide the original target metric ID, on date and source.",
+                "observation": "Supply definition reference, unit, population, basis, timezone, start, exclusive end, complete and source. Supply ratio inputs when applicable.",
+                "value": "Use a numeric value in the declared unit with an observation. Use decimal strings for exact figures.",
+                "correct-measurement": "Give the active measurement ID, reason, source and optional comparable replacement ID. Cite comparison_source for a legacy reading.",
+                "guardrail_dispositions": "On review-outcomes, give each breached or unavailable guardrail ID and the PM's disposition.",
+                "recorded_on": "The Hub supplies the date of signing for new evidence transactions.",
+            },
             "evaluation_fields": EVALUATION_FIELDS,
             "target_review_fields": {
                 "status": "PM judgment using an allowed outcome status",
@@ -65,8 +77,12 @@ def run(root, args):
             "transitions": {action: {"from": sorted(start), "to": end} for action, (start, end) in TRANSITIONS.items()},
             "horizons": HORIZONS,
             "allowed_values": {"risk": RISKS, "conclusion": RESULTS, "horizon": HORIZONS,
-                               "transition": sorted(TRANSITIONS), "outcome status": OUTCOME_STATUSES},
+                               "window": metric_registry.REPORTING_WINDOWS, "transition": sorted(TRANSITIONS), "outcome status": OUTCOME_STATUSES,
+                               "signal impact": SIGNAL_IMPACTS, "signal action": SIGNAL_ACTIONS},
             "formats": {
+                "object": "JSON object with the fields specified for its transaction",
+                "number": "finite numeric value in the signed unit; use a decimal string to preserve precision",
+                "bound": "lt or lte for a safe upper limit; gt or gte for a safe lower limit",
                 "target reviews": "object keyed by every initiative target metric ID, using target_review_fields; empty for a release without targets",
                 "review follow-up": "null to close, or an object with on (date) and action (text); required for pending outcomes",
                 "initiative ID": "registered product context ID, a slash, and an initiative slug",
@@ -79,6 +95,7 @@ def run(root, args):
                 "positive": "integer greater than zero", "count": "nonnegative integer",
                 "confidence": "integer from 0 to 10", "URL": "absolute HTTPS URL without credentials",
                 "path": "workspace-relative path", "text": "concrete single-line text without placeholders",
+                "optional text": "concrete single-line text or null",
             },
         }, indent=2))
         return
@@ -95,9 +112,9 @@ def run(root, args):
                 if "issue" in info:
                     raise ValueError(info["issue"])
         if args.command == "backlog":
-            rows = initiative_views.backlog(registers, args.phase, args.due, args.all_phases, area=area)
+            rows = initiative_views.backlog(registers, args.phase, args.due, args.all_phases, area=area, private=private)
         else:
-            rows = initiative_views.roadmap(registers, args.cycle, area=area)
+            rows = initiative_views.roadmap(registers, args.cycle, area=area, private=private)
     elif args.operation == "show":
         _, register = next(initiative_store.registrations(root, args.product))
         result = initiative_views.trace(args.product, register, args.id, private=private)

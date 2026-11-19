@@ -97,8 +97,12 @@
       "summary": "Compare roadmap candidates and prepare a capacity decision.",
       "guide": ".agents/skills/prioritize-roadmap/SKILL.md"
     },
+    "delivery launch review": {
+      "summary": "Review launch readiness, withdrawn evidence, waivers, and exceptions before a ship decision.",
+      "guide": ".agents/skills/manage-initiative-work/SKILL.md"
+    },
     "delivery outcome review": {
-      "summary": "Review measured outcomes from a shipped initiative and prepare a follow-up decision.",
+      "summary": "Review shipped outcomes, guardrail breaches and corrected readings. Prepare the PM's decision.",
       "guide": "playbook/initiative-approvals.md"
     },
     "review artifact critique": {

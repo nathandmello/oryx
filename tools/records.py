@@ -22,8 +22,9 @@ MARKER = re.compile(r"\A<!-- pm: ([a-z-]+) -->\n")
 PLACEHOLDER = re.compile(r"\{\{[^{}]+\}\}")
 CONTEXT_FIELDS = ("Parent context", "Maintainer", "Last reviewed", "Review by", "Review triggers")
 SOURCE_COLUMNS = ("ID", "Source", "Source date", "Checked on")
+SOURCE_COVERAGE = re.compile(r"(?m)^<!-- source-coverage:(S[1-9]\d*):(partial|read):(\d{4}-\d{2}-\d{2}) -->$")
 CONTEXT_METADATA = {"Context controls", "Sources", "Work state"}
-CONTEXT_RESERVED_SECTIONS = CONTEXT_METADATA | {"Filing"}
+CONTEXT_RESERVED_SECTIONS = CONTEXT_METADATA | {"Filing", "Evidence review history"}
 SHARED_TOPICS = {
     "vocabulary": "Vocabulary",
     "decisions": "Decisions already closed",
@@ -201,6 +202,8 @@ def heading_order(kind, template):
     order = [name for name, *_ in section_blocks(template)]
     if kind in ("context-note", "product-area-context") and "Context controls" in order:
         order.insert(order.index("Context controls"), "Filing")
+    if kind in CONTEXT_KINDS and "Context controls" in order:
+        order.insert(order.index("Context controls"), "Evidence review history")
     if kind == "product-context":
         for topic, old in LEGACY_PRODUCT_TOPICS.items():
             current = CONTEXT_TOPICS["product"][topic]
@@ -575,6 +578,12 @@ def validate(texts, *, legacy_structure=()):
             errors.append(f"{path}: missing section: {missing}")
         identifier, problems = state_errors(text)
         if kind in CONTEXT_KINDS:
+            if "Evidence review history" in sections:
+                import evidence_reviews
+                try:
+                    evidence_reviews.history(text)
+                except (TypeError, ValueError) as exc:
+                    problems.append(f"Invalid evidence review history: {exc}")
             # Older versions allowed custom prose outside the standard sections.
             # Apply the entry contract when a custom section adopts a lead.
             extra, parent = context_errors(path, text, kind, texts, context_content(kind, text))

@@ -46,7 +46,7 @@ def main():
         with local_ui.make_server(app) as server:
             print(json.dumps({
                 "url": f"{server.origin}/#{server.token}", "root": str(fixture.root),
-                "signers": os.environ["PM_HUB_ALLOWED_SIGNERS"], "today": fixture.today,
+                "signers": os.environ["PM_HUB_ALLOWED_SIGNERS"], "fixtureKey": str(fixture.key), "today": fixture.today,
             }), flush=True)
             server.serve_forever()
     except KeyboardInterrupt:
