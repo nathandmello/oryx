@@ -511,6 +511,20 @@ function workItems(list, command) {
   return command === "task" ? list.tasks : list.checkpoints;
 }
 
+function readinessReasons(reviews) {
+  if (!reviews.length) return null;
+  return node("ul", { class: "readiness-reasons" }, reviews.map(({ title, reasons }) =>
+    node("li", {}, title && node("strong", {}, title), reasons.map(reason => node("p", { class: "small" }, reason)))));
+}
+
+function checklistWarnings(list) {
+  return Object.entries(list.outstanding).map(([key, reasons]) => {
+    const [kind, id] = key.split(":");
+    const check = list.checkpoints.find(item => item.id === id);
+    return { title: kind === "missing" ? null : check?.title || id, reasons };
+  });
+}
+
 function workScreen() {
   const command = state.screen;
   const task = command === "task";
@@ -541,8 +555,10 @@ function workScreen() {
   }
   if (!task) {
     const ready = list.launch_readiness === "ready for launch decision";
-    app.append(node("section", { class: "panel panel-heading", "aria-label": "Launch readiness" },
-      node("h2", {}, "Launch readiness"), badge(list.launch_readiness, ready ? "done" : "pending")));
+    app.append(node("section", { class: "panel", "aria-label": "Launch readiness" },
+      node("div", { class: "panel-heading" }, node("h2", {}, "Launch readiness"),
+        badge(list.launch_readiness, ready ? "done" : "pending")),
+      readinessReasons(checklistWarnings(list))));
   }
   const output = node("section", { class: "rows", "aria-label": screenNames[command] });
   function updateList() {
@@ -558,8 +574,9 @@ function workScreen() {
       return node("article", { class: "row" },
         node("div", {}, node("h3", {}, row.title), node("p", { class: "muted small" }, caption),
           node("p", {}, row.completion_criteria || row.criterion),
-          [row.blocked_reason, dependency, supporting, evidence].filter(Boolean).map(value => node("p", { class: "muted small" }, value))),
-        badge(row.status), button("Edit", () => workEditor(row), "compact", { "aria-label": "Edit " + row.title }));
+          [row.blocked_reason, dependency, supporting, evidence].filter(Boolean).map(value => node("p", { class: "muted small" }, value)),
+          row.launch_reviews && node("div", {}, node("strong", {}, "Launch checks to review"), readinessReasons(row.launch_reviews))),
+        row.status === "verified" && row.review_issues?.length ? badge("verification needs review", "pending") : badge(row.status), button("Edit", () => workEditor(row), "compact", { "aria-label": "Edit " + row.title }));
     }) : [node("p", { class: "empty" }, query ? "No matching items." : task ? "No tasks yet." : "No checks yet.")]));
   }
   filter.addEventListener("input", () => { state.filter = filter.value; updateList(); });
@@ -616,6 +633,11 @@ function workEditor(row = null) {
   const evidence = input(row?.verification?.evidence);
   const verifier = input(row?.verification?.by);
   const verifiedOn = input(row?.verification?.on, { type: "date" });
+  const savedBasis = row?.verification?.basis_tasks;
+  const basis = select([["all", "All supporting tasks"], ["selected", "Selected supporting tasks"],
+    ["independent", "Independent evidence"]], savedBasis === undefined ? "all" : savedBasis.length ? "selected" : "independent");
+  const basisIds = input(savedBasis?.join(", "), { placeholder: "task-id, another-task-id" });
+  const namedBasis = label("Verification task IDs", basisIds, true);
   const waiver = input(row?.waiver?.reason);
   const approver = input(row?.waiver?.by);
   const waivedOn = input(row?.waiver?.on, { type: "date" });
@@ -624,7 +646,8 @@ function workEditor(row = null) {
     ...(task ? {
       done: [label("Resolution", resolution, true)],
     } : {
-      verified: [label("Verification evidence", evidence, true), label("Verified by", verifier), label("Verified on", verifiedOn)],
+      verified: [label("Verification evidence", evidence, true), label("Verified by", verifier), label("Verified on", verifiedOn),
+        label("Evidence basis", basis), namedBasis],
       waived: [label("Waiver reason", waiver, true), label("Approved by", approver), label("Approved on", waivedOn)],
     }),
   };
@@ -644,8 +667,11 @@ function workEditor(row = null) {
         field.lastChild.required = visible;
       }
     }
+    namedBasis.hidden = task || status.value !== "verified" || basis.value !== "selected";
+    basisIds.required = !namedBasis.hidden;
     owner.required = ["done", "verified"].includes(status.value);
   }
+  basis.addEventListener("change", update);
   status.addEventListener("change", update);
   update();
   const dialog = modal(row ? "Edit " + row.title : task ? "Add task" : "Add check", form, [
@@ -681,7 +707,8 @@ function workEditor(row = null) {
         title: title.value.trim(), owner: clean(owner), due_on: clean(due), source: clean(source),
         status: status.value, blocked_reason: status.value === "blocked" ? clean(blocked) : null,
       };
-      const ids = links.value.split(",").map(value => value.trim()).filter(Boolean);
+      const readIds = control => control.value.split(",").map(value => value.trim()).filter(Boolean);
+      const ids = readIds(links);
       if (task) Object.assign(fields, {
         completion_criteria: criterion.value.trim(), priority: order.value, depends_on: ids,
         resolution: ["done", "cancelled"].includes(status.value) ? clean(resolution) : null,
@@ -691,14 +718,31 @@ function workEditor(row = null) {
         verification: status.value === "verified" ? { evidence: clean(evidence), by: clean(verifier), on: clean(verifiedOn) } : null,
         waiver: status.value === "waived" ? { reason: clean(waiver), by: clean(approver), on: clean(waivedOn) } : null,
       });
+      if (fields.verification && basis.value !== "all") {
+        fields.verification.basis_tasks = basis.value === "independent" ? [] : readIds(basisIds);
+        if (basis.value === "selected" && !fields.verification.basis_tasks.length) throw new Error("Select at least one supporting task ID.");
+      }
+      const comparable = value => JSON.stringify(value && typeof value === "object" && !Array.isArray(value)
+        ? Object.keys(value).sort().map(key => [key, value[key]]) : value);
       const changed = row ? Object.fromEntries(Object.entries(fields).filter(([key, value]) =>
-        JSON.stringify(value) !== JSON.stringify(row[key]))) : fields;
+        comparable(value) !== comparable(row[key]))) : fields;
       if (!Object.keys(changed).length) throw new Error("Change a field before reviewing the edit.");
       const request = { revision, changes: [{ id: id.value, action: row ? "update" : "add", fields: changed }] };
-      await workRequest(command, scope, "apply", request);
-      const display = value => value == null ? "—" : Array.isArray(value) ? value.join(", ") || "—"
-        : typeof value === "object" ? Object.values(value).join(" · ") : String(value);
+      const proposed = await workRequest(command, scope, "apply", request);
+      const edited = workItems(proposed, command).find(item => item.id === id.value);
+      const concerns = task ? edited.launch_reviews || [] : checklistWarnings(proposed);
+      function display(value) {
+        if (value == null) return "—";
+        if (Array.isArray(value)) return value.join(", ") || "—";
+        if (typeof value !== "object") return String(value);
+        return Object.entries(value).map(([key, detail]) => {
+          if (key !== "basis_tasks") return detail;
+          return detail.length ? "Verification tasks: " + detail.join(", ") : "Independent evidence";
+        }).join(" · ");
+      }
       const review = modal("Review " + title.value.trim(), node("div", { class: "stack" },
+        concerns.length > 0 && node("section", { "aria-label": "Launch checks to review" },
+          node("h3", {}, "Launch checks to review"), readinessReasons(concerns)),
         Object.entries(changed).map(([key, value]) => node("article", { class: "review-item" },
           node("h3", {}, readable(key.replaceAll("_", "-"))),
           currentRow && node("p", { class: "muted small" }, "Before: " + display(currentRow[key])),

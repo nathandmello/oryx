@@ -416,6 +416,14 @@ def execute(root, command, operation, product, initiative, *, expected=None, cha
         if write and (original is None or rows != before or history != previous_history):
             original = save(target, original, product, initiative, rows, history)
     result = view(filename, relative, original, rows, history, tasks, task_file[3])
+    if filename == TASKS:
+        task_views = {row["id"]: row for row in result["tasks"]}
+        for key, check in checkpoints.items():
+            if check["phase"] in launch_readiness.GATE_PHASES:
+                for task, reasons in launch_readiness.supporting_task_concerns(check, check_file[3].get(key, []), tasks, history):
+                    task_views[task].setdefault("launch_reviews", []).append({
+                        "id": key, "title": check["title"], "reasons": reasons,
+                    })
     if operation == "apply" and original and storage.json_input(original)["version"] == 1:
         result["format_note"] = "The first saved change creates version 2 and preserves the original file text in legacy_original."
     return result

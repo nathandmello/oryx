@@ -49,6 +49,9 @@ Open **Tasks** or **Launch checklists**, then choose a product and initiative.
 Add or edit items. Preview changes and save them to the same lists the terminal commands use.
 
 Start a launch checklist from the shared template. Record evidence to verify a check.
+A task edit preview names launch checks affected by withdrawn evidence. The checklist shows each outstanding reason and the earlier verification.
+
+Choose independent evidence or specify verification task IDs when a check uses only some supporting tasks.
 Record the approver and reason for a waiver. Review readiness before the launch decision.
 If the list changes, inspect the current record and review your edits again.
 

@@ -108,22 +108,29 @@ def concerns(row, history, tasks, task_history, effective_on):
         proof = row['verification'] or row['waiver']
         if proof['on'] > effective_on:
             issues.append('The attestation is dated after the effective ship date.')
-    if row['status'] == 'verified':
-        basis = history[-1].get('basis', {}) if history else {}
-        for key in task_basis(row):
-            task = tasks[key]
-            recorded = task_history.get(key, [])
-            previous = basis.get(key)
-            if previous != task_token(task, recorded):
-                issues.append(f'{key}: review the linked evidence and reaffirm this verification.')
-                start = previous['entries'] if previous else 0
-                for entry in recorded[start:]:
-                    change = entry['state']
-                    if change['blocked_reason']:
-                        issues.append(f"{key}: recorded blocker on {entry['recorded_on'] or 'an unknown date'}: {change['blocked_reason']}")
-            if task['status'] != 'done':
-                issues.append(f"{key}: {task['status']}. {task['blocked_reason'] or 'Completion evidence is outstanding.'}")
+    for _, reasons in supporting_task_concerns(row, history, tasks, task_history):
+        issues.extend(reasons)
     return issues
+
+
+def supporting_task_concerns(row, history, tasks, task_history):
+    basis = history[-1].get('basis', {}) if history else {}
+    for key in task_basis(row):
+        issues = []
+        task = tasks[key]
+        recorded = task_history.get(key, [])
+        previous = basis.get(key)
+        if previous != task_token(task, recorded):
+            issues.append(f'{key}: review the linked evidence and reaffirm this verification.')
+            start = previous['entries'] if previous else 0
+            for entry in recorded[start:]:
+                change = entry['state']
+                if change['blocked_reason']:
+                    issues.append(f"{key}: recorded blocker on {entry['recorded_on'] or 'an unknown date'}: {change['blocked_reason']}")
+        if task['status'] != 'done':
+            issues.append(f"{key}: {task['status']}. {task['blocked_reason'] or 'Completion evidence is outstanding.'}")
+        if issues:
+            yield key, issues
 
 
 def snapshot(checks, check_history, tasks, task_history, *, present, effective_on, reviewed_on=None, advisories=None):
