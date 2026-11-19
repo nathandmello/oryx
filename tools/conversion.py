@@ -42,7 +42,7 @@ def archive_path(private, identifier):
     return path
 
 
-def check_plan(private, plan):
+def check_plan(private, plan, *, legacy_replay=False):
     if (not isinstance(plan, dict) or set(plan) != {"id", "reason", "changes"}
             or not isinstance(plan["changes"], list) or not plan["changes"]
             or not isinstance(plan["reason"], str) or not records.specific(plan["reason"].strip())):
@@ -72,7 +72,12 @@ def check_plan(private, plan):
                 raise ValueError("Select a retained destination for the fold")
             folds[name] = row
     for row in folds.values():
-        filing.home(row["into"])
+        if legacy_replay:
+            # Only for a hash-verified, previously accepted transaction from format 1.
+            if Path(row["into"]).parts[:1] not in {("context",), ("products",)}:
+                raise ValueError("Invalid legacy filing destination")
+        else:
+            filing.home(row["into"])
     if any(row["into"] not in edits for row in folds.values()):
         raise ValueError("Include the verified destination text for every fold")
     for name, row in edits.items():
@@ -319,9 +324,9 @@ def save_archive(private, archive, plan):
         staged.unlink(missing_ok=True)
 
 
-def apply(private, plan, validate, link_pattern, *, preview=False):
+def apply(private, plan, validate, link_pattern, *, preview=False, legacy_replay=False):
     """Caller holds the writer lock. A durable journal makes each step retryable."""
-    edits, folds = check_plan(private, plan)
+    edits, folds = check_plan(private, plan, legacy_replay=legacy_replay)
     archive = archive_path(private, plan["id"])
     new_paths = [name for name, row in edits.items() if row["before"] == "absent"]
     ignored = subprocess.run(["git", "-C", str(private), "check-ignore", "--no-index", "--",
@@ -411,7 +416,7 @@ def apply(private, plan, validate, link_pattern, *, preview=False):
     return dict(summary, status="applied")
 
 
-def resume(private, validate, link_pattern):
+def resume(private, validate, link_pattern, *, legacy=False):
     journal = pointer(private)
     if not journal.exists():
         return None
@@ -422,4 +427,4 @@ def resume(private, validate, link_pattern):
     if digest(archive.read_bytes()) != pending["sha256"]:
         raise ValueError("Pending recovery archive changed; retained workspace files")
     with zipfile.ZipFile(archive) as saved:
-        return apply(private, json.loads(saved.read("plan.json")), validate, link_pattern)
+        return apply(private, json.loads(saved.read("plan.json")), validate, link_pattern, legacy_replay=legacy)

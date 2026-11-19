@@ -1,25 +1,25 @@
-# Company, product, and initiative context
+# Company, PM, product, product area, and initiative context
 
-Context supports recurring work. Keep facts, rules, examples, and open questions that change the work. Use [the starters](../templates/README.md) and cut unused sections.
+Use [the starters](../templates/README.md) for recurring reference. Keep facts, rules, examples, and material unknowns.
 
 ## Scope and authority
 
-Keep standing company facts and commitments in `workspace/context/company.md`. Link time-bound developments and detailed records.
+Keep standing company facts and commitments in `private/context/company/overview.md`. Link separately maintained reference notes.
 
-Link product context to its company. Link initiative context to its product. Each level records the decisions, exceptions, and practical details it owns.
+Link product context to its company. Area and initiative briefs inherit their product. Record each decision and exception under its owner.
 
-Apply more specific guidance within its authority. Keep inherited commitments in force. A new exception needs evidence of approval from the decision owner.
+Keep inherited commitments in force. Cite the decision owner’s approval for any exception.
 
 Reuse authoritative records for goals, research, and delivery details. Apply [the filing rules](filing.md) before creating any supporting note.
 
 ## Make the brief usable
 
-- Write instructions that change a decision, a word, or an action. Include the reason for a guardrail.
+- Explain each guardrail and the action it changes.
 - Keep local terms with their meanings, owners, and misleading alternatives.
-- Keep closed decisions with the question, scope, named decision-maker and date, evidence and rationale, and the next step.
-- Link an approved working example or include a permitted excerpt. Put a recurring mistake beside the concrete example that resolves it.
+- Record each closed decision’s question, scope, owner, date, evidence, rationale, and next step.
+- Link an approved example or use a permitted excerpt. Pair recurring mistakes with their corrections.
 - Put data boundaries first when access is sensitive. For regulated work, list permitted inputs and name the review roles and approval gates.
-- Keep known gaps where they matter. Trim stale material and inherited detail. One-off work can use a short brief in the reply.
+- State material gaps in place. Trim stale material. One-off work can stay in the reply.
 
 | Product type | Emphasis |
 | --- | --- |
@@ -28,29 +28,50 @@ Reuse authoritative records for goals, research, and delivery details. Apply [th
 | Platform or API | Integrators and buyers, resource model, versioning, compatibility, approved interface or deprecation examples |
 | Regulated or safety-relevant | Applicable obligations, internal owners, dated approvals, permitted inputs, review path |
 
-For company work, emphasise binding policies, exclusions, and shared terminology. For initiatives, emphasise the outcome, scope, dependencies, and release evidence.
+For company work, emphasise binding policies, exclusions, and shared terminology. For initiatives, capture reusable rules and approved scope. Keep plans and release progress in the workspace.
 
 ## PM remit
 
-Save PM-confirmed responsibilities in `workspace/context/pm-remit.json` using `python3 tools/pm.py set-remit` with JSON on standard input. Link goals and metrics.
+Keep the whole PM profile in `private/context/pm/context.md`. Use plain Markdown for background, working preferences, stakeholders, and other confirmed details.
 
-```json
-{
-  "responsibilities": [
-    {"subject": "product/checkout", "role": "owner", "goals": ["products/checkout/goal.md"], "depends_on": ["product/billing"]},
-    {"subject": "area/pricing", "role": "shared", "goals": [], "depends_on": []}
-  ],
-  "follow": ["product/search", "topic/industry-benchmarks"]
-}
+Ask once about missing or unfinished responsibilities when questions are welcome. Accept deferral. For a fresh profile, use `python3 tools/pm.py new pm-context context/pm/context.md`.
+
+Ownership in `## PM remit` guides routing. The PM can edit it directly. For example:
+
+```markdown
+## PM remit
+
+Status: confirmed
+
+| Responsibility | Role | Goals | Depends on |
+| --- | --- | --- | --- |
+| product/checkout/area/refunds | owner | | product/billing |
+| product/checkout/area/receipts | shared | | |
+| product/catalogue | owner | | |
+
+| Follow |
+| --- |
+| topic/industry-benchmarks |
 ```
 
-An upstream dependency signals interest. Mark the PM’s work affected only for a confirmed consequence. The remit guides relevance. The subject and accountable owner determine the record's home. With no remit, report unknown PM relevance outside company scope.
+Separate multiple values within a cell with `<br>`. Resolve local goal links from the profile file. Agents can update remit fields with `pm.py set-remit` using JSON on standard input. Preserve surrounding prose.
+
+| Remit case | Agent action |
+| --- | --- |
+| New or changed responsibilities | Ask which products or named areas the PM owns or shares. Confirm each area's parent. Retain existing goals, dependencies, and interests. |
+| Invalid saved remit | Report the validation error; keep the file for repair. Continue capture with unknown PM responsibilities. |
+| More scope to add | Save `draft`; ask what is missing. |
+| PM confirms scope, including no current responsibilities | Save `confirmed`. |
+| Whole product | Apply the role to its areas. An explicit area role takes precedence there. |
+| Narrowed ownership | Replace the former whole-product entry with the confirmed areas. Preserve unrelated roles. |
+| One area | Use that area's role. Parent and sibling news needs a confirmed consequence for the area to count as affected. |
+| Follow or dependency | A whole product includes its areas. Use `affects` for a confirmed consequence. |
 
 ## Route supplied evidence
 
 [Ingestion](../.agents/skills/ingest-context/SKILL.md) applies automatically. Use `python3 tools/pm.py route-context` with JSON on standard input. Preview first. Write one authorised record per `--write PATH` call.
 
-New captures start with the sections they use. Add sections as new evidence warrants them. Retain the context controls, sources, and work state.
+Add sections as evidence warrants. Retain controls, sources, and work state.
 
 ```json
 {
@@ -58,6 +79,7 @@ New captures start with the sections they use. Add sections as new evidence warr
     {"reference": "Fictional approved minutes, section 3", "date": "2026-01-01", "coverage": "read", "checked_on": "2026-01-01"}
   ],
   "entries": [
+    {"scope": "pm", "topic": "preferences", "question": "How does the PM prefer to review a roadmap?"},
     {"scope": "company", "topic": "constraints", "source": 1, "location": "Section 3", "quote": "We will not create or own LLMs."},
     {"scope": "product", "product": "checkout", "topic": "vocabulary", "source": 1, "location": "Section 3", "quote": "A workspace is the boundary for shared access.", "term": {"name": "workspace", "owner": "Product", "avoid": "account"}},
     {"scope": "initiative", "product": "checkout", "initiative": "renewals", "topic": "decisions", "source": 1, "location": "Section 3", "quote": "We use existing sessions because renewal needs no new login.", "decision": {"question": "How do users authenticate?", "scope": "Renewal pilot", "person": "Fixture PM", "date": "2026-01-01", "next_step": "Brief the pilot team."}}
@@ -72,19 +94,22 @@ New captures start with the sections they use. Add sections as new evidence warr
 | Company | `organisation`, `markets`, `business-model`, `direction`, `operations`, `constraints` |
 | Product | `offer`, `vision`, `purpose`, `customers`, `contribution`, `ownership`, `constraints`, `goals` |
 | Initiative | `outcome`, `workflow`, `constraints` |
+| PM | `background`, `preferences`, `stakeholders`, `context` |
 | Shared | `vocabulary`, `decisions`, `examples`, `data-boundaries`, `reviews` |
 
-For an area, use `area` with `subject: area/<slug>`. For another reference topic, use `reference` with `subject: topic/<slug>`.
+PM entries use their four topics. Use `context` for other PM facts. Capture writes sourced entries and questions to the profile. Update confirmed ownership separately.
+
+For product or initiative context, add `product_area` when the evidence identifies an area of its product. Use `scope: area` and `subject: area/<slug>` for an unqualified responsibility. Ask before assigning an existing unqualified area to a product. For another reference topic, use `reference` with `subject: topic/<slug>`.
 
 Deferred scopes are `delivery`, `detail`, and `unclear`.
 
-Use established slugs. New initiatives use `products/<product>/initiatives/<initiative>/context.md`. Existing product headings still accept their original topics.
+Use established slugs in `context/initiatives/<initiative>/overview.md`. Link the owning product.
 
-Base local Markdown source links on the private workspace root. Each distinct inspection date retains its own source ID.
+Base local Markdown source links on the private repository root. Each inspection date retains its source ID.
 
 List each source with coverage `read`, `partial`, or `unavailable`. Omit `checked_on` for unavailable sources. Source numbers start at one.
 
-Supply permitted inspected `text` for pasted material or extracts. Read local Markdown and text links from the workspace root.
+Supply permitted inspected `text` for pasted material or extracts.
 
 The router checks literal excerpts and common commitment sentences against available text. Route an irrelevant commitment as deferred. Report excerpt-only checks explicitly.
 
@@ -96,7 +121,7 @@ Omit the topic to keep an update at its source. Use `affects` for confirmed effe
 
 ## Review and maintain
 
-Set a maintainer and concrete triggers before active use. Review when a decision closes, a release ships, or a material source changes.
+Name a maintainer and review triggers. Review closed decisions, releases, and changed sources.
 
 Use an event-driven review or a dated deadline. Set Last reviewed after an actual review. Carry parent changes through to the affected briefs and goals.
 

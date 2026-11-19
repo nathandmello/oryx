@@ -1,7 +1,7 @@
 <!-- pm: initiative-context -->
 # {{title}}
 
-Use [the context rules](../playbook/context.md). Keep the rules and evidence a colleague needs to resume the initiative.
+Use [the context rules](../playbook/context.md). Keep the rules and evidence readers consult across initiative tasks. Link the working plan for actions and progress.
 
 ## Data boundaries
 

@@ -6,11 +6,13 @@ from pathlib import Path
 from posixpath import normpath
 import re
 
+import layout
 import storage
+import upgrades
 from urllib.parse import quote, unquote, urlsplit, urlunsplit
 from uuid import uuid4
 
-CONTEXT_KINDS = ("company-context", "product-context", "initiative-context", "context-note")
+CONTEXT_KINDS = ("company-context", "product-context", "product-area-context", "initiative-context", "context-note")
 KINDS = (*CONTEXT_KINDS, "goal", "problem", "strategy", "experiment", "roadmap")
 FIELDS = ("ID", "State", "Mode", "Last checkpoint", "Next action", "Waiting on", "Resume when")
 STATES = {"draft", "active", "waiting", "complete"}
@@ -45,6 +47,7 @@ CONTEXT_TOPICS = {
         "constraints": "Dependencies and constraints", **SHARED_TOPICS,
     },
 }
+AREA_HEADINGS = {"The product": "Area scope and ownership", "The vision": "Area outcomes", "The users": "Area users and workflow"}
 LEGACY_PRODUCT_TOPICS = {
     "purpose": "Purpose and boundaries", "vision": "Purpose and boundaries", "customers": "Customers and their work",
     "offer": "Current offer", "contribution": "Business contribution and market",
@@ -144,47 +147,67 @@ def table(text, name, columns):
     return rows[1:], []
 
 
+def area_brief_path(product, area):
+    return layout.area(product, area)
+
+
+def is_area_path(path):
+    return layout.brief_kind(path) == "product-area-context"
+
+
 def context_location(kind, path):
-    parts = Path(path).parts
-    if kind == "company-context" and parts[:1] != ("context",):
-        return "company context belongs under context/"
-    if kind == "product-context" and (parts[:1] != ("products",) or len(parts) < 3):
-        return "product context belongs under products/<product>/"
-    if kind == "initiative-context" and (
-        parts[:1] != ("products",) or len(parts) < 3 or (len(parts) == 3 and parts[-1] == "context.md")
-    ):
-        return "initiative context belongs in a distinct record under products/<product>/"
-    if kind == "context-note" and parts[:1] != ("context",) and (
-        parts[:1] != ("products",) or len(parts) < 3
-    ):
-        return "context notes belong under context/ or products/<product>/"
+    if kind == "context-note":
+        try:
+            owner = layout.entity(path)
+            relative = Path(path).relative_to(owner)
+        except ValueError:
+            return "File a context note under its context entity"
+        if (owner == Path("context/pm") or len(relative.parts) not in (1, 2)
+                or relative.suffix != ".md" or not layout.SLUG.fullmatch(relative.stem)
+                or relative.name in {"overview.md", "context.md"} or
+                (len(relative.parts) == 2 and not layout.SLUG.fullmatch(relative.parts[0]))):
+            return "Use an entity subject or one topic directory for a context note"
+    elif kind in CONTEXT_KINDS and layout.brief_kind(path) != kind:
+        return f"Use the canonical entity overview path for {kind}"
+    elif kind in layout.WORK_FOLDERS and not layout.valid_work(path, kind):
+        return f"File {kind} work under workspace/{layout.WORK_FOLDERS[kind]}/"
     return None
 
 
 def existing_briefs(private, canonical, scope):
-    """Find subject-matched, typed older briefs when the standard file is absent."""
-    parent = Path(canonical).parent
-    found = []
-    for path in storage.inventory(private):
-        rel = path.relative_to(private)
-        if (path.suffix != ".md" or path.resolve() != path or not path.is_file()
-                or any(p.startswith(".") or p == "secrets" for p in rel.parts)
-                or parent not in rel.parents):
-            continue
-        if scope == "product" and "initiatives" in rel.parts[2:]:
-            continue
-        with path.open("rb") as stream:
-            marker = MARKER.match(stream.readline(128).decode("utf-8", errors="replace"))
-        if marker and marker[1] == f"{scope}-context":
-            found.append(rel.as_posix())
-    return found
+    """Only the typed overview can be the active authority after layout alignment."""
+    canonical = str(canonical)
+    path = private / canonical
+    if path.resolve() != path or not path.is_file() or canonical in upgrades.source_paths(private):
+        return []
+    with path.open("rb") as stream:
+        marker = MARKER.match(stream.readline(128).decode("utf-8", errors="replace").replace("\r\n", "\n"))
+    return [canonical] if marker and marker[1] == f"{scope}-context" else []
+
+
+def product_briefs(private, product):
+    return existing_briefs(private, layout.product(product), "product")
+
+
+def parent_reference(path, text):
+    controls, _ = table(text, "Context controls", ("Field", "Value"))
+    value = dict(controls).get("Parent context", "")
+    match = re.fullmatch(r"\[[^\]]+\]\(([^\s)]+)\)", value)
+    if not match:
+        return None
+    parsed = urlsplit(match[1])
+    if parsed.scheme or parsed.netloc or parsed.query or parsed.fragment:
+        return None
+    return normpath((Path(path).parent / unquote(parsed.path)).as_posix())
 
 
 def context_sections(kind):
     if kind == "context-note":
         return {"Context"}
     scope = kind.removesuffix("-context")
-    sections = set(CONTEXT_TOPICS[scope].values())
+    sections = set(CONTEXT_TOPICS["product" if scope == "product-area" else scope].values())
+    if scope == "product-area":
+        sections = {AREA_HEADINGS.get(name, name) for name in sections}
     if scope == "product":
         sections.update(LEGACY_PRODUCT_TOPICS.values())
     return sections
@@ -273,10 +296,10 @@ def context_errors(path, text, kind, texts, content_sections, template=False):
         else:
             parent = normpath((Path(path).parent / unquote(parsed.path)).as_posix())
             marker = MARKER.match(texts.get(parent, ""))
-            if kind == "initiative-context":
-                product = Path(path).parts[:2]
-                if (len(product) != 2 or Path(parent).parts[:2] != product
-                        or not marker or marker[1] != "product-context"):
+            if kind in {"initiative-context", "product-area-context"}:
+                product_path = layout.brief_kind(parent) == "product-context"
+                same_product = kind == "initiative-context" or Path(path).parts[:3] == Path(parent).parts[:3]
+                if not product_path or not same_product or not marker or marker[1] != "product-context":
                     errors.append("Parent context must link to the same product's product-context record")
             elif not parent.startswith("context/") or not marker or marker[1] != "company-context":
                 errors.append("Parent context must link to a company-context record inside PM Hub")
@@ -387,6 +410,8 @@ def validate(texts):
             problems.extend(extra)
             if parent:
                 parents[path] = parent
+        elif context_location(kind, path):
+            problems.append(context_location(kind, path))
         if identifier and identifier in ids:
             errors.append(f"{path}: duplicate ID also used by {ids[identifier]}")
         if identifier:
@@ -419,23 +444,26 @@ def retarget_links(text, source, target, root, copies=None):
     return re.sub(r"\[([^\]\n]+)\]\((<[^>\n]+>|[^\s)]+)\)", retarget, text)
 
 
-def create(root, kind, destination, title=None, owner="", filing_contract=None):
+def create(root, kind, destination, title=None, owner="", filing_contract=None, product_parent=None):
     root = root.resolve()
     relative = Path(destination)
-    if relative.is_absolute() or relative.parts[:1] not in (("context",), ("products",)):
-        raise ValueError("Create PM artifacts under context/ or products/ with a relative path")
-    workspace = root / "workspace"
+    if relative.is_absolute() or relative.parts[:1] not in (("context",), ("workspace",)):
+        raise ValueError("Create PM artifacts under context/ or workspace/ with a private-relative path")
+    workspace = storage.private_root(root)
     if workspace.is_symlink() or not (workspace / ".git").is_dir() or (workspace / ".git").is_symlink():
-        raise ValueError("Initialise workspace/ as a separate Git repository before PM work")
+        raise ValueError("Initialise the private repository before PM work")
     target = workspace / relative
     if target.resolve() != target or target.suffix != ".md":
         raise ValueError("Use a direct Markdown path inside PM Hub")
+    storage.require_visible(workspace, relative.as_posix())
     if kind not in KINDS:
         raise ValueError(f"Unknown template: {kind}")
     if context_location(kind, relative):
         raise ValueError(context_location(kind, relative))
-    text = draft_text(root, kind, target, title, owner)
+    text = draft_text(root, kind, target, title, owner, product_parent=product_parent)
     if filing_contract:
+        if kind == "product-area-context":
+            text = text.replace("{{Area release, closed decision, new evidence, or changed product rules.}}", filing_contract["trigger"])
         import filing
         text = filing.add_contract(text, workspace, target, filing_contract)
     target.parent.mkdir(parents=True, exist_ok=True)
@@ -444,7 +472,7 @@ def create(root, kind, destination, title=None, owner="", filing_contract=None):
     return target
 
 
-def draft_text(root, kind, target, title=None, owner=""):
+def draft_text(root, kind, target, title=None, owner="", product_parent=None):
     source = root / "templates" / f"{kind}.md"
     if source.resolve() != source:
         raise ValueError("Templates must be regular files inside PM Hub")
@@ -452,6 +480,8 @@ def draft_text(root, kind, target, title=None, owner=""):
     marker = MARKER.match(text)
     if not marker or marker[1] != kind or work_state(text)[1]:
         raise ValueError("Repair the source template before creating a draft")
+    if kind == "product-area-context" and title is None:
+        title = target.parent.name.replace("-", " ").capitalize() + " context"
     title = title or target.stem.replace("-", " ").capitalize()
     if "\n" in title or "\r" in title:
         raise ValueError("Use a single line for the title")
@@ -461,25 +491,24 @@ def draft_text(root, kind, target, title=None, owner=""):
     text = text.replace("{{id}}", f"{kind}-{uuid4().hex[:12]}")
     text = text.replace("{{date and result}}", f"{date.today().isoformat()}: Draft created.")
     text = retarget_links(text, source, target, root)
-    if kind in {"product-context", "initiative-context"}:
-        private = root / "workspace"
+    if kind in {"product-context", "initiative-context", "product-area-context"}:
+        private = storage.private_root(root)
         if kind == "product-context":
-            parent = private / "context/company.md"
+            canonical = layout.COMPANY
             expected, label = "company-context", "Company context"
             placeholder = "{{Local Markdown link to the relevant company-context record.}}"
         else:
-            product = target.relative_to(private).parts[1]
-            parent = private / "products" / product / "context.md"
+            if kind == "product-area-context":
+                canonical = layout.product(target.relative_to(private).parts[2])
+            else:
+                canonical = product_parent
+                if not canonical or layout.brief_kind(canonical) != "product-context":
+                    raise ValueError("Give the initiative's owning product overview as its parent")
             expected, label = "product-context", "Product context"
             placeholder = "{{Local Markdown link to the same product's product-context record.}}"
-        if not parent.exists():
-            alternatives = existing_briefs(private, parent.relative_to(private), expected.removesuffix("-context"))
-            if len(alternatives) == 1:
-                parent = private / alternatives[0]
-        if parent.resolve() == parent and parent.is_file():
-            with parent.open(encoding="utf-8") as stream:
-                marker = MARKER.match(stream.readline())
-            if marker and marker[1] == expected:
-                link = Path(relpath(parent, target.parent)).as_posix()
-                text = text.replace(placeholder, f"[{label}]({link})")
+        if existing_briefs(private, canonical, expected.removesuffix("-context")):
+            link = quote(Path(relpath(private / canonical, target.parent)).as_posix())
+            text = text.replace(placeholder, f"[{label}]({link})")
+        elif kind in {"initiative-context", "product-area-context"}:
+            raise ValueError("Establish the owning product overview before filing this context")
     return text

@@ -4,9 +4,9 @@ PM Hub supports personal product management. The PM makes product decisions.
 
 ## Start and scope
 
-Open the outer Hub. Read [README.md](README.md). For an installed workspace, run `python3 tools/pm.py align` and follow [upgrade guidance](playbook/updates.md). Read relevant records and settings.
+Open the outer Hub. Read [README.md](README.md). For installed workspaces, run `python3 tools/pm.py align` and follow [upgrade guidance](playbook/updates.md). Read relevant records and settings. If prompted, ask once about remit.
 
-The system and `workspace/` are independent Git repositories. The system ignores `workspace/`. Read private records explicitly; root Git searches omit them.
+The shared system and `private/` have independent Git histories. Search private records explicitly. File reference material under `private/context/` and working artifacts under `private/workspace/`.
 
 Read [the Git rules](playbook/git.md) before any commit, pull, push, remote change, or GitHub action.
 
@@ -29,7 +29,7 @@ Research and results can change earlier choices. Keep learning, delivery progres
 
 ## Ownership
 
-- The private workspace owns PM analysis, evidence, strategic choices, high-level solutions, priorities, roadmaps, and operational plans.
+- The private repository owns PM analysis, evidence, strategic choices, high-level solutions, priorities, roadmaps, and operational plans.
 - Organisation-wide goals retain their existing authority. Record their source and the product's contribution.
 - The delivery system owns PRDs, user stories, detailed flows, acceptance criteria, and specifications. Identify it in private settings.
 - Link to engineering artifacts. Keep their contents in the delivery system. Engineering task trackers own delivery tasks and status.

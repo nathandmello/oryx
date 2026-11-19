@@ -12,19 +12,19 @@ Clone the shared system, then open its root in Codex or Claude. Initialise a pri
 python3 tools/pm.py init-workspace --owner "Your name" --delivery-system "Your delivery system"
 ```
 
-The command creates `workspace/` with its own Git repository and empty starter files. It creates no remote, commit, or push.
+The command creates `private/` with its own Git repository and starter guides. Configure a remote when you need one.
 
-To restore existing work, clone its private repository into `workspace/` instead. A new machine needs both repositories.
+To restore existing work, clone its private repository into `private/`. Run the shared Hub on each machine before opening the restored data.
 
-Read `workspace/settings.json` for the owner, delivery system, system version, workspace format, and confirmed remote URLs.
+Read `private/settings.json` for the owner, delivery system, system version, workspace format, and confirmed remote URLs.
 
-Read `workspace/README.md` for the current session checkpoint and next action. Keep that handoff current before ending a session.
+Read `private/README.md` for the current session checkpoint and next action. Keep that handoff current before ending a session.
 
 For first-time setup, start with company context, then product context and strategy. Mixed sources can inform several records in one session.
 
-Link a recurring initiative to its product context when the work warrants a separate brief.
+For area work, read the product brief and its area-specific evidence. Maintain a separate [area brief](playbook/filing.md#product-area-context) when the work warrants it.
 
-Agents automatically use [ingest-context](.agents/skills/ingest-context/SKILL.md) for context capture. Set the PM remit when responsibilities are known.
+Agents automatically use [ingest-context](.agents/skills/ingest-context/SKILL.md) for context capture. The agent prompts for a missing or unfinished [PM remit](playbook/context.md#pm-remit). A remit can cover whole products or several areas within them.
 
 ## Placement
 
@@ -32,23 +32,23 @@ Keep only `README.md`, `AGENTS.md`, `CLAUDE.md`, and `.gitignore` as root files.
 
 | Home | Purpose | Repository |
 | --- | --- | --- |
-| `workspace/context/` | Organisation and business context | Private workspace |
-| `workspace/context/pm-remit.json` | Optional PM responsibilities, goals, dependencies, and topics to follow | Private workspace |
-| `workspace/products/<product>/` | Product context, initiative context, and active PM work | Private workspace |
-| `workspace/settings.json` | Personal settings and expected remotes | Private workspace |
-| `workspace/.hub-history/` | Verified original files and conversion plans for recovery | Private workspace |
-| `workspace/.hub-upgrades.json` | Private progress on release-specific reviews | Private workspace |
+| `private/context/` | Reference material organised by company, product, product area, initiative, or PM | Private |
+| `private/context/pm/context.md` | PM profile, including responsibilities, goals, dependencies, and interests | Private |
+| `private/workspace/` | Work in progress and completed PM artifacts, organised by type | Private |
+| `private/settings.json` | Installation settings and expected remotes | Private |
+| `private/.hub-history/` | Recovery copies for reviewed filing conversions | Private |
+| `private/.hub-upgrades.json` | Private progress on release-specific reviews | Private |
 | `playbook/` | Methods, working practices, Git rules, and release metadata | Shared system |
 | `templates/` | Starters for requested artifact types | Shared system |
 | `tools/` and `tests/` | Commands, empty workspace seeds, and checks | Shared system |
 | `.agents/skills/` | Canonical shared skills | Shared system |
 | `.claude/`, `.codex/`, `.github/` | Native client and CI configuration | Shared system |
 
-Paths such as `context/` in artifact commands are relative to `workspace/`. Keep shared product goals and research at product level.
+Artifact paths are relative to `private/`. For example, `context/company/overview.md` holds company facts. An experiment testing a product choice belongs in `workspace/experiments/`.
 
 Use [the filing rules](playbook/filing.md) to decide when a section earns a separate file. Keep records in place as work advances; their state changes, and their location follows their subject.
 
-A new home needs a current purpose and updated checks. Add templates for requested artifact types.
+Start reference material in the entity overview. Create a topic folder only for a recurring reader need under the filing rules.
 
 ## Work
 
@@ -58,6 +58,8 @@ A new home needs a current purpose and updated checks. Add templates for request
 - [Working practices](playbook/working.md): checkpoints, thought-partner mode, and quiet mode.
 - [Git rules](playbook/git.md): the correct repository for saves, updates, and contributions.
 
+The Git command name `workspace` selects the entire private repository.
+
 Use Git and Python 3.9 or later. The tools use the Python standard library.
 
 ```sh
@@ -65,7 +67,7 @@ python3 tools/pm.py check
 python3 -m unittest discover -s tests -v
 python3 tools/pm.py git workspace status
 python3 tools/pm.py git system status
-python3 tools/pm.py new company-context context/company.md --title "Company context"
+python3 tools/pm.py new company-context context/company/overview.md --title "Company context"
 ```
 
 Shared Hub changes automatically use [extend-hub](.agents/skills/extend-hub/SKILL.md) to trace dependencies and correct stale guidance. Use `red-team` when you want a product decision challenged against its evidence.
@@ -88,7 +90,7 @@ python3 tools/pm.py git system push
 
 These commands act when invoked; they do not grant permission. Read the Git rules before use.
 
-Pulls require clean files and a fast-forward update. Format changes stop for migration review. System updates record the accepted version in private settings.
+The Git wrapper checks the target and requires a fast-forward update. Session startup aligns supported private layouts.
 
 After pulling, open the Hub and work as usual. The agent handles [existing-workspace alignment](playbook/updates.md) and raises decisions that need you.
 
@@ -98,7 +100,7 @@ Shared CI runs `check --system-only` and tests against fictional workspaces. Fol
 
 Both clients load the context capture rule at session start and check the hub before a normal stop. Hooks work from nested workspace directories.
 
-The edit hook redirects native attempts to create active private Markdown files to the shared commands. Original sources have a separate home. Existing records still support direct maintenance.
+The edit hook enforces filing rules for supported native edits. Use the shared commands to start typed records. Keep original sources identifiable.
 
 In Codex, review and trust the project hooks through `/hooks`. In Claude, accept project trust and inspect `/hooks`.
 

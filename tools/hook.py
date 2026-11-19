@@ -24,7 +24,7 @@ def edit_guard(root, cwd, payload):
         blocks = re.split(r"(?m)^\*\*\* ", command)
         for block in blocks:
             header, _, body = block.partition("\n")
-            if header.startswith(("Add File: ", "Move to: ")):
+            if header.startswith(("Add File: ", "Update File: ", "Move to: ")):
                 added = "\n".join(row[1:] for row in body.splitlines() if row.startswith("+"))
                 edits.append((header.split(": ", 1)[1], added + "\n"))
         if isinstance(inputs, dict) and inputs.get("workdir"):
@@ -35,19 +35,26 @@ def edit_guard(root, cwd, payload):
             content = "\n".join(item.get("new_string", "") for item in inputs.get("edits", []))
         edits.append((inputs["file_path"], content))
 
-    private = root / "workspace"
+    private = pm.workspace.private_root(root)
     for value, content in edits:
         target = (cwd / value).resolve()
-        if private not in target.parents or target.exists() or target.suffix.lower() != ".md":
+        if private.name == "private" and (target == root / "workspace" or root / "workspace" in target.parents):
+            reason = "This is the retired private root. File PM work under private/workspace/ and reference material under private/context/."
+        elif private not in target.parents or target.suffix.lower() != ".md":
             continue
-        parts = target.relative_to(private).parts
-        if not any(part == "sources" or part == "secrets" or part.startswith(".") for part in parts):
-            reason = (
-                "Use pm.py route-context to preview and write an authorised context record. "
-                "Use pm.py new to initialise other typed records."
-            )
-            return {"hookSpecificOutput": {"hookEventName": "PreToolUse", "permissionDecision": "deny",
-                                           "permissionDecisionReason": reason}}
+        else:
+            relative = target.relative_to(private)
+            parts = relative.parts
+            typed = any(line.startswith("<!-- pm:") for line in content.splitlines())
+            plain_work = pm.layout.valid_work(relative) and parts[1] in {"initiatives", "backlogs"}
+            if plain_work and typed:
+                reason = "File the typed artifact at its canonical home. Backlogs and initiative plans are plain working documents."
+            elif target.exists() or plain_work or any(p in {"sources", "secrets"} or p.startswith(".") for p in parts):
+                continue
+            else:
+                reason = "Use pm.py route-context to preview and write context. Use pm.py new for another typed record."
+        return {"hookSpecificOutput": {"hookEventName": "PreToolUse", "permissionDecision": "deny",
+                                       "permissionDecisionReason": reason}}
     return {}
 
 
@@ -89,13 +96,21 @@ def main():
             result = edit_guard(root, cwd, payload)
         else:
             errors = []
-            private = root / "workspace"
+            private = pm.workspace.private_root(root)
             if private.is_dir() and event in {"SessionStart", "Stop"}:
                 report = pm.alignment(root, prepare=event == "SessionStart")
                 if event == "Stop" and any(item["status"] == "pending" for item in report["outstanding"]):
                     errors.append("Finish the pending filing review in playbook/updates.md. Record genuine evidence gaps as waiting.")
             result = response(event, errors + pm.check(root), retry)
             if event == "SessionStart":
+                private = pm.workspace.private_root(root)
+                if private.is_dir():
+                    prompt = pm.context_capture.remit_prompt(private)
+                    if prompt:
+                        result["hookSpecificOutput"]["additionalContext"] += (
+                            "\nAsk the PM once this session when questions are welcome: " + prompt
+                            + " Accept deferral and continue the requested work. Save only PM-confirmed answers with set-remit."
+                        )
                 notice = pm.alignment_notice(root)
                 if notice:
                     result["hookSpecificOutput"]["additionalContext"] += "\n" + notice

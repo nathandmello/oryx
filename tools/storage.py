@@ -1,6 +1,7 @@
 """Serialize local Hub writers and publish complete files atomically."""
 
 from contextlib import contextmanager
+from contextvars import ContextVar
 import os
 from pathlib import Path
 import stat
@@ -8,8 +9,21 @@ import subprocess
 from tempfile import NamedTemporaryFile
 
 
+# Windows permits reading a locked range through the lock owner’s file handle.
+# Keep that handle available only during the context that acquired it.
+_repository_handles = ContextVar("pm_hub_repository_handles", default=())
+
+
+def private_root(root):
+    """Choose one physical private checkout, including installations awaiting conversion."""
+    current, previous = root / "private", root / "workspace"
+    if os.path.lexists(current) and os.path.lexists(previous):
+        raise ValueError("Both private/ and workspace/ exist. Identify the private repository before alignment")
+    return previous if os.path.lexists(previous) else current
+
+
 @contextmanager
-def writer_lock(private):
+def repository_lock(private):
     # A stable inode in Git metadata survives replacement of the document being edited.
     lock = private / ".git" / "pm-hub-writer.lock"
     if lock.resolve() != lock or not lock.parent.is_dir():
@@ -25,7 +39,54 @@ def writer_lock(private):
         else:
             import fcntl
             fcntl.flock(stream, fcntl.LOCK_EX)
-        yield  # Closing the descriptor also releases the lock after exceptions.
+        token = _repository_handles.set((*_repository_handles.get(), (lock, stream)))
+        try:
+            yield
+        finally:
+            _repository_handles.reset(token)  # Closing the descriptor releases its lock.
+
+
+@contextmanager
+def snapshot_reader(path):
+    """Read the exact bytes of a held lock without reopening its mandatory Windows range."""
+    for locked_path, stream in _repository_handles.get():
+        if locked_path == path:
+            if not os.path.samestat(os.fstat(stream.fileno()), path.lstat()):
+                raise ValueError(f"The held repository lock was replaced during backup: {path}")
+            position = stream.tell()
+            try:
+                stream.seek(0)
+                yield stream
+            finally:
+                stream.seek(position)
+            return
+    with path.open("rb") as source:
+        yield source
+
+
+@contextmanager
+def writer_lock(private):
+    root = private.parent
+    if private.name in {"private", "workspace"} and (root / "playbook/release.json").is_file():
+        # The outer inode remains in place when the private checkout changes its name.
+        with repository_lock(root):
+            if private_root(root) != private:
+                raise ValueError("The private repository moved. Retry with its current location")
+            with repository_lock(private):
+                yield
+    else:
+        with repository_lock(private):
+            yield
+
+
+def require_visible(private, relative):
+    """Prevent active writes that the private repository would omit from a save."""
+    check = subprocess.run(["git", "-C", str(private), "check-ignore", "--", str(relative)],
+                           capture_output=True, text=True)
+    if check.returncode == 0:
+        raise ValueError(f"The private repository ignores {relative}. Review its ignore rules before filing")
+    if check.returncode != 1:
+        raise ValueError(f"Cannot verify the private Git status of {relative}")
 
 
 def replace_text(target, original, candidate):
@@ -68,7 +129,7 @@ def inventory(root: Path) -> list[Path]:
             if path.is_symlink():
                 paths.append(path)
                 dirs.remove(name)
-            elif name in SKIP_DIRS or name == "secrets" or (path == root / "workspace"):
+            elif name in SKIP_DIRS or name == "secrets" or (path.parent == root and path.name in {"workspace", "private"} and (root / "tools/pm.py").is_file()):
                 dirs.remove(name)
         paths.extend(Path(directory) / name for name in names)
     return sorted(paths)

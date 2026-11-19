@@ -9,7 +9,7 @@ Use [the context rules](../playbook/context.md). Keep sections that guide recurr
 
 ## The product
 
-{{What it does, who uses it, and how it makes money or saves work. Use the team's measures.}}
+{{What it does, who uses it, and how it makes money or saves work. Link separately maintained areas. Use the team's measures.}}
 
 ## The vision
 
@@ -27,7 +27,7 @@ Use [the context rules](../playbook/context.md). Keep sections that guide recurr
 
 ## Constraints
 
-{{Capture binding technical, commercial, contractual, and regulatory rules. Name owners, exceptions, and dependencies.}}
+{{Capture binding technical, commercial, contractual, and regulatory rules. Name owners, applicable product areas, exceptions, and dependencies.}}
 
 ## Decisions already closed
 

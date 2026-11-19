@@ -6,7 +6,9 @@ from pathlib import Path
 import shutil
 import subprocess
 import sys
+import tarfile
 import unittest
+import zipfile
 from unittest.mock import patch
 
 import test_pm
@@ -16,6 +18,11 @@ import git_ops
 import pm
 import records
 import workspace
+
+
+def next_patch(version):
+    major, minor, patch_version = map(int, version.split("."))
+    return f"{major}.{minor}.{patch_version + 1}"
 
 
 class RepositoryTests(unittest.TestCase):
@@ -50,10 +57,12 @@ class RepositoryTests(unittest.TestCase):
             settings["remotes"][role] = str(remote)
             self.remotes[role] = remote
         (self.work / "settings.json").write_text(json.dumps(settings, indent=2) + "\n")
-        (self.work / "context/notes.md").write_text("# Notes\n\nFictional PM fixture.\n")
+        (self.work / "workspace/backlogs").mkdir(parents=True)
+        (self.work / "workspace/backlogs/compare-offers.md").write_text("# Notes\n\nFictional PM fixture.\n")
         self.commit(self.root, "Initial shared system")
         self.commit(self.work, "Initial private fixture")
-        self.assertEqual(self.cli("git", "system", "push").returncode, 0)
+        pushed = self.cli("git", "system", "push")
+        self.assertEqual(pushed.returncode, 0, pushed.stdout + pushed.stderr)
         result = self.cli("git", "workspace", "push", cwd=self.work / "context")
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
 
@@ -63,10 +72,10 @@ class RepositoryTests(unittest.TestCase):
         return target
 
     def test_private_work_is_ignored_by_system_and_checked_explicitly(self):
-        target = records.create(self.root, "problem", "products/example/problem.md")
+        target = records.create(self.root, "problem", "workspace/problems/example.md")
         self.assertTrue(self.git(self.root, "check-ignore", str(target)))
-        self.assertNotIn("workspace/", self.git(self.root, "ls-files", "--others", "--exclude-standard"))
-        self.assertIn("products/example/problem.md", self.git(self.work, "ls-files", "--others", "--exclude-standard"))
+        self.assertNotIn("private/", self.git(self.root, "ls-files", "--others", "--exclude-standard"))
+        self.assertIn("workspace/problems/example.md", self.git(self.work, "ls-files", "--others", "--exclude-standard"))
         target.write_text(target.read_text().replace("| Mode | thought-partner |", "| Mode | invalid |"))
         self.assertTrue(any("Mode must" in error for error in pm.check(self.root)))
         self.assertEqual(pm.check(self.root, include_workspace=False), [])
@@ -83,15 +92,15 @@ class RepositoryTests(unittest.TestCase):
         links = {match[1]: (self.work / match[2]).resolve()
                  for match in pm.LINK.finditer((self.work / "README.md").read_text())}
         self.assertEqual(links["context"], self.work / "context/README.md")
-        self.assertEqual(links["products"], self.work / "products/README.md")
+        self.assertEqual(links["workspace"], self.work / "workspace/README.md")
         self.assertEqual(links["constitution"], self.root / "AGENTS.md")
         self.assertEqual(links["the working practices"], self.root / "playbook/working.md")
 
     def test_new_command_uses_private_destination_and_configured_owner_from_nested_cwd(self):
-        result = self.cli("new", "company-context", "context/company.md", "--title", "Company context",
-                          cwd=self.work / "products")
+        result = self.cli("new", "company-context", "context/company/overview.md", "--title", "Company context",
+                          cwd=self.work / "workspace")
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
-        target = self.work / "context/company.md"
+        target = self.work / "context/company/overview.md"
         self.assertIn("| Maintainer | Fixture PM |", target.read_text())
         self.assertTrue(self.git(self.root, "check-ignore", str(target)))
         self.assertEqual(pm.check(self.root), [])
@@ -110,6 +119,19 @@ class RepositoryTests(unittest.TestCase):
         with patch.object(Path, "read_text", read):
             self.assertTrue(any("private file" in error for error in pm.check(self.root)))
 
+    def test_two_private_directories_require_resolution_without_choosing_one(self):
+        legacy = self.root / "workspace"
+        self.git(self.root, "init", "--quiet", "--initial-branch=main", str(legacy))
+        original = b"Retained original bytes.\r\n"
+        (legacy / "local.txt").write_bytes(original)
+        settings = (self.work / "settings.json").read_bytes()
+        for command in (("align", "--status"), ("align",), ("init-workspace",), ("git", "workspace", "status")):
+            result = self.cli(*command)
+            self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)
+            self.assertEqual((legacy / "local.txt").read_bytes(), original)
+            self.assertEqual((self.work / "settings.json").read_bytes(), settings)
+        self.assertFalse((legacy / "settings.json").exists())
+
     def test_missing_private_git_cannot_fall_back_to_system(self):
         shutil.rmtree(self.work / ".git")
         with self.assertRaisesRegex(ValueError, "own local Git"):
@@ -118,7 +140,7 @@ class RepositoryTests(unittest.TestCase):
 
     def test_force_added_private_git_link_is_rejected_without_reading_data(self):
         self.commit(self.work, "Private fixture")
-        self.git(self.root, "add", "--force", "workspace")
+        self.git(self.root, "add", "--force", "private")
         original = Path.read_text
 
         def read(path, *args, **kwargs):
@@ -146,13 +168,13 @@ class RepositoryTests(unittest.TestCase):
         self.connect()
         system_files = self.git(self.remotes["system"], "ls-tree", "-r", "--name-only", "main")
         private_files = self.git(self.remotes["workspace"], "ls-tree", "-r", "--name-only", "main")
-        self.assertNotIn("workspace/", system_files)
-        self.assertNotIn("context/notes.md", system_files)
-        self.assertIn("context/notes.md", private_files)
+        self.assertNotIn("private/", system_files)
+        self.assertNotIn("workspace/backlogs/compare-offers.md", system_files)
+        self.assertIn("workspace/backlogs/compare-offers.md", private_files)
         restored = self.root.parent / "restored"
         self.git(self.root.parent, "clone", str(self.remotes["system"]), str(restored))
         self.assertEqual(pm.check(restored, include_workspace=False), [])
-        self.git(restored, "clone", str(self.remotes["workspace"]), str(restored / "workspace"))
+        self.git(restored, "clone", str(self.remotes["workspace"]), str(restored / "private"))
         self.assertEqual(pm.check(restored), [])
 
     def test_network_operations_require_confirmed_remote_and_detect_push_url_mismatch(self):
@@ -177,27 +199,77 @@ class RepositoryTests(unittest.TestCase):
     def test_system_update_preserves_private_history_and_records_accepted_version(self):
         self.connect()
         private_head = self.git(self.work, "rev-parse", "HEAD")
-        note = (self.work / "context/notes.md").read_bytes()
+        note = (self.work / "workspace/backlogs/compare-offers.md").read_bytes()
         source = self.contributor("system")
-        metadata = workspace.release(source)
-        metadata["system_version"] = "0.2.1"
-        (source / "playbook/release.json").write_text(json.dumps(metadata) + "\n")
+        wire_file = source / "playbook/release.json"
+        metadata = json.loads(wire_file.read_text())
+        metadata["system_version"] = next_patch(metadata["system_version"])
+        wire_file.write_text(json.dumps(metadata) + "\n")
         self.commit(source, "Release a compatible system update")
         self.git(source, "push", "origin", "main")
         result = self.cli("git", "system", "pull", cwd=self.work)
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertEqual(self.git(self.work, "rev-parse", "HEAD"), private_head)
-        self.assertEqual((self.work / "context/notes.md").read_bytes(), note)
-        self.assertEqual(workspace.settings(self.root)["system_version"], "0.2.1")
+        self.assertEqual((self.work / "workspace/backlogs/compare-offers.md").read_bytes(), note)
+        self.assertEqual(workspace.settings(self.root)["system_version"], metadata["system_version"])
+
+    def test_ordinary_shared_pull_aligns_forward_same_format_with_a_backup(self):
+        self.connect()
+        source = self.contributor("system")
+        path = source / "playbook/release.json"
+        release = json.loads(path.read_text())
+        previous = release["system_version"]
+        release["system_version"] = next_patch(previous)
+        path.write_text(json.dumps(release) + "\n")
+        self.commit(source, "Release a same-format patch")
+        self.git(source, "push", "origin", "main")
+        self.git(self.root, "pull", "--ff-only", "origin", "main")
+        settings = self.work / "settings.json"
+        original = settings.read_bytes()
+        self.assertTrue(pm.alignment(self.root)["needs_setup"])
+        self.assertEqual(settings.read_bytes(), original)
+        report = pm.alignment(self.root, prepare=True)
+        with tarfile.open(report["installation_backup"]) as backup:
+            self.assertEqual(backup.extractfile("private/settings.json").read(), original)
+        self.assertEqual(workspace.settings(self.root)["system_version"], release["system_version"])
+        (self.root / "playbook/release.json").write_text(json.dumps(dict(release, system_version=previous)))
+        with self.assertRaisesRegex(ValueError, "Unsupported workspace version"):
+            pm.alignment(self.root, prepare=True)
+        self.assertEqual(workspace.settings(self.root, compatible=False)["system_version"], release["system_version"])
+
+    def test_system_pull_merges_the_commit_it_inspected_after_another_fetch(self):
+        self.connect()
+        source = self.contributor("system")
+        wire_file = source / "playbook/release.json"
+        release = json.loads(wire_file.read_text())
+        release["system_version"] = next_patch(release["system_version"])
+        wire_file.write_text(json.dumps(release))
+        self.commit(source, "Release the checked patch")
+        self.git(source, "push", "origin", "main")
+        expected = self.git(source, "rev-parse", "HEAD")
+        previous = self.git(self.root, "rev-parse", "HEAD")
+
+        git = workspace.git
+        def another_fetch(path, *args):
+            result = git(path, *args)
+            if args == ("rev-parse", "FETCH_HEAD^{commit}"):
+                (path / ".git/FETCH_HEAD").write_text(previous + "\n")
+            return result
+
+        with patch.object(workspace, "git", side_effect=another_fetch):
+            git_ops.run(self.root, "system", "pull")
+        self.assertEqual(self.git(self.root, "rev-parse", "HEAD"), expected)
+        self.assertEqual(workspace.settings(self.root)["system_version"], release["system_version"])
 
     def test_incompatible_system_update_stops_before_any_workspace_change(self):
         self.connect()
         old_head = self.git(self.root, "rev-parse", "HEAD")
         settings = (self.work / "settings.json").read_bytes()
         source = self.contributor("system")
-        metadata = workspace.release(source)
-        metadata["workspace_format"] = 2
-        (source / "playbook/release.json").write_text(json.dumps(metadata) + "\n")
+        format_file = source / workspace.FORMAT_FILE
+        metadata = json.loads(format_file.read_text())
+        metadata["workspace_format"] = 99
+        format_file.write_text(json.dumps(metadata) + "\n")
         self.commit(source, "Release an incompatible workspace format")
         self.git(source, "push", "origin", "main")
         with self.assertRaisesRegex(ValueError, "review a migration"):
@@ -209,13 +281,13 @@ class RepositoryTests(unittest.TestCase):
         self.connect()
         system_head = self.git(self.root, "rev-parse", "HEAD")
         source = self.contributor("workspace")
-        (source / "context/notes.md").write_text("# Notes\n\nUpdated fictional context.\n")
+        (source / "workspace/backlogs/compare-offers.md").write_text("# Notes\n\nUpdated fictional context.\n")
         self.commit(source, "Update private work")
         self.git(source, "push", "origin", "main")
         result = self.cli("git", "workspace", "pull")
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertEqual(self.git(self.root, "rev-parse", "HEAD"), system_head)
-        self.assertIn("Updated fictional context.", (self.work / "context/notes.md").read_text())
+        self.assertIn("Updated fictional context.", (self.work / "workspace/backlogs/compare-offers.md").read_text())
 
     def test_workspace_pull_cannot_silently_change_destinations(self):
         self.connect()
@@ -243,13 +315,13 @@ class RepositoryTests(unittest.TestCase):
 
     def test_dirty_divergent_and_misdirected_tracking_stop_updates(self):
         self.connect()
-        note = self.work / "context/notes.md"
+        note = self.work / "workspace/backlogs/compare-offers.md"
         note.write_text("# Notes\n\nUncommitted fictional context.\n")
         with self.assertRaisesRegex(ValueError, "preserve local changes"):
             git_ops.run(self.root, "workspace", "pull")
         self.commit(self.work, "Local change")
         source = self.contributor("workspace")
-        (source / "context/notes.md").write_text("# Notes\n\nRemote fictional context.\n")
+        (source / "workspace/backlogs/compare-offers.md").write_text("# Notes\n\nRemote fictional context.\n")
         self.commit(source, "Remote change")
         self.git(source, "push", "origin", "main")
         with self.assertRaises(ValueError):
@@ -265,10 +337,10 @@ class RepositoryTests(unittest.TestCase):
         head = self.git(self.root, "rev-parse", "HEAD")
         local = self.work / "local-notes.md"
         local.write_text("Original private untracked bytes.")
-        collision = contributor / "workspace/local-notes.md"
+        collision = contributor / "private/local-notes.md"
         collision.parent.mkdir()
         collision.write_text("Incoming shared path")
-        self.git(contributor, "add", "-f", "workspace/local-notes.md")
+        self.git(contributor, "add", "-f", "private/local-notes.md")
         self.git(contributor, "commit", "-m", "Fictional accidental private-tree collision")
         self.git(contributor, "push", "origin", "main")
         with self.assertRaisesRegex(ValueError, "tracks the private workspace"):
@@ -297,11 +369,223 @@ class RepositoryTests(unittest.TestCase):
         self.git(self.work, "commit", "-m", "Preserve the private recovery blob")
         self.assertEqual(self.cli("git", "workspace", "push").returncode, 0)
 
+    def test_second_machine_can_fast_forward_an_identical_uncommitted_layout_migration(self):
+        self.connect()
+        # Publish a private format-1 tree, then independently open it in two installations of the new Hub.
+        test_pm.use_previous_layout(self.work)
+        original = test_pm.legacy_product(self.root, self.work, "products/shop/context.md")
+        original.write_text(original.read_text() + "\nA repeat customer can request a receipt.\n")
+        self.commit(self.work, "Last private format-1 save")
+        self.git(self.work, "push", "origin", "main")
+        previous = self.git(self.work, "rev-parse", "HEAD")
+        installations = []
+        for name in ("first-machine", "second-machine"):
+            outer = self.root.parent / name
+            self.git(self.root.parent, "clone", str(self.remotes["system"]), str(outer))
+            self.git(outer, "clone", str(self.remotes["workspace"]), str(outer / "workspace"))
+            pm.alignment(outer, prepare=True)
+            installations.append(outer / "private")
+        first, second = installations
+        self.commit(first, "Save migrated private layout")
+        git_ops.run(first.parent, "workspace", "push")
+        target = self.git(first, "rev-parse", "HEAD")
+        self.assertEqual(self.git(second, "rev-parse", "HEAD"), previous)
+
+        path = second / "context/products/shop/overview.md"
+        original = path.read_bytes()
+
+        def refused():
+            index = self.git(second, "write-tree")
+            with self.assertRaisesRegex(ValueError, "preserve local changes"):
+                git_ops.run(second.parent, "workspace", "pull")
+            self.assertEqual(self.git(second, "write-tree"), index)
+            self.assertEqual(self.git(second, "rev-parse", "HEAD"), previous)
+            self.assertFalse((second / ".git" / git_ops.HANDOFF).exists())
+
+        path.write_bytes(original + b"\nA local revision.\n")
+        refused()
+        self.assertTrue(path.read_bytes().endswith(b"A local revision.\n"))
+        self.git(second, "add", "--", str(path))
+        path.write_bytes(original)  # An exact worktree must not hide a distinct staged version.
+        refused()
+        self.assertIn("A local revision.", self.git(second, "show", ":context/products/shop/overview.md"))
+        self.git(second, "reset", "--quiet", "HEAD", "--", str(path))
+        local = second / "untracked.txt"
+        local.write_text("Material from the second machine.\n")
+        refused()
+        self.assertTrue(local.exists())
+        local.unlink()
+        ignore = second / ".git/info/exclude"
+        exclusions = ignore.read_bytes()
+        ignore.write_bytes(exclusions + b"\n/context/products/shop/overview.md\n")
+        refused()
+        retired = second / "products/shop/context.md"
+        retired.parent.mkdir(parents=True, exist_ok=True)
+        retired.write_bytes(b"An independent copy left in an ignored directory.\n")
+        ignore.write_bytes(exclusions + b"\n/products/\n")
+        refused()
+        self.assertTrue(retired.read_bytes().startswith(b"An independent copy"))
+        retired.unlink()
+        ignore.write_bytes(exclusions)
+
+        real_git = workspace.git
+        def interrupted(repo, *args):
+            if args[0] == "update-ref":
+                raise OSError("interrupted during fast-forward")
+            return real_git(repo, *args)
+
+        with patch.object(workspace, "git", side_effect=interrupted), self.assertRaises(OSError):
+            git_ops.run(second.parent, "workspace", "pull")
+        self.assertEqual(self.git(second, "rev-parse", "HEAD"), previous)
+        self.assertEqual(self.git(second, "write-tree"), self.git(first, "rev-parse", "HEAD^{tree}"))
+        self.assertTrue((second / ".git" / git_ops.HANDOFF).exists())
+        before = {p.relative_to(second): p.read_bytes() for p in pm.inventory(second) if p.is_file()}
+        git_ops.run(second.parent, "workspace", "pull")
+        self.assertEqual(self.git(second, "rev-parse", "HEAD"), target)
+        self.assertEqual(self.git(second, "status", "--porcelain"), "")
+        self.assertFalse((second / ".git" / git_ops.HANDOFF).exists())
+        self.assertEqual(before, {p.relative_to(second): p.read_bytes() for p in pm.inventory(second) if p.is_file()})
+        self.assertEqual(pm.check(second.parent), [])
+
+    def interrupt_historical_filing(self, outer, private):
+        """Run the installed 0.2 converter and interrupt it after recovering the loose record."""
+        import hashlib
+        main = private / "context/company.md"
+        loose = private / "decision-from-meeting.md"
+        quote = "The original access policy applies to every region."
+        loose.write_bytes((quote + "\r\n").encode())
+        original = loose.read_bytes()
+        plan = {"id": "recover-access", "reason": "Keep the approved scope in the existing brief.",
+                "changes": [
+                    {"path": "context/company.md", "before": hashlib.sha256(main.read_bytes()).hexdigest(),
+                     "text": main.read_text() + "\n" + quote + "\n"},
+                    {"path": loose.name, "before": hashlib.sha256(original).hexdigest(), "into": "context/company.md"}]}
+        # sys.path points at the historical checkout; the new migration code has not been installed.
+        script = """import json, sys
+from pathlib import Path
+from unittest.mock import patch
+sys.path.insert(0, 'tools')
+import conversion, pm, storage, upgrades
+private = Path('workspace').resolve()
+write = storage.replace_text
+def interrupted(target, *args):
+    if target == private / upgrades.LEDGER:
+        raise OSError('simulated interrupted ledger write')
+    return write(target, *args)
+with storage.writer_lock(private), patch.object(storage, 'replace_text', side_effect=interrupted):
+    try:
+        conversion.apply(private, json.load(sys.stdin), pm.filing_validator(private.parent), pm.LINK)
+    except OSError as exc:
+        assert str(exc) == 'simulated interrupted ledger write'
+    else:
+        raise AssertionError('expected interruption after applying the historical plan')
+"""
+        proc = subprocess.run([sys.executable, "-c", script], cwd=outer, input=json.dumps(plan),
+                              text=True, capture_output=True)
+        self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
+        self.assertTrue((private / ".hub-filing-pending.json").is_file())
+        self.assertFalse(loose.exists())
+        return loose.name, original, quote
+
+    def test_published_updaters_reach_the_new_layout_and_preserve_private_history(self):
+        revisions = {"0.1.0": "315e31ab6ed46bf72ef72faa8e18225b7d091093",
+                     "0.2.0": "bcf127d23698b8002d5e898a84d7a506289add98"}
+        missing = [sha for sha in revisions.values() if subprocess.run(
+            ["git", "-C", str(pm.ROOT), "cat-file", "-e", f"{sha}^{{commit}}"], capture_output=True).returncode]
+        if missing:
+            if os.environ.get("GITHUB_ACTIONS") == "true":
+                self.fail("Full published Git history is required for consumer update checks")
+            self.skipTest("Historical updater verification requires the published Git history")
+
+        current = workspace.release(pm.ROOT)["system_version"]
+        for version, interrupted, target_version in (("0.1.0", False, current), ("0.2.0", False, current),
+                                                     ("0.2.0", True, current), ("0.2.0", False, next_patch(current))):
+            with self.subTest(version=version, interrupted=interrupted, target_version=target_version):
+                sha = revisions[version]
+                fixture = f"{version}-to-{target_version}" + ("-interrupted" if interrupted else "")
+                outer = self.root.parent / f"consumer-{fixture}"
+                self.git(self.root.parent, "clone", "--quiet", "--no-checkout", "--no-local", str(pm.ROOT), str(outer))
+                self.git(outer, "checkout", "--quiet", "-B", "main", sha)
+                origin = self.root.parent / f"system-{fixture}.git"
+                self.git(self.root.parent, "init", "--bare", "--initial-branch=main", str(origin))
+                self.git(outer, "remote", "set-url", "origin", str(origin))
+                self.git(outer, "push", "--set-upstream", "origin", "main")
+
+                def command(*args):
+                    result = subprocess.run([sys.executable, str(outer / "tools/pm.py"), *args], cwd=outer,
+                                            text=True, capture_output=True)
+                    self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+                    return result.stdout
+
+                command("init-workspace", "--owner", "Fixture PM")
+                command("new", "company-context", "context/company.md", "--title", "Standing guidance")
+                legacy = outer / "workspace"
+                settings_file = legacy / "settings.json"
+                settings = json.loads(settings_file.read_text())
+                self.assertEqual((settings["workspace_format"], settings["system_version"]), (1, version))
+                settings["remotes"]["system"] = str(origin)
+                settings_file.write_text(json.dumps(settings))
+                evidence = legacy / "context/company.md"
+                text = evidence.read_text()
+                before_id = records.work_state(text)[0]["ID"]
+                evidence.write_text(text.replace("## Sources", "## Earlier evidence\n\nA signed policy is available.\n\n## Sources", 1))
+                self.commit(legacy, "Initial private records")
+                private_head = self.git(legacy, "rev-parse", "HEAD")
+                local_data = "Untracked field evidence – São Paulo.\r\n".encode("utf-8")
+                (legacy / "context/sources").mkdir(exist_ok=True)
+                (legacy / "context/sources/field.txt").write_bytes(local_data)
+
+                if interrupted:
+                    loose, original, quote = self.interrupt_historical_filing(outer, legacy)
+
+                publisher = self.root.parent / f"publisher-{fixture}"
+                self.git(self.root.parent, "clone", "--quiet", str(origin), str(publisher))
+                self.git(publisher, "rm", "-qr", ".")
+                for path in pm.inventory(pm.ROOT):
+                    if path.is_file():
+                        target = publisher / path.relative_to(pm.ROOT)
+                        target.parent.mkdir(parents=True, exist_ok=True)
+                        shutil.copyfile(path, target)
+                if target_version != current:
+                    wire = publisher / "playbook/release.json"
+                    wire.write_text(json.dumps(dict(json.loads(wire.read_text()), system_version=target_version)) + "\n")
+                self.commit(publisher, "Current release fixture")
+                self.git(publisher, "push", "origin", "main")
+                command("git", "system", "pull")
+                # The old 0.1 wrapper calls the newly installed check. Session start then runs align.
+                command("align")
+                private = outer / "private"
+                self.assertFalse(legacy.exists())
+                self.assertEqual(self.git(private, "rev-parse", "HEAD"), private_head)
+                installed = json.loads((private / "settings.json").read_text())
+                self.assertEqual((installed["workspace_format"], installed["system_version"]), (2, target_version))
+                brief = (private / "context/company/overview.md").read_text()
+                self.assertEqual(records.work_state(brief)[0]["ID"], before_id)
+                self.assertIn("A signed policy is available.", brief)
+                if interrupted:
+                    self.assertIn(quote, brief)
+                    self.assertFalse((private / ".hub-filing-pending.json").exists())
+                    with zipfile.ZipFile(private / ".hub-history/recover-access.zip") as saved:
+                        self.assertEqual(saved.read("original/" + loose), original)
+                self.assertEqual((private / "context/sources/field.txt").read_bytes(), local_data)
+                # The layout snapshot contains the installed migrator and the old private work.
+                receipt = json.loads((private / f".git/pm-hub-backup-{target_version}-layout-2.json").read_text())
+                archive = outer / ".git/pm-hub-backups" / receipt["id"] / "hub.tar.gz"
+                with tarfile.open(archive) as backup:
+                    before = json.load(backup.extractfile("workspace/settings.json"))
+                    self.assertEqual((before["workspace_format"], before["system_version"]), (1, target_version))
+                    self.assertIn(workspace.FORMAT_FILE, backup.getnames())
+                    self.assertEqual(backup.extractfile("workspace/context/sources/field.txt").read(), local_data)
+                before = {p.relative_to(private): p.read_bytes() for p in pm.inventory(private) if p.is_file()}
+                command("align")
+                self.assertEqual(before, {p.relative_to(private): p.read_bytes() for p in pm.inventory(private) if p.is_file()})
+                command("check")
+
     def test_ordinary_shared_git_pull_preserves_modified_and_untracked_private_files(self):
         self.connect()
         local = self.work / "product-peculiar.md"
         local.write_bytes(b"Private untracked work\r\n")
-        tracked = self.work / "context/notes.md"
+        tracked = self.work / "workspace/backlogs/compare-offers.md"
         tracked.write_bytes(b"Uncommitted private changes\r\n")
         other = self.contributor("system")
         guide = other / "README.md"

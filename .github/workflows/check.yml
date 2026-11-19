@@ -19,12 +19,13 @@ permissions:
 
 jobs:
   check:
-    runs-on: ubuntu-latest
+    runs-on: macos-latest
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+          fetch-depth: 0
       - name: Check Hub structure, skills, templates, hooks and dependencies
         run: python3 tools/pm.py check --system-only
       - name: Test PM workflows, consumer upgrades and recovery

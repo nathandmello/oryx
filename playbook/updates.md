@@ -1,29 +1,35 @@
 # Updating an installed Hub
 
-Pull the shared Hub and open it as usual. The agent updates private records during the session.
+Pull and open the shared Hub. The agent handles private updates.
 
-Release 0.2.0 accepts private layout 1 from 0.1.0. Update the shared Hub on each machine before sharing migrated private work. Fresh installations start aligned.
+Release 0.3.0 uses private format 2. Both updaters read the release version in `playbook/release.json`. Its format 1 value lets older clients fetch the migration code. The new Hub reads the installed private format from `playbook/workspace-format.json`.
 
 ## What runs
 
-1. The trusted session-start hook runs `python3 tools/pm.py align`. With hooks disabled, AGENTS.md directs the agent to run it first.
-2. Alignment inventories tracked and untracked Markdown visible to private Git. It skips ignored files, hidden paths, secrets, and symlinks.
-3. It preserves original starter guidance before updating exact installed paragraphs. Local additions remain available for review.
-4. It records candidates in `.hub-upgrades.json` under `record-filing-0.2`. Paths and explicit record types supply hints.
-5. The agent reads every pending record, its sources, and incoming links. It executes supported corrections during the session.
-6. The stop hook flags pending reviews. A specific unresolved dependency can stay waiting while the PM continues other work.
+1. The trusted session-start hook calls `python3 tools/pm.py align`. With hooks disabled, the agent follows AGENTS.md.
+2. The Hub locates the private Git repository. Conflicting repository locations require inspection.
+3. It verifies a full local backup before changing the private layout. Git history and remotes travel with the repository.
+4. It moves reference records to `private/context/` and work to `private/workspace/`. Record IDs remain stable.
+5. It converts valid legacy remit data to the PM’s Markdown profile. It retains conflicts for review.
+6. The agent reports ambiguous ownership, missing evidence, and occupied destinations.
 
-Each checkout finds local records missing from the private ledger, at any depth. Determine ownership and redundancy from contents.
+`align --status` previews the upgrade. Older installations move from `workspace/` to `private/`.
+
+## Using two machines
+
+Save and push the verified private migration from one machine when authorised. On the second, update the shared Hub, then pull private work before committing its local migration. The pull can accept an identical migration from the same history. It checks staged work and preserves working files.
+
+If changes differ, keep the existing checkout. Restore the remote private repository in a separate Hub checkout. Compare both copies, including staged and untracked files. Reconcile unique local changes there before retiring either copy.
 
 ## Convert existing work
 
-Apply [the filing test](filing.md) to each record. Retain original evidence and purposeful records. Preserve stable IDs when moving records.
+Apply [the filing test](filing.md). Retain original evidence and purposeful records.
 
 Compare claims with inspected originals. Check actors, exclusions, scope, conditions, numbers, dates, and certainty. Separate decisions from proposals and source coverage from assumptions.
 
-Restore supported clauses, route mixed subjects, and retain unknowns beside affected claims. Use the matching template to bring an older brief into the current format.
+Restore supported clauses, route mixed subjects, and retain unknowns beside affected claims. Use its current template.
 
-The agent submits JSON on standard input to `align --preview-plan`, then `align --apply-plan`. The PM has no command to run.
+The agent submits JSON to `align --preview-plan`, then `align --apply-plan`.
 
 | Plan field | Meaning |
 | --- | --- |
@@ -51,7 +57,7 @@ For redundant navigation, supply its `line` and `disposition: navigation`. The t
 
 For a verbatim line routed elsewhere, give its `line` and retained `destination`. Preserve the meaning of headings and verify changed links and anchors.
 
-Use `waiting` for a specific blocker. Read-only `align --status` shows outstanding items and digests. Revisit them when evidence arrives.
+Use `waiting` for specific blockers. Recheck them with `align --status`.
 
 Run `python3 tools/pm.py check` after conversion. Compare the result with the original sources. Report completed changes, retained records, and unresolved evidence separately.
 
@@ -61,33 +67,37 @@ Before the first migration write, the Hub snapshots the entire local installatio
 
 Links are stored as links. The archive omits its own backup directory. Special files, external Git object stores, or verification failures stop migration.
 
-The archive records POSIX modes and extended attributes exposed by Python. Platform-specific metadata outside those APIs needs a native backup when required.
+The archive records POSIX modes and extended attributes exposed by Python. On macOS, use a native backup for Finder tags, resource forks, or ACLs.
 
-The current updater snapshots before merging a version change.
+| Update path | Backup timing |
+| --- | --- |
+| Current wrapper or the released 0.2.0 wrapper | A version-changing system pull verifies a backup before merging the shared update. Startup verifies the layout backup before private conversion. |
+| Direct shared Git pull | Startup backs up the updated toolkit and the original private layout. |
+| Released 0.1.0 wrapper | The wrapper can set the private version to 0.3.0 first. The layout backup includes that setting. |
 
-A plain shared Git pull updates the toolkit first. Session startup then captures the untouched private workspace.
+The receipt identifies `.git/pm-hub-backups/<id>/hub.tar.gz` and its SHA-256.
 
-The old 0.1.0 updater can update private version metadata before the new code runs. Its snapshot reflects that setting and the updated shared checkout.
-
-The local archive is `.git/pm-hub-backups/<id>/hub.tar.gz`. Its release receipt records the ID and SHA-256.
-
-The tool verifies the archive against live files. Retries reuse the snapshot.
+Retries reuse the verified snapshot.
 
 ## Recovery
 
-For a full restore, locate the release receipt under `workspace/.git/pm-hub-backup-<version>.json`. Use its ID to locate the archive.
+Use the reported `installation_backup` path. For this layout migration, the private receipt is `.git/pm-hub-backup-0.3.0-layout-2.json`. Other release backups use `.git/pm-hub-backup-<version>.json`.
 
 Verify `SHA256SUMS` in the archive directory. Extract into a new empty private directory with a tool that preserves permissions and extended attributes.
 
-On Linux, run GNU tar from the backup directory.
+On macOS, run these commands from the archive directory. Use the private directory name recorded in the archive.
 
 ```sh
-sha256sum -c SHA256SUMS
+shasum -a 256 -c SHA256SUMS
 mkdir -m 700 /path/to/new-recovery-directory
-tar --xattrs --xattrs-include='*' -xpzf hub.tar.gz -C /path/to/new-recovery-directory
+tar -xpzf hub.tar.gz -C /path/to/new-recovery-directory
 git -C /path/to/new-recovery-directory fsck --full
-git -C /path/to/new-recovery-directory/workspace fsck --full
+# Use workspace for an archive of the older layout.
+private_name=private
+git -C "/path/to/new-recovery-directory/$private_name" fsck --full
 ```
+
+For GNU tar on Linux, use `--xattrs --xattrs-include='*'` when restoring extended attributes.
 
 Compare the recovered working files before switching installations.
 
