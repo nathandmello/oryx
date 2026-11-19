@@ -100,6 +100,13 @@ class RedTeamBenchmarkTests(unittest.TestCase):
             self.assertIn("recorded benchmark inputs differ", rejected.stdout)
             self.assertNotIn("PASS", rejected.stdout)
 
+    def test_native_startup_inputs_are_bound_to_fingerprint(self):
+        command = [sys.executable, str(benchmark.ROOT / "tools/pm.py"), "eval-red-team", "fingerprint"]
+        result = subprocess.run(command, capture_output=True, text=True, check=True)
+        files = json.loads(result.stdout)["files"]
+        startup = {".claude/settings.json", ".codex/config.toml", ".codex/hooks.json", "tools/hook.py", "tools/pm.py"}
+        self.assertTrue(startup <= files.keys())
+
     def test_context_suite_uses_its_own_cases_and_fingerprint(self):
         suite_name = "context-guardrails"
         manifest_path = benchmark.SUITES[suite_name]

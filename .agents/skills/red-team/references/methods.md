@@ -50,7 +50,7 @@ For First Principles, rebuild the recommendation from established facts and cons
 
 ### Falsification
 
-Name an observation that can disprove the claim and an alternative explanation that fits. Check whether the proposed test distinguishes them. For experiments, check the hypothesis, comparison, primary metric, guardrails, and decision rule. For A/B tests, also check assignment, exposure, telemetry, sample size, and stopping rules. In readouts, check the observed allocation against the intended split. Preserve inconclusive results and identify criteria changed after results.
+Name evidence that can disprove the claim or distinguish a competing explanation. Check the hypothesis, comparison, guardrails, and decision rule. Verify that every arm can measure the primary outcome. For A/B tests, check assignment, exposure, telemetry, sample size, and stopping rules. In readouts, compare observed and intended allocation. Preserve inconclusive results and flag criteria changed after results.
 
 ## Apply an AI lens when the artifact makes AI claims
 

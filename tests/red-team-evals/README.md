@@ -29,7 +29,7 @@ python3 tools/pm.py eval-red-team prompt experiment-proxy
 python3 tools/pm.py eval-red-team rubric experiment-proxy
 ```
 
-Save the fingerprint before collecting reviews. It covers the skill, relevant guidance, benchmark files, and pinned BMAD revision.
+Save the fingerprint before collecting reviews. It records the listed skill, guidance, hook, and benchmark files and the pinned BMAD revision.
 
 ## Grade blind
 
