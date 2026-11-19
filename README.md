@@ -28,6 +28,10 @@ Use the [opportunity workflow](playbook/opportunities.md) for proposed investmen
 
 Agents automatically use [ingest-context](.agents/skills/ingest-context/SKILL.md) for context capture. The agent prompts for a missing or unfinished [PM remit](playbook/context.md#pm-remit). A remit can cover whole products or several areas within them.
 
+Ask the agent to ingest a meeting by initiative and meeting title, date range, source link, or transcript file. See [summarize-meeting](.agents/skills/summarize-meeting/SKILL.md).
+
+The agent discovers available connectors and asks you to clarify uncertain source or filing choices before it proceeds.
+
 ## Placement
 
 Keep only `README.md`, `AGENTS.md`, `CLAUDE.md`, and `.gitignore` as root files. The checker enforces these homes:
@@ -35,6 +39,7 @@ Keep only `README.md`, `AGENTS.md`, `CLAUDE.md`, and `.gitignore` as root files.
 | Home | Purpose | Repository |
 | --- | --- | --- |
 | `private/context/` | Reference material organised by company, product, product area, initiative, or PM | Private |
+| `private/context/initiatives/<initiative>/` | Initiative overview and dated meeting summaries that qualify as event history | Private |
 | `private/context/pm/context.md` | PM profile, including responsibilities, goals, dependencies, and interests | Private |
 | `private/workspace/` | Work in progress and completed PM artifacts, organised by type | Private |
 | `private/workspace/backlogs/<product>/initiatives.json` | Signed initiative register used by the backlog and roadmap commands | Private |

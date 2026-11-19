@@ -1,0 +1,84 @@
+{
+  "resolutions": {
+    "title": "VC API governance",
+    "initiative": "vc-api-governance",
+    "date": "2021-09-21",
+    "mode": "capture",
+    "input": "connector",
+    "download": "https://raw.githubusercontent.com/w3c-ccg/meetings/67ffc7007af48f665906ec3702aadcf9bb4e3210/2021-09-21-vchttpapi/index.html",
+    "sha256": "04b89dfb85d07ac2cb19576564cc72502239a1fb3f074ad70795d2957aedeedf",
+    "prompt": "Ingest the September 21, 2021 call for our VC API governance initiative under eval-product. Capture the merge policy and naming decisions and save a dated meeting note we can revisit. Use the public transcript at https://github.com/w3c-ccg/meetings/blob/67ffc7007af48f665906ec3702aadcf9bb4e3210/2021-09-21-vchttpapi/index.html."
+  },
+  "noisy-full": {
+    "title": "VC API testing",
+    "initiative": "vc-api-testing",
+    "date": "2022-08-30",
+    "mode": "summary",
+    "input": "file",
+    "filename": "call.html",
+    "download": "https://raw.githubusercontent.com/w3c-ccg/meetings/67ffc7007af48f665906ec3702aadcf9bb4e3210/2022-08-30-vcapi/index.html",
+    "sha256": "c401254b30e750d8ea26af776c4a58604b19032f553e875ff72bc341abc812bd",
+    "prompt": "Summarize the VC API Task Force call on August 30, 2022 from ../input/call.html for the API test team. What does the issuer suite cover, what is still outside it, and what was decided about changing the meeting time? Reply here only."
+  },
+  "excerpt": {
+    "title": "VC API testing",
+    "initiative": "vc-api-testing",
+    "date": "2022-08-30",
+    "mode": "summary",
+    "input": "excerpt",
+    "filename": "excerpt.html",
+    "download": "https://raw.githubusercontent.com/w3c-ccg/meetings/67ffc7007af48f665906ec3702aadcf9bb4e3210/2022-08-30-vcapi/index.html",
+    "sha256": "c401254b30e750d8ea26af776c4a58604b19032f553e875ff72bc341abc812bd",
+    "prompt": "I only have this scheduling excerpt of the August 30, 2022 VC API call, in ../input/excerpt.html. Using this excerpt alone, what time did they settle on, and which September meetings did they cancel? Just reply here.",
+    "lines": [
+      92,
+      108
+    ]
+  },
+  "engineering": {
+    "title": "Release readiness",
+    "initiative": "release-readiness",
+    "date": "2024-10-03",
+    "mode": "capture",
+    "input": "file",
+    "filename": "maintenance.txt",
+    "source": "https://openedx.atlassian.net/wiki/spaces/COMM/pages/4519067649/2024-10-03+Meeting+notes",
+    "sha256": "af60f32f5ed3c1fdd49c05623ad944f86382aeb5bfdb2543925967adb16161e0",
+    "prompt": "Ingest our October 3, 2024 Open edX maintenance call into the release-readiness initiative under eval-product. Use the transcript in ../input/maintenance.txt. Its source is https://openedx.atlassian.net/wiki/spaces/COMM/pages/4519067649/2024-10-03+Meeting+notes. Save the decisions, follow-ups, and uncertainties, including a dated meeting note that the release lead can revisit.",
+    "extract": "openedx"
+  },
+  "product": {
+    "title": "Product team",
+    "initiative": "product-team",
+    "date": "2019-07-09",
+    "mode": "summary",
+    "input": "file",
+    "filename": "product-call.json",
+    "source": "https://www.youtube.com/watch?v=k8K6wQLxooU",
+    "download": "https://raw.githubusercontent.com/arshadhs/aiml-meeting-intelligence/91d4b49fec412b929c7b8ba7ff9ccfb025dee2c2/tests/data/gitlab-product-team-meeting-2019-07-09.json",
+    "sha256": "5fbd115a14e46c9421d0c7159828366aaf97ba2a7addce36cc44d33d2e17d68a",
+    "prompt": "Summarize the July 9, 2019 GitLab product team call in ../input/product-call.json for a PM who missed it. What do PMs owe on customer discovery? What can they show at kickoff, what remains open about kickoff, and what changed about planning labels? Include owners, timing, and sources where supported. Reply here only."
+  },
+  "staff": {
+    "title": "Engineering operations",
+    "initiative": "engineering-operations",
+    "date": "2022-09-14",
+    "mode": "summary",
+    "input": "file",
+    "filename": "staff.json",
+    "source": "https://www.youtube.com/watch?v=rOqgRiNMVqg",
+    "download": "https://raw.githubusercontent.com/arshadhs/aiml-meeting-intelligence/91d4b49fec412b929c7b8ba7ff9ccfb025dee2c2/tests/data/gitlab-sec-growth-datascience-2022-09-14.json",
+    "sha256": "8a3ef285ee3824fd69f3e993b1b02034760de819a4081276c9590d3ba41d6545",
+    "prompt": "Catch me up on communications, staffing and reporting ownership from the September 14 GitLab engineering staff meeting in ../input/staff.json. Include the anti-abuse reorganization and what is or isn't imminent. Reply here only, with timestamps."
+  },
+  "ambiguous-source": {
+    "title": "Release readiness",
+    "initiative": "release-readiness",
+    "mode": "clarify",
+    "input": "file",
+    "fixture": "release-review-catalog.json",
+    "filename": "meeting-catalog.json",
+    "sha256": "84e2c7fa966c68c6ae3d473dc6f7e277aa41e59d60eb1fcaf65390bfb697a814",
+    "prompt": "Ingest the release readiness review from the first week of March 2025 into release-readiness under eval-product. Use the meeting matches in ../input/meeting-catalog.json."
+  }
+}

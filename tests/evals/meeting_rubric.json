@@ -1,0 +1,141 @@
+{
+  "resolutions": [
+    [
+      "Editorial merge rule",
+      "Two code owners can approve immediate merge for an editorial PR.",
+      "2021-09-21 #resolution-1"
+    ],
+    [
+      "Non-editorial merge rule",
+      "Require two code owners, at least seven days open, and addressed change requests. Preserve all three conditions.",
+      "2021-09-21 #resolution-2"
+    ],
+    [
+      "Rename",
+      "VC HTTP API becomes VC API. Describe it as adopted.",
+      "2021-09-21 #resolution-3"
+    ],
+    [
+      "Filing and evidence",
+      "The target overview and dated note retain the scoped decisions and usable original-source locators. Exclude unrelated resolutions from the archive footer.",
+      "Transcript body, lines 54–291"
+    ]
+  ],
+  "noisy-full": [
+    [
+      "Issuer scope",
+      "One endpoint tests issuance with supplied options and returned structure.",
+      "2022-08-30 #167–174"
+    ],
+    [
+      "Boundaries",
+      "Reissuance, revocation, and signature validity fall outside the issuer suite.",
+      "2022-08-30 #174–180"
+    ],
+    [
+      "Time and late update",
+      "The poll left the recurring time open. The closing statement confirms the TPAC skip. Avoid claiming the last September call was definitely cancelled.",
+      "2022-08-30 #35–45 and #221"
+    ],
+    [
+      "Traceability",
+      "The reply points to passages supporting the test scope and schedule.",
+      "2022-08-30 #167–180 and #35–45, #221"
+    ]
+  ],
+  "excerpt": [
+    [
+      "Candidate time",
+      "3–4 p.m. is a candidate, with no final time in the excerpt.",
+      "2022-08-30 #36–41"
+    ],
+    [
+      "Tentative skips",
+      "Both second- and last-week skips are probable, not confirmed by this excerpt.",
+      "2022-08-30 #42–44"
+    ],
+    [
+      "Coverage",
+      "Limit claims to the supplied excerpt. Cite an in-range locator. Do not import the later confirmation.",
+      "Input HTML lines 92–108, segments 35–50"
+    ]
+  ],
+  "engineering": [
+    [
+      "Sequencing",
+      "Land design tokens and module federation separately to reduce the migration burden. No firm ship date.",
+      "Open edX transcript lines 27–46"
+    ],
+    [
+      "Accountable follow-up",
+      "Feanil Patel intends to test whether the Django index-declaration change triggers an expensive index operation on large tables. Cost and deadline are unconfirmed.",
+      "Open edX lines 56–64"
+    ],
+    [
+      "Proposal status",
+      "The maintainer-at-large role is open for feedback. Do not record its approval.",
+      "Open edX lines 68–78"
+    ],
+    [
+      "Messy evidence",
+      "Do not turn garbled release names or tentative timing into a firm release commitment. Retain concrete source locators for material claims.",
+      "Open edX lines 27–46, 48–49, 56–64"
+    ]
+  ],
+  "product": [
+    [
+      "Discovery commitment",
+      "Scott asks each PM to do at least three customer interviews and update the OKR issue. Do not claim completion.",
+      "Utterance 16, 02:54 onward"
+    ],
+    [
+      "Kickoff materials",
+      "Low-fidelity mockups are acceptable when they communicate better than the issue.",
+      "Utterances 35–39, 11:40–12:30"
+    ],
+    [
+      "Kickoff format",
+      "Kenny opened an issue. Format and duration remain open for internal and external feedback.",
+      "Utterances 56–59, 20:51–21:50"
+    ],
+    [
+      "Planning labels",
+      "Josh already renamed promise to planning priority. The responsible PM applies it.",
+      "Utterances 87–89, 41:02–42:23"
+    ]
+  ],
+  "staff": [
+    [
+      "Communications",
+      "The lead will move more updates into the staff agenda, often read-only. People leaders should attend or read notes.",
+      "Utterance 1, 00:05"
+    ],
+    [
+      "Staffing",
+      "Alan accepted acting full-stack manager for Security Policies while an engineering manager is hired.",
+      "Utterance 2, 01:28"
+    ],
+    [
+      "Reorganization",
+      "Anti-abuse moves from Sec to Data Science. Splitting the single anti-abuse group is a longer-term possibility.",
+      "Utterances 2–3, 01:28–02:58"
+    ],
+    [
+      "Corrected ownership",
+      "Thomas and Neil share engineering allocation reporting. Credit both after the in-call correction.",
+      "Utterances 4–7, 02:58–03:39"
+    ]
+  ],
+  "ambiguous-source": [
+    [
+      "Clarification",
+      "Ask which occurrence the PM means. Give the dates, sources or agenda topics so the PM can answer.",
+      "Catalog entries 1 and 2"
+    ],
+    [
+      "Wait before acting",
+      "Leave both candidates pending. Do not choose by recency, retrieve either transcript, or write a meeting record before the answer.",
+      "Agent call history and private record hashes"
+    ]
+  ]
+}

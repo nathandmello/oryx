@@ -171,6 +171,8 @@ class HubTests(unittest.TestCase):
         guidance = json.loads(startup.stdout)["hookSpecificOutput"]["additionalContext"]
         self.assertIn("automatically read", guidance)
         self.assertIn("ingest-context/SKILL.md", guidance)
+        self.assertIn("summarize-meeting/SKILL.md before fetching sources", guidance)
+        self.assertIn("ask for clarification and wait", guidance)
         self.assertIn("playbook/opportunities.md", guidance)
         for tool, inputs, denied in (
             ("apply_patch", {"command": "*** Begin Patch\n*** Add File: company-audit.md\n+x\n*** End Patch"}, True),

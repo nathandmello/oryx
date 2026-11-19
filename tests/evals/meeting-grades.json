@@ -1,0 +1,141 @@
+{
+  "resolutions": [
+    {
+      "criterion": "Editorial merge rule",
+      "verdict": "pass",
+      "evidence": "Resolution 1, source line 95, allows an immediate editorial merge on approval from two code owners. Both filed records retain the condition."
+    },
+    {
+      "criterion": "Non-editorial merge rule",
+      "verdict": "pass",
+      "evidence": "Resolution 2, line 124, requires two code-owner approvals, seven days open and addressed change requests. The overview and dated note retain all three."
+    },
+    {
+      "criterion": "Rename",
+      "verdict": "pass",
+      "evidence": "Resolution 3, line 148, adopts VC API. Both records distinguish the new and former names. The full-name clarification follows comment 57."
+    },
+    {
+      "criterion": "Filing and evidence",
+      "verdict": "pass",
+      "evidence": "The overview links to the dated note. Both identify the pinned minutes and Resolutions 1–3. The additional PR examples come from the meeting body, including Orie’s comment immediately after 100."
+    }
+  ],
+  "noisy-full": [
+    {
+      "criterion": "Issuer scope",
+      "verdict": "pass",
+      "evidence": "Segments 167–174 support one issuer endpoint, valid credential/options, request and response structure, and the example of a string-valued credential subject."
+    },
+    {
+      "criterion": "Boundaries",
+      "verdict": "pass",
+      "evidence": "Segment 174 expressly excludes reissuance, revocation and the signature itself. Segments 177–179, 186–196 and 200 support the separate verifier, cryptographic interop, and in-development suites."
+    },
+    {
+      "criterion": "Time and late update",
+      "verdict": "pass",
+      "evidence": "Segments 35–45 leave the poll open and identify a candidate. Segment 221 confirms the TPAC skip. The reply makes no definite last-week cancellation claim."
+    },
+    {
+      "criterion": "Traceability",
+      "verdict": "pass",
+      "evidence": "The three table rows cite the matching numbered passages. Eastern time is supported by segment 45, and the firm TPAC update by 221."
+    }
+  ],
+  "excerpt": [
+    {
+      "criterion": "Candidate time",
+      "verdict": "pass",
+      "evidence": "Comments 36–41 give 3–4 p.m. as a possible time an hour earlier. Comment 45 supplies the time zone. The reply leaves the selection open."
+    },
+    {
+      "criterion": "Tentative skips",
+      "verdict": "pass",
+      "evidence": "Comments 42–44 support “probably cancel” for both the second-week TPAC and last-week Rebooting the Web of Trust calls. The reply preserves that uncertainty."
+    },
+    {
+      "criterion": "Coverage",
+      "verdict": "pass",
+      "evidence": "All cited comments are in the supplied 35–50 excerpt. The answer draws no conclusion from the full meeting’s closing statement."
+    }
+  ],
+  "engineering": [
+    {
+      "criterion": "Sequencing",
+      "verdict": "pass",
+      "evidence": "Overview and dated note record separate migrations, documentation and operator workload, with no fixed landing date. Lines 33–46 support the agreement."
+    },
+    {
+      "criterion": "Accountable follow-up",
+      "verdict": "pass",
+      "evidence": "Lines 56–64 support Feanil Patel’s proposed test of an index-declaration migration on large tables. The reply and dated note distinguish expected low cost from a result and identify no deadline."
+    },
+    {
+      "criterion": "Proposal status",
+      "verdict": "pass",
+      "evidence": "The reply correctly calls the maintainer-at-large item a request for feedback, with no approval claim, as in lines 68–78. It explains why it was outside the release-readiness filing."
+    },
+    {
+      "criterion": "Messy evidence",
+      "verdict": "pass",
+      "evidence": "The dated note cites lines 27–46, 48–55 and 56–64. Teak is identified with proposed timing and a transcription caveat. The reply and overview record no firm date or migration cost."
+    }
+  ],
+  "product": [
+    {
+      "criterion": "Discovery commitment",
+      "verdict": "pass",
+      "evidence": "The reply assigns each PM the three-interview goal and OKR update, with about three weeks remaining. Utterance 16 at 02:54 supports the request and gives no completion result."
+    },
+    {
+      "criterion": "Kickoff materials",
+      "verdict": "pass",
+      "evidence": "Utterances 35–40 within 10:53–16:39 support judgment for non-UI work, rough mockups when clearer than an issue, and Google Slides as an example."
+    },
+    {
+      "criterion": "Kickoff format",
+      "verdict": "pass",
+      "evidence": "Utterances 50–59 within 15:07–21:55 support Kenny starting the issue, a format review before the next kickoff, and feedback from both audiences. Duration and speaker limits remain open."
+    },
+    {
+      "criterion": "Planning labels",
+      "verdict": "pass",
+      "evidence": "Utterance 88 at 41:50 reports Josh’s completed rename and limits application to the responsible section PM. The reply preserves both."
+    }
+  ],
+  "staff": [
+    {
+      "criterion": "Communications",
+      "verdict": "pass",
+      "evidence": "Utterance 1 at 00:05 states that more updates will go in the agenda, often read-only, and that people leaders should attend or read. Utterances 37 and 43 corroborate Wayne’s identification."
+    },
+    {
+      "criterion": "Staffing",
+      "verdict": "pass",
+      "evidence": "Utterance 2 at 01:28 explicitly says Alan accepted acting full-stack manager for Security Policies while an engineering manager is recruited."
+    },
+    {
+      "criterion": "Reorganization",
+      "verdict": "pass",
+      "evidence": "Utterances 2–3 at 01:28–02:55 support the move to Data Science, one current Anti-abuse group, and a possible split outside the near term."
+    },
+    {
+      "criterion": "Corrected ownership",
+      "verdict": "pass",
+      "evidence": "Utterances 4–7 at 02:58–04:12 thank Thomas, name Neil as doing half, and acknowledge the initial omission. The reply credits both."
+    }
+  ],
+  "ambiguous-source": [
+    {
+      "criterion": "Clarification",
+      "verdict": "pass",
+      "evidence": "The agent asked which review to ingest. Its question identified both dates, agenda topics, and providers from the catalog."
+    },
+    {
+      "criterion": "Wait before acting",
+      "verdict": "pass",
+      "evidence": "The agent reported zero connector calls. The checker found no system or private record changes."
+    }
+  ]
+}
