@@ -38,6 +38,9 @@ When a release flags older records, follow [the context cleanup procedure](../..
 - Surface a sibling product update as an FYI when relevant. Flag its concrete effect on an owned product.
 - Keep the original source with its owner. Save a product-specific implication separately with its citation when requested.
 - Reuse a suitable record. Apply [the filing test](../../../playbook/filing.md) before creating a file. Supply its parent, basis, reader need, and review trigger.
+- Apply the [section rules](../../../playbook/filing.md#when-a-section-earns-its-place) inside the owning record. Check its parent for overlapping claims.
+- Give a new or revised section a brief lead. Name what it covers and when a PM would read it.
+- Use a custom heading for a distinct lookup. Preserve the date and scope of event evidence.
 - Reuse an existing topic folder whenever its reader question fits. Apply the filing limits before naming another.
 - Use delivery for requirements and design. Use detail to retain the source. Use unclear when ownership needs review.
 - Record a specific open question where its answer matters. Supply an answer only when an excerpt resolves it.
@@ -46,7 +49,7 @@ When a release flags older records, follow [the context cleanup procedure](../..
 
 ## Apply
 
-- Run `route-context` in preview mode. Inspect each home, disposition, and relevance. Account for each supplied source.
+- Run `route-context` in preview mode. Inspect each home, heading, lead, disposition, and relevance. Account for each supplied source.
 - Run `route-context --write PATH` for one authorised record at a time. Use an existing artifact's workflow for other records.
 - Treat access to a source as permission to read it. A suggested destination grants no write permission.
 - Report FYIs and other out-of-scope entries in the reply. Save them when the PM requests retention.

@@ -3,6 +3,7 @@
 import json
 import os
 from datetime import date, timedelta
+from html import unescape
 from pathlib import Path
 import re
 import shutil
@@ -16,6 +17,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "tools"))
 import hook
 import pm
 import records
+import red_team_eval
 import workspace
 
 
@@ -396,6 +398,26 @@ class HubTests(unittest.TestCase):
                                            "- Fact: This claim continues\n  with its source. [S1]", 1))
         self.assertEqual(pm.check(self.root), [])
 
+    def test_custom_section_claims_and_leads_are_checked(self):
+        target = self.context_record()
+        original = target.read_text()
+        heading = "UK rollout baseline"
+        lead = "Consult when comparing UK adoption before and after rollout."
+        for body, expected in (
+            ("Historical context from an earlier brief.", None),
+            ("- Fact: The UK had 2,000 active merchants.", "Fact entries need"),
+            (f"{records.CONTEXT_LEAD}\n{lead}\n\n- Fact: The UK had 2,000 active merchants. [S1]", None),
+            (f"{records.CONTEXT_LEAD}\n\n- Fact: The UK had 2,000 active merchants. [S1]", "short prose lead"),
+            (f"{records.CONTEXT_LEAD}\n{lead}\n\nThe UK had 2,000 active merchants.", "labelled context bullets"),
+        ):
+            with self.subTest(body=body):
+                target.write_text(original.replace("## Context controls", f"## {heading}\n\n{body}\n\n## Context controls"))
+                errors = pm.check(self.root)
+                if expected:
+                    self.assertTrue(any(heading in error and expected in error for error in errors), errors)
+                else:
+                    self.assertEqual(errors, [])
+
     def test_context_sources_require_unique_ids_and_honest_dates(self):
         target = self.context_record()
         original = target.read_text()
@@ -534,6 +556,158 @@ class HubTests(unittest.TestCase):
         self.assertEqual(company.read_text(), company_text)
         self.assertEqual(set(pm.inventory(self.work)) - before, {company, product})
         self.assertEqual(pm.check(self.root), [])
+
+    def test_capture_previews_and_reuses_a_custom_section(self):
+        target = self.context_record()
+        original = target.read_bytes()
+        heading = "UK rollout baseline"
+        lead = "Consult when comparing UK adoption before and after rollout."
+        quote = "The company reported 2,000 active UK merchants before rollout."
+        payload = {
+            "sources": [{"reference": "Fictional UK rollout announcement", "date": "undated",
+                         "coverage": "read", "checked_on": date.today().isoformat(), "text": quote}],
+            "entries": [{"scope": "company", "heading": heading, "lead": lead,
+                         "source": 1, "location": "Paragraph 1", "quote": quote}],
+        }
+        destination = target.relative_to(self.work).as_posix()
+        entry = payload["entries"][0]
+        for changes, message in (({"heading": "sources"}, "reserved context metadata"),
+                                 ({"lead": "- Fact: Invalid as a lead."}, "short prose lead")):
+            with self.subTest(changes=changes):
+                result = self.context_capture(dict(payload, entries=[{**entry, **changes}]), "--write", destination)
+                self.assertEqual(result.returncode, 1, result.stdout)
+                self.assertIn(message, result.stdout)
+                self.assertEqual(target.read_bytes(), original)
+        entry.pop("lead")
+        result = self.context_capture(payload)
+        self.assertEqual(result.returncode, 1, result.stdout)
+        self.assertIn("Give UK rollout baseline a short lead", result.stdout)
+        entry["lead"] = lead
+
+        result = self.context_capture(payload)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        preview = json.loads(result.stdout)["entries"][0]
+        self.assertEqual((preview["section"], preview["section_lead"], preview["section_action"]),
+                         (heading, lead, "create"))
+        self.assertEqual(target.read_bytes(), original)
+
+        result = self.context_capture(payload, "--write", destination)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertEqual(json.loads(result.stdout)["written"], destination)
+        captured = target.read_text()
+        self.assertEqual(records.split_context_lead(records.section(captured, heading))[0], lead)
+        self.assertIn(quote, records.section(captured, heading))
+        self.assertIsNone(records.split_context_lead(records.section(captured, "Customers and markets"))[0])
+        self.assertEqual(pm.check(self.root), [])
+
+        entry.pop("lead")
+        result = self.context_capture(payload, "--write", destination)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        replay = json.loads(result.stdout)
+        self.assertEqual((replay["entries"][0]["section_action"], replay["entries"][0]["section_lead"]), ("reuse", lead))
+        self.assertIsNone(replay["written"])
+        self.assertEqual(target.read_text(), captured)
+
+        entry["lead"] = "Consult when comparing active merchant counts for the UK pilot."
+        result = self.context_capture(payload, "--write", destination)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        text = target.read_text()
+        self.assertEqual(records.split_context_lead(records.section(text, heading))[0], entry["lead"])
+        self.assertEqual(text.count(quote), 1)
+        self.assertEqual(pm.check(self.root), [])
+
+    def evaluate_real_world_context_capture(self, case_id):
+        manifest = pm.ROOT / red_team_eval.SUITES["context-sections"]
+        case = red_team_eval.load_manifest(manifest)["cases"][case_id]
+        capture = case["capture"]
+        sources = [
+            {"reference": f"[{source['title']} (benchmark paraphrase)]({source['url']})",
+             "date": source["date"], "checked_on": date.today().isoformat(), "coverage": "partial",
+             "text": source["summary"]}
+            for source in case["sources"]
+        ]
+        entries = [
+            {**entry, "location": case["sources"][entry["source"] - 1]["location"],
+             "quote": sources[entry["source"] - 1]["text"]}
+            for entry in capture["entries"]
+        ]
+        payload = {"sources": sources, "entries": entries}
+        destination = capture["destination"]
+        target = self.work / destination
+        if destination.startswith("context/products/"):
+            records.create(self.root, "company-context", "context/company/overview.md")
+        before = {path: path.read_bytes() for path in pm.inventory(self.work) if path.is_file()}
+
+        preview = self.context_capture(payload)
+        self.assertEqual(preview.returncode, 0, preview.stdout + preview.stderr)
+        plan = json.loads(preview.stdout)
+        self.assertEqual({path: path.read_bytes() for path in before}, before)
+        self.assertFalse(target.exists())
+        self.assertEqual(len(plan["entries"]), len(entries))
+        self.assertTrue(all(row["verification"] == "supplied text" for row in plan["source_checks"]),
+                        plan["source_checks"])
+        proposed = {}
+        for given, row in zip(entries, plan["entries"]):
+            if given["scope"] == "detail":
+                self.assertEqual(row["disposition"], "deferred")
+                self.assertIsNone(row["destination"])
+                continue
+            self.assertEqual(row["destination"], destination)
+            expected = given.get("heading") or records.CONTEXT_TOPICS[given["scope"]][given["topic"]]
+            self.assertEqual(row["section"], expected)
+            self.assertEqual(row["section_action"], "create")
+            if "lead" in given:
+                self.assertEqual(row["section_lead"], given["lead"])
+            self.assertTrue(row["section_lead"])
+            proposed[expected] = row["section_lead"]
+
+        result = self.context_capture(payload, "--write", destination)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        text = target.read_text(encoding="utf-8")
+        self.assertEqual(set(pm.inventory(self.work)) - before.keys(), {target})
+        self.assertEqual({path: path.read_bytes() for path in before}, before)
+        found, errors = records.table(text, "Sources", records.SOURCE_COLUMNS)
+        self.assertEqual(errors, [])
+        references = {reference: (identifier, published) for identifier, reference, published, _ in found}
+        self.assertEqual(references.keys(), {
+            sources[row["source"] - 1]["reference"] for row in plan["entries"] if row["destination"]
+        })
+        for row in plan["entries"]:
+            if row["destination"] is None:
+                self.assertNotIn(row["quote"], unescape(text))
+                continue
+            heading = row["section"]
+            lead, body = records.split_context_lead(records.section(text, heading))
+            source = sources[row["source"] - 1]
+            identifier, published = references[source["reference"]]
+            self.assertEqual(published, source["date"])
+            self.assertEqual(lead, proposed[heading])
+            self.assertIn(f"[{identifier}] ({row['location']})\n  > {row['quote']}", unescape(body))
+        self.assertEqual(pm.check(self.root), [])
+
+        replay = self.context_capture(payload, "--write", destination)
+        self.assertEqual(replay.returncode, 0, replay.stdout + replay.stderr)
+        replay_plan = json.loads(replay.stdout)
+        self.assertIsNone(replay_plan["written"])
+        self.assertTrue(all(row["section_action"] == "reuse" for row in replay_plan["entries"] if row["destination"]))
+
+        wrong_source = {**payload, "entries": [{**entries[0], "source": 2}, *entries[1:]]}
+        rejected = self.context_capture(wrong_source, "--write", destination)
+        self.assertEqual(rejected.returncode, 1, rejected.stdout + rejected.stderr)
+        self.assertIn("differs from the supplied text", rejected.stdout)
+        self.assertEqual(target.read_text(encoding="utf-8"), text)
+
+    def test_real_world_context_shopify_annual_gmv(self):
+        self.evaluate_real_world_context_capture("shopify-annual-gmv")
+
+    def test_real_world_context_gitlab_renewal(self):
+        self.evaluate_real_world_context_capture("gitlab-premium-renewal")
+
+    def test_real_world_context_apple_storefronts(self):
+        self.evaluate_real_world_context_capture("apple-storefront-purchase-links")
+
+    def test_real_world_context_stripe_versions(self):
+        self.evaluate_real_world_context_capture("stripe-billing-period-versions")
 
     def test_capture_keeps_open_questions_and_resolves_only_the_addressed_question(self):
         company = self.context_record()
@@ -709,6 +883,8 @@ class HubTests(unittest.TestCase):
         result = self.context_capture(payload, "--write", "context/company/overview.md")
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertIn("Who owns the pricing exception?", company.read_text())
+        lead, _ = records.split_context_lead(records.section(company.read_text(), "Constraints and open questions"))
+        self.assertEqual(lead, records.CONTEXT_LEADS["Constraints and open questions"])
         self.assertEqual(set(re.findall(r"^## (.+)$", company.read_text(), re.M)),
                          records.CONTEXT_METADATA | {"Constraints and open questions"})
         self.assertEqual(pm.check(self.root), [])

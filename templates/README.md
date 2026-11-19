@@ -22,6 +22,8 @@ Create only the artifact needed for the current work. Templates guide thought; t
 
 Create a [PM profile](../playbook/context.md#pm-remit) with `new pm-context context/pm/context.md`. Add background and preferences directly in Markdown.
 
+Use the [context section rules](../playbook/filing.md#when-a-section-earns-its-place) to choose headings. Give each substantive section a lead that explains when it applies.
+
 Registered initiatives share one signed product register. Generate their live backlog and roadmap with the [view templates](../playbook/initiative-views.md).
 Ordinary Markdown can hold other working plans. Cite the applicable company, product, or area context.
 

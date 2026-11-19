@@ -1,0 +1,181 @@
+{
+  "bmad_revision": "e435a22574fe55722841086e5566420178b98df3",
+  "cases": {
+    "shopify-annual-gmv": {
+      "compare": false,
+      "request": "A PM is preparing an annual commerce benchmark. Which figure answers the latest full-year question in this packet? Which figure is the historical comparison? Propose the section heading and one-line lead you would keep in the company brief.",
+      "artifact": "Company brief draft\n\n## Figures reported at the announcement\n\n- Shopify GMV: $175.4 billion.\n- A newer announcement reports $119 billion.\n\nThe chart label reads Latest annual Shopify GMV.",
+      "sources": [
+        {
+          "title": "Shopify FY2021 financial results",
+          "url": "https://www.shopify.com/news/shopify-announces-fourth-quarter-and-full-year-2021-financial-results",
+          "date": "2022-02-16",
+          "location": "Full-Year Financial Highlights",
+          "summary": "Shopify reported gross merchandise volume of $175.4 billion for FY2021."
+        },
+        {
+          "title": "Shopify company profile",
+          "url": "https://www.shopify.com/news/about-us",
+          "date": "undated",
+          "location": "Milestones, 2025 GMV",
+          "summary": "Shopify's company profile lists $378 billion in gross merchandise volume for FY2025."
+        },
+        {
+          "title": "Shopify Q3 2026 financial results",
+          "url": "https://www.shopify.com/news/shopify-q3-2026-financial-results",
+          "date": "2026-11-03",
+          "location": "Opening remarks and period covered",
+          "summary": "Shopify reported $119 billion in gross merchandise volume for the quarter ended September 30, 2026."
+        }
+      ],
+      "capture": {
+        "destination": "context/company/overview.md",
+        "entries": [
+          {
+            "scope": "company",
+            "heading": "Shopify GMV by fiscal year",
+            "lead": "Consult when comparing Shopify's reported gross merchandise volume across full fiscal years.",
+            "source": 1
+          },
+          {"scope": "company", "heading": "Shopify GMV by fiscal year", "source": 2},
+          {"scope": "detail", "source": 3}
+        ]
+      },
+      "criteria": {
+        "latest_year": "Answers $378 billion for FY2025 as the latest full fiscal year in the packet and cites S2.",
+        "historical_year": "Answers $175.4 billion for FY2021 as the historical comparison and cites S1.",
+        "period": "Identifies S3 as quarterly GMV and keeps it out of the comparable full-year figure.",
+        "section": "Proposes a subject-specific heading and a short lead that tells a PM to use it for full-year GMV comparisons."
+      },
+      "gates": ["latest_year", "historical_year", "period", "section"]
+    },
+    "gitlab-premium-renewal": {
+      "compare": false,
+      "request": "Review two historical support cases under the terms in this packet. Both customers had an existing annual GitLab Premium subscription. Their first renewal under the new pricing falls on April 2 and April 3, 2024, respectively. Which customer can use the transition offer? Propose where the rule belongs and the lead a PM should see.",
+      "artifact": "Company context draft\n\n## Business model\n\nGitLab Premium list price rose to $29 per user per month in 2023.\n\n## Renewal pricing\n\nExisting Premium customers pay $24 per user per month.",
+      "sources": [
+        {
+          "title": "GitLab Premium pricing announcement",
+          "url": "https://about.gitlab.com/blog/gitlab-premium-update/",
+          "date": "2023-03-02",
+          "location": "Opening pricing announcement",
+          "summary": "GitLab announced a Premium list price increase from $19 to $29 per user per month effective April 3, 2023."
+        },
+        {
+          "title": "GitLab Premium pricing FAQ",
+          "url": "https://about.gitlab.com/pricing/faq-premium-update/",
+          "date": "undated",
+          "location": "Existing GitLab Premium customers, transition offers",
+          "summary": "Existing Premium subscriptions could get a one-time $24 per-user monthly price on a one-year renewal through April 2, 2024."
+        }
+      ],
+      "capture": {
+        "destination": "context/company/overview.md",
+        "entries": [
+          {"scope": "company", "topic": "business-model", "source": 1},
+          {
+            "scope": "company",
+            "heading": "GitLab Premium renewal transition through April 2024",
+            "lead": "Consult when checking eligibility for the one-time Premium renewal offer after the 2023 price increase.",
+            "source": 2
+          }
+        ]
+      },
+      "criteria": {
+        "cutoff": "April 2 is eligible on the given facts. April 3 falls outside the offer. Cites S2 for the cutoff.",
+        "scope": "Keeps the $24 per-user monthly price confined to the one-time, one-year renewal for existing Premium subscriptions.",
+        "list_price": "Distinguishes the announced $29 list price from the transition price. Makes no current pricing claim.",
+        "section": "Proposes a date-scoped home and a lead for historical eligibility checks."
+      },
+      "gates": ["cutoff", "scope", "list_price", "section"]
+    },
+    "apple-storefront-purchase-links": {
+      "compare": false,
+      "request": "A PM wants to use the same in-app external purchase button for digital goods in the United States and EU storefronts. Based on this snapshot, what applies in each region and what must the team verify before proceeding? Propose headings and leads that make the two scopes easy to find.",
+      "artifact": "Mobile app product brief\n\n## External purchase options\n\nLinks work without an entitlement. Reuse the US setup for the EU release.\n\nThe team has not confirmed its EU entitlement.",
+      "sources": [
+        {
+          "title": "Apple App Review Guidelines",
+          "url": "https://developer.apple.com/app-store/review/guidelines/#link-to-other-purchase-methods",
+          "date": "undated",
+          "location": "Section 3.1.1(a), Link to Other Purchase Methods",
+          "summary": "Apple's US storefront does not require the external purchase link entitlement for in-app buttons, links, or calls to action."
+        },
+        {
+          "title": "Apple EU App Store payment options",
+          "url": "https://developer.apple.com/support/payment-options-on-the-app-store-in-the-eu",
+          "date": "undated",
+          "location": "What is new and how it works",
+          "summary": "Under the EU terms effective October 1, 2026, offering alternative payment options requires the applicable StoreKit External Purchases or Offers Entitlement."
+        }
+      ],
+      "capture": {
+        "destination": "context/products/mobile-app/overview.md",
+        "entries": [
+          {
+            "scope": "product",
+            "product": "mobile-app",
+            "heading": "External purchase links in the US App Store",
+            "lead": "Consult before adding an external purchase call to action to the US storefront.",
+            "source": 1
+          },
+          {
+            "scope": "product",
+            "product": "mobile-app",
+            "heading": "EU App Store alternative payment requirements",
+            "lead": "Consult before planning an external purchase option for EU storefronts.",
+            "source": 2
+          }
+        ]
+      },
+      "criteria": {
+        "us_scope": "States the US storefront exception for this external link entitlement, with S1 and no broader approval claim.",
+        "eu_scope": "Uses the October 1, 2026 EU terms and applicable entitlement documented in S2.",
+        "unverified": "Leaves the app's EU eligibility or entitlement unconfirmed and identifies it as a prerequisite to reuse.",
+        "section": "Provides storefront-specific headings and leads or an equivalent scoped structure. Each prompt has a clear place to look."
+      },
+      "gates": ["us_scope", "eu_scope", "unverified", "section"]
+    },
+    "stripe-billing-period-versions": {
+      "compare": false,
+      "request": "A billing PM must write handoff guidance for an integration pinned to 2024-06-20 and one moving to 2025-03-31.basil. Where should each find the period end? The pinned integration will run for another quarter. Propose the context heading and lead, with citations.",
+      "artifact": "Billing product brief\n\n## Subscription dates\n\nAlways use the subscription's current_period_end.\n\nThe Basil track and the older track have separate delivery plans.",
+      "sources": [
+        {
+          "title": "Stripe Subscription object for API version 2024-06-20",
+          "url": "https://docs.stripe.com/api/subscriptions/object?api-version=2024-06-20",
+          "date": "undated",
+          "location": "Subscription object and current_period_end attribute",
+          "summary": "The Stripe 2024-06-20 API reference shows current_period_end on the top-level Subscription object."
+        },
+        {
+          "title": "Stripe Basil subscription billing periods changelog",
+          "url": "https://docs.stripe.com/changelog/basil/2025-03-31/deprecate-subscription-current-period-start-and-end",
+          "date": "2025-03-31",
+          "location": "Breaking change and impact",
+          "summary": "Stripe API version 2025-03-31.basil removes subscription-level period fields and directs integrations to items.data.current_period_end on subscription items."
+        }
+      ],
+      "capture": {
+        "destination": "context/products/billing/overview.md",
+        "entries": [
+          {
+            "scope": "product",
+            "product": "billing",
+            "heading": "Stripe subscription billing periods by API version",
+            "lead": "Consult when mapping period fields for a pinned Stripe version or planning a version upgrade.",
+            "source": 1
+          },
+          {"scope": "product", "product": "billing", "heading": "Stripe subscription billing periods by API version", "source": 2}
+        ]
+      },
+      "criteria": {
+        "older_version": "Uses the top-level current_period_end for the pinned 2024-06-20 integration and cites S1.",
+        "basil": "Uses items.data.current_period_end for 2025-03-31.basil and cites S2.",
+        "parallel_support": "Keeps the prior mapping available for the pinned integration. Makes no claim that both integrations must migrate together.",
+        "section": "Proposes a version-scoped heading and lead for finding the mapping. Uses context for the reference and delivery plans for migration work."
+      },
+      "gates": ["older_version", "basil", "parallel_support", "section"]
+    }
+  }
+}

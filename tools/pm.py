@@ -54,6 +54,7 @@ REQUIRED = (
     ".agents/skills/run-discovery/plan.md", ".agents/skills/run-discovery/investigate.md",
     ".agents/skills/define-initiative/SKILL.md", ".agents/skills/prioritize-roadmap/SKILL.md",
     "tools/red_team_eval.py", "tests/red-team-evals/cases.json", "tests/red-team-evals/context-guardrails.json",
+    "tests/red-team-evals/context-sections.json",
 )
 ROOT_FILES = {"README.md", "AGENTS.md", "CLAUDE.md", ".gitignore"}
 ROOT_DIRS = {"playbook", "templates", "tools", "tests",

@@ -306,6 +306,8 @@ def relevance(remit, subject, affects):
 
 
 def target_section(text, entry, section):
+    if "heading" in entry:
+        return section
     if text.startswith("<!-- pm: product-area-context -->\n"):
         by_topic = {"ownership": "Area scope and ownership", "contribution": "Area outcomes"}
         return by_topic.get(entry.get("topic"), records.AREA_HEADINGS.get(section, section))
@@ -499,7 +501,7 @@ def route_home(private, entry, scope, canonical, section):
         kind = marker[1] if marker else None
         if kind == "context-note":
             filing.verify_note(private, record["path"], text)
-            return record["path"], "Context", "existing"
+            return record["path"], entry.get("heading", "Context"), "existing"
         if brief_path(record["path"]) and kind == layout.brief_kind(record["path"]):
             return canonical, target_section(text, entry, section), "existing"
         raise ValueError("Select a typed reference at its owning context path")
@@ -507,7 +509,7 @@ def route_home(private, entry, scope, canonical, section):
         return canonical, section, "new-brief"
     note_filing(private, record)
     filing.check_new(private, "context-note", record["path"], None)
-    return record["path"], "Context", "new-note"
+    return record["path"], entry.get("heading", "Context"), "new-note"
 
 
 def note_filing(private, record):
@@ -544,6 +546,31 @@ def validate_entry_shape(entry, section):
             raise ValueError("Keep the original wording of an exclusion in the rule; record its application separately")
 
 
+def section_leads(text, entries):
+    headings = {heading.strip().casefold(): heading.rstrip() for heading in re.findall(r"^## (.+)$", text, re.M)}
+    groups = {}
+    for entry in entries:
+        heading = entry["section"]
+        if headings.setdefault(heading.casefold(), heading) != heading:
+            raise ValueError(f"Use the existing spelling for the section {headings[heading.casefold()]}")
+        groups.setdefault(heading, []).append(entry)
+    leads = {}
+    for heading, group in groups.items():
+        proposed = {entry["lead"] for entry in group if "lead" in entry}
+        if len(proposed) > 1:
+            raise ValueError(f"Give {heading} one lead for this capture")
+        existing, _ = records.split_context_lead(records.section(text, heading) or "")
+        lead = next(iter(proposed), existing)
+        if lead is None:
+            lead = records.CONTEXT_LEADS.get(heading)
+            if heading == "Context":
+                lead = group[0].get("record", {}).get("reason")
+        if lead is None or not records.valid_context_lead(lead):
+            raise ValueError(f"Give {heading} a short lead that explains when to consult the section")
+        leads[heading] = lead
+    return leads
+
+
 def route(payload, private, remit=None):
     """Plan destinations and PM relevance independently from prepared excerpts."""
     fields(payload, ("sources", "entries"))
@@ -556,9 +583,9 @@ def route(payload, private, remit=None):
     initiative_products = {}
     entries = []
     for entry in payload["entries"]:
-        fields(entry, ("scope",), ("topic", "product", "product_area", "initiative", "subject", "record", "affects", "source",
-                                    "location", "quote", "question", "answers", "interpretation",
-                                    "rule", "term", "decision"))
+        fields(entry, ("scope",), ("topic", "heading", "lead", "product", "product_area", "initiative", "subject",
+                                    "record", "affects", "source", "location", "quote", "question", "answers",
+                                    "interpretation", "rule", "term", "decision"))
         scope = line(entry["scope"], "Scope")
         if scope not in TOPICS and scope not in DEFERRED | {"area", "reference"}:
             raise ValueError(f"Unknown context scope: {scope}")
@@ -595,6 +622,14 @@ def route(payload, private, remit=None):
             section = TOPICS.get(scope, {}).get(topic)
             if not section:
                 raise ValueError(f"Use a supported brief topic for {scope} scope")
+        if "heading" in entry:
+            if section or scope in DEFERRED | {"pm"} or (canonical is None and "record" not in entry):
+                raise ValueError("Use a topic or a heading for a typed context record")
+            section = line(entry["heading"], "Section heading")
+            reserved = {name.casefold() for name in records.CONTEXT_RESERVED_SECTIONS}
+            if (not records.specific(section) or section != section.strip() or any(c in section for c in "#<>[]")
+                    or section.casefold() in reserved):
+                raise ValueError("Use a descriptive section heading outside the reserved context metadata")
         if scope == "product" and "product_area" in entry and section:
             canonical = standing_area_home(private, entry, canonical, section, sources)
         intended = entry["record"].get("path") if isinstance(entry.get("record"), dict) else canonical
@@ -607,6 +642,9 @@ def route(payload, private, remit=None):
             entry = dict(entry, candidates=blocked[intended])
         else:
             destination, section, disposition = route_home(private, entry, scope, canonical, section)
+        if "lead" in entry and (scope == "pm" or not section
+                                or not records.valid_context_lead(line(entry["lead"], "Section lead"))):
+            raise ValueError("Use a short prose lead for a typed context section")
         validate_entry_shape(entry, section)
         affects = entry.get("affects", {})
         if not isinstance(affects, dict):
@@ -645,6 +683,19 @@ def route(payload, private, remit=None):
     if any(row["destination"] and (row["destination"] in originals or "sources" in Path(row["destination"]).parts)
            for row in entries):
         raise ValueError("Original source files cannot be context capture destinations")
+    targets = {}
+    for entry in entries:
+        destination = entry["destination"]
+        if destination and destination != REMIT_PATH and entry["section"]:
+            targets.setdefault(destination, []).append(entry)
+    for destination, group in targets.items():
+        target = record_path(private, destination)
+        text = target.read_text(encoding="utf-8") if target.is_file() else ""
+        leads = section_leads(text, group)
+        for entry in group:
+            heading = entry["section"]
+            entry["section_lead"] = leads[heading]
+            entry["section_action"] = "reuse" if records.section(text, heading) is not None else "create"
     verification = verify_excerpts(payload["sources"], entries, private)
     return {"sources": sources, "entries": entries, "source_checks": verification, "remit_configured": remit is not None,
             "remit_status": remit_status(remit)}
@@ -670,8 +721,7 @@ def table_row(values):
     return "| " + " | ".join(values) + " |"
 
 
-def section_body(text, heading):
-    body = (records.section(text, heading) or "").strip()
+def section_body(body, heading):
     columns = records.CONTEXT_TABLES.get(heading)
     if not columns:
         return "" if records.PLACEHOLDER.fullmatch(body) else body
@@ -710,7 +760,8 @@ def render_entry(entry, identifier):
     return f"- {label}: {scoped_text(entry, statement)} {cite}\n  > {quote}"
 
 
-def insert_entries(text, selected, sources, private, target):
+def insert_entries(text, selected, sources, private, target, leads=None):
+    leads = leads or {}
     if text.startswith("<!-- pm: product-area-context -->\n"):
         # The whole brief already identifies the area, including manually authored questions.
         selected = [{k: v for k, v in row.items() if k != "product_area"} for row in selected]
@@ -721,11 +772,12 @@ def insert_entries(text, selected, sources, private, target):
              if re.fullmatch(r"S[1-9]\d*", identifier)}
     source_section = records.section(text, "Sources").strip()
     source_changed = False
-    updates = {}
+    updates, originals = {}, {}
     for entry in selected:
         heading = entry["section"]
         if heading not in updates:
-            updates[heading] = section_body(text, heading)
+            originals[heading] = records.split_context_lead(records.section(text, heading) or "")
+            updates[heading] = section_body(originals[heading][1], heading)
         if "question" in entry:
             bullet = f"- Unknown: {scoped_text(entry, literal(entry['question']))}"
         else:
@@ -758,9 +810,15 @@ def insert_entries(text, selected, sources, private, target):
             # A question with continuation lines needs a separate review of the whole entry.
             pattern = rf"^{re.escape(question)}(?:\n(?!\n*  )|\Z)"
             updates[heading] = re.sub(pattern, "", updates[heading], flags=re.M).strip()
+    revised_leads = {entry["section"] for entry in selected if "lead" in entry}
     for heading, body in updates.items():
-        if body != (records.section(text, heading) or "").strip():
-            text = edit_section(text, heading, body)
+        previous, previous_body = originals[heading]
+        lead = leads.get(heading, previous)
+        if body == previous_body and (heading not in revised_leads or lead == previous):
+            continue
+        if lead is not None:
+            body = f"{records.CONTEXT_LEAD}\n{lead}\n\n{body}"
+        text = edit_section(text, heading, body)
     if source_changed:
         source_section = "\n".join(value for value in source_section.splitlines() if "{{S1}}" not in value)
         text = edit_section(text, "Sources", source_section)
@@ -826,7 +884,7 @@ def apply(root, destination, plan, owner, lint):
     if kind not in records.CONTEXT_KINDS or records.context_location(kind, destination):
         raise ValueError("Use the existing record's workflow, or select a typed context section")
     topics = records.context_sections(kind)
-    if any(entry["section"] not in topics for entry in selected):
+    if any(entry["section"] not in topics and "heading" not in entry for entry in selected):
         raise ValueError("Use the existing record's workflow, or select a typed context section")
     if original is None:
         parent = product_path(selected[0]["product"]) if kind == "initiative-context" else None
@@ -846,7 +904,7 @@ def apply(root, destination, plan, owner, lint):
     headings = re.findall(r"^## (.+)$", text, re.M)
     if len(set(headings)) != len(headings) or not records.CONTEXT_METADATA <= set(headings):
         raise ValueError("Use one section per heading and keep the context metadata before capture")
-    candidate = insert_entries(text, selected, plan["sources"], private, target)
+    candidate = insert_entries(text, selected, plan["sources"], private, target, section_leads(text, selected))
     if candidate == text:
         return False
     state = records.section(candidate, "Work state")

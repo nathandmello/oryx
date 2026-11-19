@@ -131,3 +131,22 @@ class RedTeamBenchmarkTests(unittest.TestCase):
             rejected = subprocess.run(scoring, capture_output=True, text=True)
             self.assertEqual(rejected.returncode, 1)
             self.assertIn("trial 1 missed authority", rejected.stdout)
+
+    def test_context_section_prompts_hide_reference_routes_and_rubrics(self):
+        manifest = benchmark.ROOT / benchmark.SUITES["context-sections"]
+        cases = benchmark.load_manifest(manifest)["cases"]
+        for case_id, case in cases.items():
+            with self.subTest(case=case_id):
+                prompt = benchmark.render_prompt(case)
+                self.assertIn(case["artifact"], prompt)
+                self.assertIn("name a task or decision that calls for it", prompt)
+                for number, source in enumerate(case["sources"], 1):
+                    self.assertIn(f"S{number}. {source['title']}", prompt)
+                    self.assertIn(source["url"], prompt)
+                    self.assertIn(source["summary"], prompt)
+                for entry in case["capture"]["entries"]:
+                    if "lead" in entry:
+                        self.assertNotIn(entry["lead"], prompt)
+                self.assertTrue(set(case["gates"]) <= case["criteria"].keys())
+                for criterion in case["criteria"].values():
+                    self.assertNotIn(criterion, prompt)
