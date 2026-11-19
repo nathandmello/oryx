@@ -310,6 +310,20 @@ class HubTests(unittest.TestCase):
         self.assertTrue(any("duplicate ID" in error for error in errors))
         self.assertTrue(any("missing section: Outcome" in error for error in errors))
 
+    def test_strategy_timing_prompt_preserves_earlier_briefs(self):
+        template = self.root / "templates/strategy.md"
+        current = template.read_text()
+        previous = re.sub(r"^## When\n.*?(?=^## )", "", current, flags=re.M | re.S)
+        self.assertNotEqual(previous, current)
+        template.write_text(previous)
+        previous_draft = records.create(self.root, "strategy", "workspace/strategies/previous.md")
+        self.assertIsNone(records.section(previous_draft.read_text(), "When"))
+
+        template.write_text(current)
+        current_draft = records.create(self.root, "strategy", "workspace/strategies/current.md")
+        self.assertIn("consequence of waiting", records.section(current_draft.read_text(), "When"))
+        self.assertEqual(pm.check(self.root), [])
+
     def test_nested_drafts_retarget_template_links(self):
         source = self.root / "templates/goal.md"
         source.write_text(source.read_text() + "\nRead [the framework](../playbook/framework.md).\n")

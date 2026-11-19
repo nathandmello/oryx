@@ -23,10 +23,13 @@ Value validation connects the customer and problem, the solution's effect, and a
 
 ## Strategy brief
 
-- Why: context, purpose, business need, and agreed goals or gaps.
-- Who: selected customers and their problems.
-- What: the problem to pursue first, supporting evidence, and priority rationale.
-- How: the high-level approach, its expected effect, and the measures it can influence.
+- **Why** gives the context, business need, and agreed goals or gaps.
+- **Who** identifies the priority customers and their problems.
+- **What** names the problem to pursue first, supporting evidence, and priority rationale.
+- **When** gives the decision horizon, reason to act, and review trigger.
+- **How** explains the high-level approach, expected effect, and measures it can influence.
+
+Use [the brief-review checks](brief-review.md) to assess the frame, wording, and evidence.
 
 Keep user stories, detailed flows, and engineering specifications in the configured delivery system.
 
@@ -58,10 +61,10 @@ Identify the assumption whose failure most threatens the decision. Record contra
 
 Use four statements:
 
-- We believe that: the hypothesis.
-- To verify that, we will: the test.
-- We will measure: the metric.
-- We are right if: the decision criterion.
+- **We believe** states one claim about a specific population or condition.
+- **We will test it by** states the method and any comparison.
+- **We will measure** defines the primary measure, window, and relevant guardrails.
+- **We proceed if** links the evidence threshold to a decision.
 
 Assess criticality, test cost, evidence quality, and time to a useful result. Prefer a small test that fits the question.
 
@@ -79,7 +82,7 @@ Use Nathan's evidence scale as a reference:
 | 8–9 | Test results |
 | 10 | Launch and usage data |
 
-A category records evidence origin. Check its relevance, quality, age, and limits before a confidence judgment. Model agreement adds no customer evidence.
+A category records evidence origin. Judge confidence against the specific claim and decision. Check directness, quality, age, and limits. Model agreement adds no customer evidence.
 
 ## Iterations
 
