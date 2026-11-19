@@ -438,7 +438,7 @@ class HubTests(unittest.TestCase):
             (f"## Examples\n\n{fenced}\n<!-- Fixture -->## {heading}\n<!-- Fixture -->## Background",
              "Ambiguous context section boundary"),
             *((f"## Examples\n\n<{tag}>\n{section}\n</{tag}>", "Ambiguous context section boundary")
-              for tag in ("pre", "script", "style", "textarea")),
+              for tag in ("pre", "script", "style", "textarea", "div", "custom-example")),
         ):
             with self.subTest(body=body):
                 text = original.replace("## Context controls", f"{body}\n\n## Context controls")

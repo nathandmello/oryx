@@ -546,12 +546,24 @@ def validate_entry_shape(entry, section):
             raise ValueError("Keep the original wording of an exclusion in the rule; record its application separately")
 
 
+HTML_BLOCK_TAGS = (
+    "address|article|aside|base|basefont|blockquote|body|caption|center|col|colgroup|dd|details|dialog|dir|div|dl|dt|"
+    "fieldset|figcaption|figure|footer|form|frame|frameset|h[1-6]|head|header|hr|html|iframe|legend|li|link|main|menu|"
+    "menuitem|nav|noframes|noscript|ol|optgroup|option|p|param|search|section|summary|table|tbody|td|tfoot|th|thead|"
+    "title|tr|track|ul"
+)
 HIDDEN_SECTION_MARKUP = re.compile(
     # Match a whole fence first so literal comments or tags inside it stay local to the example.
     r"^ {0,3}(?P<fence>(?P<mark>[`~])(?P=mark){2,})(?!(?P=mark))[^\n]*(?:\n|\Z)"
     r".*?(?:^ {0,3}(?P=fence)(?P=mark)*[ \t]*(?=\n|\Z)|\Z)"
     r"|<!--.*?(?:-->|\Z)"
-    r"|^ {0,3}<(?P<tag>pre|script|style|textarea)(?=[\s>/]).*?(?:</(?P=tag)\s*>|\Z)",
+    r"|^ {0,3}<(?P<tag>pre|script|style|textarea)(?=[\s>/]).*?(?:</(?P=tag)\s*>|\Z)"
+    # CommonMark declarations and processing instructions close with their own delimiters.
+    r"|^ {0,3}(?:<\?.*?(?:\?>|\Z)|<!\[CDATA\[.*?(?:\]\]>|\Z)|<![a-z].*?(?:>|\Z))"
+    # Ordinary block tags and standalone custom tags end at the first blank line.
+    rf"|^ {{0,3}}</?(?:{HTML_BLOCK_TAGS})(?=[\s>/])[^\n]*(?:\n(?![ \t]*(?:\n|\Z))[^\n]*)*"
+    r"|(?:\A|(?<=\n)^[ \t]*\n) {0,3}</?[a-z][a-z0-9-]*(?:[ \t]+[^<>\n]*)?[ \t]*/?>[ \t]*"
+    r"(?:\n(?![ \t]*(?:\n|\Z))[^\n]*)*(?=\n|\Z)",
     re.I | re.M | re.S,
 )
 
