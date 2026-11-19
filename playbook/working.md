@@ -20,6 +20,10 @@ Both modes retain source checks, ownership boundaries, and existing permissions.
 
 Read the record in `private/workspace/`, its checkpoint, and linked context. Check the sources behind accepted decisions. Report only changes or gaps that matter now.
 
+Resolve context for each workspace task, including drafts and replies. Repeat the lookup when scope or evidence changes.
+Run `pm.py task-context "TASK"` if hooks are unavailable. Use `--product`, `--area`, or `--initiative` when scope is known.
+Use [the numerical evidence procedure](numbers.md) before relying on material figures from any source.
+
 At startup, ask once about any `remit_prompt` from `pm.py align` when questions are welcome. Respect quiet mode and deferrals. Capture agreed responsibilities in the [PM profile](context.md#pm-remit).
 
 For area work, use `pm.py area-context PRODUCT AREA` to locate the product overview, area brief, and inline evidence.

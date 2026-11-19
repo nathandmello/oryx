@@ -12,7 +12,7 @@ Read [the initiative workflow](../../../playbook/opportunities.md). Use `initiat
 3. Describe the solution, customer benefit, business value, and credible options.
 4. Set a first increment, exclusions, rough effort, dependencies, delivery approach, rollout, and enablement.
 5. Review value, usability, feasibility, and viability with the relevant owners. Give material gaps a next step.
-6. Reuse a product metric. Propose the initiative target, baseline, date, and guardrails with their sources.
+6. Reuse a product metric. Use [the registry](../../../playbook/metrics.md) for the definition. Propose the target, baseline, date, and guardrails with sources.
 7. Inspect the metric's existing experiment or linked draft with `initiative show`. Keep unknown test details empty.
 8. Apply [the brief-review checks](../../../playbook/brief-review.md). Resolve gaps that block approval or return them to the PM.
 9. Complete the brief when it supports approval. Use `initiative propose` for `approve-initiative`.

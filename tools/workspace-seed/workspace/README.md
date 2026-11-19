@@ -4,6 +4,8 @@ Keep work here by type. Examples include backlogs, roadmaps, initiatives, and ex
 
 Use the [artifact templates](../../../templates/README.md) for supported work types. Link to [context](../context/README.md) for the applicable rules or evidence.
 
+For working Markdown, use Scope, Evidence, and Next action in that order. State the evidence gap while work is incomplete.
+
 For registered initiatives, use these paths relative to the private repository:
 
 | Work | Location |

@@ -59,6 +59,9 @@ CONTEXT_TABLES = {
     "Decisions already closed": ("Question", "Scope", "Person and date", "Evidence", "Next step"),
 }
 SOURCE_REFERENCE = re.compile(r"\[S[1-9]\d*\]")
+WORKING_SECTIONS = ("Scope", "Evidence", "Next action")
+SECTION_HEADING = re.compile(r"^## ([^\r\n]+)")
+FENCE = re.compile(r"^ {0,3}(`{3,}|~{3,})(.*)")
 
 
 def work_state(text):
@@ -125,9 +128,73 @@ def state_errors(text):
     return values.get("ID"), errors
 
 
+def section_blocks(text):
+    """Find real Markdown headings, preserving their section bytes."""
+    positions, offset, fence = [], 0, None
+    for line in text.splitlines(keepends=True):
+        marker = FENCE.match(line)
+        if marker:
+            token, rest = marker.groups()
+            if fence is None:
+                fence = token
+            elif fence[0] == token[0] and len(token) >= len(fence) and not rest.strip():
+                fence = None
+        elif fence is None and (heading := SECTION_HEADING.match(line)):
+            positions.append((heading[1].strip(), offset, offset + len(line)))
+        offset += len(line)
+    return [(name, start, body, end) for (name, start, body), end in
+            zip(positions, [item[1] for item in positions[1:]] + [len(text)])]
+
+
 def section(text, name):
-    matches = re.findall(r"^## " + re.escape(name) + r"\s*\n(.*?)(?=^## |\Z)", text, re.M | re.S)
-    return matches[0] if len(matches) == 1 else None
+    matches = [(body, end) for heading, _, body, end in section_blocks(text) if heading == name]
+    return re.sub(r"^(?:[ \t]*\r?\n)+", "", text[slice(*matches[0])]) if len(matches) == 1 else None
+
+
+def heading_order(kind, template):
+    order = [name for name, *_ in section_blocks(template)]
+    if kind in ("context-note", "product-area-context") and "Context controls" in order:
+        order.insert(order.index("Context controls"), "Filing")
+    if kind == "product-context":
+        for topic, old in LEGACY_PRODUCT_TOPICS.items():
+            current = CONTEXT_TOPICS["product"][topic]
+            if old not in order and current in order:
+                order.insert(order.index(current) + 1, old)
+    return order
+
+
+def ordered_sections(text, order):
+    blocks = section_blocks(text)
+    positions = {name: index for index, name in enumerate(order)}
+    sorted_blocks = sorted(blocks, key=lambda item: positions.get(item[0], len(positions)))
+    if sorted_blocks == blocks:
+        return text
+    return text[:blocks[0][1]] + "".join(
+        text[start:end].rstrip("\r\n") + "\n\n" for _, start, _, end in sorted_blocks
+    ).rstrip("\n") + "\n"
+
+
+def working_errors(text):
+    errors = []
+    sections = [name for name, *_ in section_blocks(text) if name in WORKING_SECTIONS]
+    if sections != list(WORKING_SECTIONS):
+        errors.append("Use Scope, Evidence, and Next action sections in that order for working Markdown")
+    for name in WORKING_SECTIONS:
+        if name in sections and not (section(text, name) or "").strip():
+            errors.append(f"Give {name} a concrete entry or state the current gap")
+    return errors
+
+
+def structure_errors(kind, text, order):
+    headings = [name for name, *_ in section_blocks(text)]
+    sections = set(headings)
+    errors = []
+    if [name for name in headings if name in order] != [name for name in order if name in sections]:
+        errors.append(f"use the section order from the {kind} template")
+    if kind in CONTEXT_KINDS:
+        errors.extend(f"unknown context section: {name}. File its content under a supported heading"
+                      for name in sorted(sections - set(order)))
+    return errors
 
 
 def table(text, name, columns):
@@ -191,6 +258,15 @@ def existing_briefs(private, canonical, scope):
 
 def product_briefs(private, product):
     return existing_briefs(private, layout.product(product), "product")
+
+
+def initiative_home(private, product, initiative):
+    qualified = layout.initiative(initiative, product)
+    legacy = layout.initiative(initiative)
+    if (private / qualified).exists() or not existing_briefs(private, legacy, "initiative"):
+        return qualified
+    text = (private / legacy).read_text(encoding="utf-8")
+    return legacy if parent_reference(legacy, text) == layout.product(product) else qualified
 
 
 def parent_reference(path, text):
@@ -302,7 +378,8 @@ def context_errors(path, text, kind, texts, content_sections, template=False):
             marker = MARKER.match(texts.get(parent, ""))
             if kind in {"initiative-context", "product-area-context"}:
                 product_path = layout.brief_kind(parent) == "product-context"
-                same_product = kind == "initiative-context" or Path(path).parts[:3] == Path(parent).parts[:3]
+                same_product = (Path(path).parts[:2] == ("context", "initiatives")
+                                or Path(path).parts[:3] == Path(parent).parts[:3])
                 if not product_path or not same_product or not marker or marker[1] != "product-context":
                     errors.append("Parent context must link to the same product's product-context record")
             elif not parent.startswith("context/") or not marker or marker[1] != "company-context":
@@ -349,7 +426,7 @@ def context_errors(path, text, kind, texts, content_sections, template=False):
         for line in body.splitlines():
             if not line.strip() or PLACEHOLDER.fullmatch(line.strip()):
                 continue
-            entry = re.fullmatch(r"- (Fact|Rule|Example|Interpretation|Assumption|Unknown): (.+)", line)
+            entry = re.fullmatch(r"- (Fact|Rule|Example|Interpretation|Reported metric|Assumption|Unknown): (.+)", line)
             if entry:
                 current = [entry[1], entry[2]]
                 entries.append(current)
@@ -358,16 +435,16 @@ def context_errors(path, text, kind, texts, content_sections, template=False):
             else:
                 errors.append(f"{name}: use labelled context bullets")
         for label, claim in entries:
-            substantive = substantive or label in {"Fact", "Rule", "Example"}
-            if label in {"Fact", "Rule", "Example"} and not PLACEHOLDER.fullmatch(claim) and not SOURCE_REFERENCE.search(claim):
+            substantive = substantive or label in {"Fact", "Rule", "Example", "Reported metric"}
+            if label in {"Fact", "Rule", "Example", "Reported metric"} and not PLACEHOLDER.fullmatch(claim) and not SOURCE_REFERENCE.search(claim):
                 errors.append(f"{name}: {label} entries need a source reference such as [S1]")
     if state == "complete" and not substantive:
         errors.append("complete context needs a sourced fact, rule, example, or structured entry")
     return errors, parent
 
 
-def validate(texts):
-    errors, contracts, ids, parents = [], {}, {}, {}
+def validate(texts, *, legacy_structure=()):
+    errors, contracts, orders, ids, parents = [], {}, {}, {}, {}
     for path in texts:
         if path.startswith("templates/") and path.endswith(".md") and path != "templates/README.md":
             if Path(path).relative_to("templates").as_posix() not in {f"{kind}.md" for kind in KINDS}:
@@ -383,7 +460,9 @@ def validate(texts):
             problems.append("templates must start as drafts")
         if values.get("Mode") != "thought-partner":
             problems.append("templates must start in thought-partner mode")
-        contracts[kind] = set(re.findall(r"^## (.+)$", text, re.M))
+        contracts[kind] = {name for name, *_ in section_blocks(text)}
+        if "Context controls" in contracts[kind] or kind not in CONTEXT_KINDS:
+            orders[kind] = heading_order(kind, text)
         if kind in CONTEXT_KINDS:
             content = contracts[kind] - CONTEXT_METADATA
             if content - context_sections(kind):
@@ -403,7 +482,10 @@ def validate(texts):
         if kind not in contracts:
             errors.append(f"{path}: unknown artifact type: {kind}")
             continue
-        sections = set(re.findall(r"^## (.+)$", text, re.M))
+        headings = [name for name, *_ in section_blocks(text)]
+        sections = set(headings)
+        if path not in legacy_structure:
+            errors.extend(f"{path}: {error}" for error in structure_errors(kind, text, orders.get(kind, [])))
         required = CONTEXT_METADATA if kind in CONTEXT_KINDS else contracts[kind]
         if kind == "strategy":
             required = required - {"When"}  # Earlier strategy records predate this prompt.

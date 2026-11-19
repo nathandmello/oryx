@@ -9,6 +9,7 @@ import json
 import experiment_drafts
 import initiative_areas
 import layout
+import metric_registry
 from initiative_events import HORIZONS, IN_DEFINITION, PHASES, iso_date
 
 BACKLOG_FIELDS = {
@@ -116,10 +117,13 @@ def trace(product, register, identifier=None, *, private):
         "product": {"id": register.setup["references"]["product_id"], "path": register.setup["product_context"]},
     }
     files = {"register": layout.initiative_register(product)}
+    definitions = metric_registry.effective(private.parent, private, product)
+    current = {key: row for key, event in register.metrics.items()
+               if (row := metric_registry.current_for_snapshot(definitions, event))}
     if identifier is None:
         files["planning_comparisons"] = {cycle: data["references"]["path"] for cycle, data in register.cycles.items()}
         return {"product": product, "context": context, "files": files, "limits": register.limits,
-                "metrics": register.metrics, "cycles": sorted(register.cycles)}
+                "metrics": register.metrics, "cycles": sorted(register.cycles), "current_metric_registry": current}
     item = register.items.get(identifier)
     if not item:
         raise ValueError(f"Unknown initiative in this product: {identifier}")
@@ -142,7 +146,8 @@ def trace(product, register, identifier=None, *, private):
             "reviewed_on": decision["on"] if decision["action"] == "review-outcomes" else None,
         }
     return {"product": product, "context": context, "files": files, "initiative": initiative,
-            "metric_definitions": {key: register.metrics[key] for key in metric_ids}}
+            "metric_definitions": {key: register.metrics[key] for key in metric_ids},
+            "current_metric_registry": {key: current[key] for key in metric_ids if key in current}}
 
 
 def cell(value):

@@ -16,6 +16,7 @@ import initiative_areas
 import initiative_intake
 import layout
 import layout_upgrade
+import metric_registry
 import opportunities
 import records
 import storage
@@ -265,13 +266,23 @@ def prepare(root, product, changes):
     accepted = []
     intake_reviews = {}
     proposed_experiments = set()
+    definitions = None
     for event in changes:
         if isinstance(event, dict) and event.get("type") == "approve-experiment":
             event = experiment_drafts.proposed_plan(storage.private_root(root), product, register, event)
         elif (isinstance(event, dict) and event.get("type") == "experiment"
               and str(event.get("experiment", "")).startswith("experiment.")):
             raise ValueError("Use approve-experiment to review the named draft")
+        if isinstance(event, dict) and event.get("type") == "metric":
+            event = metric_registry.snapshot(root, storage.private_root(root), product, event)
         validate_event(event)
+        if event["type"] == "target" and (existing := register.metrics.get(event["metric"])):
+            if metric_registry.reference_metric(existing):
+                if definitions is None:
+                    definitions = metric_registry.effective(root, storage.private_root(root), product)
+                current = metric_registry.current_for_snapshot(definitions, existing)
+                if not current or existing["source"] != metric_registry.REFERENCE + current["reference"]:
+                    raise ValueError("This metric revision changed. Propose the current registry definition under a new metric ID.")
         if event["type"] == "capture" and register.items:
             shortlist = initiative_intake.candidates(register.items, event)
             intake_reviews[event["initiative"]] = shortlist

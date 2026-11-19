@@ -68,18 +68,25 @@ class PurposeRoutingTests(unittest.TestCase):
         self.assertTrue(any("uncategorised" in issue for issue in errors))
         self.assertTrue(any("6 topic" in issue for issue in errors))
 
-    def test_flat_initiative_ids_and_context_only_writes(self):
+    def test_qualified_initiative_ids_and_context_only_writes(self):
         self.cli("new", "company-context", layout.COMPANY)
         for product in ("billing", "retail"):
             self.cli("new", "product-context", layout.product(product))
         self.cli("new", "initiative-context", layout.initiative("renewals"), "--parent", layout.product("billing"))
         row = {"scope": "initiative", "initiative": "renewals", "product": "retail",
                "topic": "outcome", "question": "Which users are eligible?"}
-        rejected = self.cli("route-context", payload={"sources": [], "entries": [row]}, ok=False)
-        self.assertIn("owning product", rejected)
+        payload = {"sources": [], "entries": [row]}
+        qualified = layout.initiative("renewals", "retail")
+        preview = json.loads(self.cli("route-context", payload=payload))
+        self.assertEqual(preview["entries"][0]["destination"], qualified)
+        self.cli("route-context", "--write", qualified, payload=payload)
+        legacy = json.loads(self.cli("route-context", payload={"sources": [], "entries": [dict(row, product="billing")]}))
+        self.assertEqual(legacy["entries"][0]["destination"], layout.initiative("renewals"))
         work = "workspace/initiatives/renewals/plan.md"
         (self.work / work).parent.mkdir(parents=True)
-        (self.work / work).write_text("# Renewals plan\n")
+        plan = ("# Renewals plan\n\n## Scope\n\nEligible renewals.\n\n"
+                "## Evidence\n\nConfirm the start date.\n\n## Next action\n\nCheck the timeline.\n")
+        (self.work / work).write_text(plan)
         row.update(product="billing", record={"path": work, "reason": "Read the active plan."},
                    source=1, location="Item 2", quote="Renewals start in March.")
         row.pop("question")
@@ -88,5 +95,5 @@ class PurposeRoutingTests(unittest.TestCase):
         preview = json.loads(self.cli("route-context", payload=payload))
         self.assertIsNone(preview["entries"][0]["section"])
         self.cli("route-context", "--write", work, payload=payload, ok=False)
-        self.assertEqual((self.work / work).read_text(), "# Renewals plan\n")
+        self.assertEqual((self.work / work).read_text(), plan)
         self.assertEqual(pm.check(self.root), [])

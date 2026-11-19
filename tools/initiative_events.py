@@ -6,6 +6,7 @@ from urllib.parse import urlsplit
 
 import brief_review
 import initiative_intake
+import metric_registry
 from opportunities import SLUG
 from records import specific
 
@@ -285,8 +286,15 @@ class Register:
                 linked(self.items, identifier, "option in this product")
             unique(self.cycles, event["cycle"], {**event, "compared_at": index, "placements": []}, "planning cycle")
         elif kind == "metric":
-            if any(identity(metric["name"]) == identity(event["name"]) for metric in self.metrics.values()):
-                raise ValueError("Reuse the existing metric definition")
+            source = event["source"]
+            definition = metric_registry.reference_metric(event)
+            for old in self.metrics.values():
+                if identity(old["name"]) != identity(event["name"]):
+                    continue
+                prior = old["source"]
+                prior_definition = metric_registry.reference_metric(old) or old["metric"]
+                if not (definition and source != prior and prior_definition == definition):
+                    raise ValueError("Reuse the existing metric definition")
             unique(self.metrics, event["metric"], event, "metric ID")
         elif kind == "capture":
             self.capture(event)

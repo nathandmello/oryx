@@ -78,7 +78,8 @@ class HubTests(unittest.TestCase):
     def test_high_level_brief_passes_and_prd_copy_fails(self):
         brief = self.work / "workspace/initiatives/example/plan.md"
         brief.parent.mkdir(parents=True)
-        brief.write_text("# Initiative\n\nHelp administrators choose their next action.\n")
+        brief.write_text("# Initiative\n\n## Scope\n\nHelp administrators choose their next action.\n\n"
+                         "## Evidence\n\nAdministrator interviews are pending.\n\n## Next action\n\nSchedule two interviews.\n")
         self.assertEqual(pm.check(self.root), [])
         (brief.parent / "PRD-security-hub.md").write_text("# Product specification\n")
         self.assertTrue(any("engineering artifacts" in error for error in pm.check(self.root)))
@@ -735,7 +736,7 @@ class HubTests(unittest.TestCase):
     def test_capture_routes_structured_context_across_company_product_and_initiative(self):
         stamp = date.today().isoformat()
         paths = ("context/company/overview.md", "context/products/example/overview.md",
-                 "context/initiatives/renewals/overview.md")
+                 "context/products/example/initiatives/renewals/overview.md")
         person = "Fixture PM"
         payload = {
             "sources": [{"reference": "Fixture approved decisions", "date": stamp,
@@ -764,7 +765,7 @@ class HubTests(unittest.TestCase):
         self.assertIn("- Rule: Use approved usage summaries.", company.read_text())
         self.assertIn("| workspace | A workspace is the access boundary.", product.read_text())
         self.assertIsNone(records.section(product.read_text(), "The users"))
-        self.assertIn("[Product context](../../products/example/overview.md)", initiative.read_text())
+        self.assertIn("[Product context](../../overview.md)", initiative.read_text())
         decisions = records.section(initiative.read_text(), "Decisions already closed")
         self.assertIn(f"| How do users authenticate? | Renewal pilot | {person}, {stamp} |", decisions)
         self.assertIn("Use existing sessions because renewal needs no new login. [S1]", decisions)
@@ -776,7 +777,7 @@ class HubTests(unittest.TestCase):
         invalid = original.replace("| Brief the pilot team. |", "|  |")
         initiative.write_text(invalid)
         self.assertTrue(any("need every field" in error for error in pm.check(self.root)))
-        initiative.write_text(original.replace("[Product context](../../products/example/overview.md)", "[Company](../../company/overview.md)"))
+        initiative.write_text(original.replace("[Product context](../../overview.md)", "[Company](../../../../company/overview.md)"))
         self.assertTrue(any("same product" in error for error in pm.check(self.root)))
         initiative.write_text(original)
         payload["entries"][2]["decision"].pop("next_step")

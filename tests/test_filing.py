@@ -58,10 +58,12 @@ class FilingTests(unittest.TestCase):
         other.parent.mkdir(parents=True)
         other.write_text("# Incident\n\nCustomers received refunds in March.\n")
         open_event = self.start("SessionStart")
-        self.assertIn("execute playbook/updates.md", open_event["hookSpecificOutput"]["additionalContext"])
+        notice = open_event["hookSpecificOutput"]["additionalContext"]
+        self.assertIn("Follow playbook/updates.md", notice)
+        self.assertIn("Seek the user's choice", notice)
         pending = pm.alignment(self.root)["outstanding"]
         self.assertEqual({i["path"] for i in pending}, {p.relative_to(self.work).as_posix() for p in [*received, other]})
-        self.assertEqual(self.start("Stop")["decision"], "block")
+        self.assertEqual(self.start("Stop"), {})
         preview = self.cli("align", "--preview-plan", data=plan)
         self.assertEqual(preview.returncode, 0, preview.stdout)
         self.assertFalse((self.work / conversion.HISTORY).exists())
