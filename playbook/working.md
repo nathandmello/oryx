@@ -14,7 +14,7 @@ Keep the mode for the current work until the PM changes it. Save it in the work 
 
 A direct request overrides a saved mode. A requested red-team review permits that review; it does not change the mode for later work.
 
-Both modes retain source checks, ownership boundaries, and existing permissions. Show known risks that affect the requested work.
+Both modes retain source checks, ownership boundaries, and existing permissions. Report known [evidence risks](evidence-reviews.md) that affect the requested work, including in quiet mode.
 
 ## Reply preferences
 

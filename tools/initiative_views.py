@@ -8,6 +8,7 @@ from io import StringIO
 import json
 
 import brief_review
+import evidence_reviews
 import experiment_drafts
 import initiative_areas
 import layout
@@ -135,7 +136,9 @@ def evidence_review_labels(reviews):
         if not review["active"] or review["state"] == "routine":
             continue
         claim = f" ({review['claims'][0]['text']})" if review["claims"] else ""
-        labels.append(f"{review['state']}: {review['id']}{claim} — {review['reason']}")
+        evidence = review.get("evidence", {}).get("summary")
+        description = f"{evidence} — {review['reason']}" if evidence else review["reason"]
+        labels.append(f"{review['state']}: {review['id']}{claim} — {description}")
     return labels
 
 
@@ -146,6 +149,7 @@ def backlog(registrations, phase=None, due=False, all_phases=False, *, area=None
     elif due or all_phases:
         phases = set(PHASES)
     rows = []
+    context_reviews = evidence_reviews.workspace_reviews(private)
     for product, register in registrations:
         for item in register.items.values():
             if item["phase"] not in phases or (area is not None and area not in item["areas"]):
@@ -153,7 +157,8 @@ def backlog(registrations, phase=None, due=False, all_phases=False, *, area=None
             decision = item["decisions"][-1] if item["decisions"] else {}
             revisit = next_review(item, decision)
             review_date = iso_date(revisit)
-            reviews = signal_reviews(None, item)
+            reviews = signal_reviews(private, item)
+            reviews += evidence_reviews.for_initiative(private, product, item, reviews=context_reviews)
             review_dates = [iso_date(review["review_on"]) for review in reviews if review["review_on"]]
             if review_dates and (not review_date or min(review_dates) < review_date):
                 review_date = min(review_dates)
@@ -182,6 +187,7 @@ def backlog(registrations, phase=None, due=False, all_phases=False, *, area=None
 def roadmap(registrations, cycle_filter=None, *, area=None, private=None):
     rows = []
     matched = False
+    context_reviews = evidence_reviews.workspace_reviews(private)
     for product, register in registrations:
         matched = matched or cycle_filter in register.cycles
         for item in register.items.values():
@@ -191,6 +197,8 @@ def roadmap(registrations, cycle_filter=None, *, area=None, private=None):
             if area is not None and area not in item["areas"]:
                 continue
             cycle = register.cycles[placement["cycle"]]
+            reviews = signal_reviews(private, item)
+            reviews += evidence_reviews.for_initiative(private, product, item, reviews=context_reviews)
             rows.append({
                 "product": product, "id": item["id"], "title": item["title"], "phase": item["phase"],
                 "areas": item["areas"],
@@ -199,7 +207,7 @@ def roadmap(registrations, cycle_filter=None, *, area=None, private=None):
                 "effort": placement["effort"], "unit": cycle["unit"], "trade_off": placement["reason"],
                 "period_start": cycle["starts_on"], "period_end": cycle["ends_on"],
                 "planning_record": cycle["references"]["path"], "delivery": item["delivery"],
-                "evidence_reviews": evidence_review_labels(signal_reviews(None, item)),
+                "evidence_reviews": evidence_review_labels(reviews),
             })
     if cycle_filter is not None and not matched:
         raise ValueError(f"Unknown planning cycle: {cycle_filter}")
@@ -263,7 +271,8 @@ def trace(product, register, identifier=None, *, private):
     metric_ids = sorted(set(drafts) | set(item["targets"]) | {test["metric"] for test in item["experiments"].values()})
     metric_ids = sorted(set(metric_ids) | {row["metric"] for revisions in item["guardrails"].values() for row in revisions})
     initiative = {key: value for key, value in item.items() if not key.startswith("_")}
-    initiative.update(experiment_drafts=drafts, signal_reviews=signal_reviews(private, item))
+    initiative.update(experiment_drafts=drafts, signal_reviews=signal_reviews(private, item),
+                      context_risks=evidence_reviews.for_initiative(private, product, item))
     if item["phase"] == "shipped":
         ship = next(event for event in reversed(item["decisions"]) if event["action"] == "ship")
         initiative["launch_review"] = ("Recorded in the signed ship decision." if "readiness" in ship

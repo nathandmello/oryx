@@ -112,9 +112,9 @@ def run(root, args):
                 if "issue" in info:
                     raise ValueError(info["issue"])
         if args.command == "backlog":
-            rows = initiative_views.backlog(registers, args.phase, args.due, args.all_phases, area=area)
+            rows = initiative_views.backlog(registers, args.phase, args.due, args.all_phases, area=area, private=private)
         else:
-            rows = initiative_views.roadmap(registers, args.cycle, area=area)
+            rows = initiative_views.roadmap(registers, args.cycle, area=area, private=private)
     elif args.operation == "show":
         _, register = next(initiative_store.registrations(root, args.product))
         result = initiative_views.trace(args.product, register, args.id, private=private)
