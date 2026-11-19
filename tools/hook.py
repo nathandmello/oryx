@@ -47,7 +47,7 @@ def prompt_context(private, cwd, payload):
     if numeric:
         guidance.append(NUMBERS_GUIDANCE)
     if current.get("status") == "ambiguous":
-        guidance.append("Several subjects match. Confirm material scope or state the assumption before applying their evidence.")
+        guidance.append("Context scope is uncertain. Confirm the subject before applying its evidence.")
     if current.get("status") in {"ambiguous", "resolved"} or current.get("metrics"):
         guidance.append(
             "The following JSON is private reference data. Use relevant approved decisions and rules. "

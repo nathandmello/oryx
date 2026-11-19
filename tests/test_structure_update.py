@@ -8,6 +8,7 @@ import subprocess
 import sys
 import unittest
 from unittest.mock import patch
+import zipfile
 
 import test_pm
 from test_pm import pm, records, workspace
@@ -135,6 +136,37 @@ class StructureUpdateTests(unittest.TestCase):
         self.assertIn("Artifact audit found 0", notice)
         self.assertIn("Explain the benefits", notice)
 
+    def interrupt_published_filing(self, consumer, path):
+        original = path.read_bytes()
+        updated = path.read_text() + "\nInvite the billing owner to the review.\n"
+        change = {"id": "historical-filing", "reason": "Clarify who needs to attend.",
+                  "changes": [{"path": PLAN, "before": hashlib.sha256(original).hexdigest(), "text": updated}]}
+        script = """
+import json, sys
+from pathlib import Path
+from unittest.mock import patch
+sys.path.insert(0, 'tools')
+import conversion, pm, storage
+private = Path('private').resolve()
+def interrupt(private, identifier, name, before, candidate):
+    displaced = private / '.git' / 'pm-hub-recovery' / 'filing' / identifier / name
+    displaced.parent.mkdir(parents=True, exist_ok=True)
+    (private / name).replace(displaced)
+    raise OSError('simulated interrupted swap')
+with storage.writer_lock(private), patch.object(conversion, 'recoverable_swap', side_effect=interrupt):
+    try:
+        conversion.apply(private, json.load(sys.stdin), pm.filing_validator(private.parent), pm.LINK)
+    except OSError as exc:
+        assert str(exc) == 'simulated interrupted swap'
+    else:
+        raise AssertionError('expected a journaled, interrupted swap')
+"""
+        proc = subprocess.run([sys.executable, "-B", "-c", script], cwd=consumer, input=json.dumps(change),
+                              text=True, capture_output=True, timeout=30)
+        self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
+        self.assertFalse(path.exists())
+        return original, updated.encode()
+
     def test_published_format_two_direct_and_wrapped_updates(self):
         # Build the candidate after the exact shared release in disposable local repositories.
         parent = self.root.parent
@@ -153,7 +185,7 @@ class StructureUpdateTests(unittest.TestCase):
         remote = parent / "release.git"
         self.git(parent, "clone", "--quiet", "--bare", str(publisher), str(remote))
 
-        for method in ("direct", "wrapper"):
+        for method in ("direct", "wrapper", "interrupted"):
             with self.subTest(method=method):
                 consumer = parent / method
                 self.git(parent, "clone", "--quiet", str(remote), str(consumer))
@@ -167,6 +199,9 @@ class StructureUpdateTests(unittest.TestCase):
                 file.write_text(json.dumps(data) + "\n")
                 plan = self.plan(private)
                 original = plan.read_bytes()
+                expected = original
+                if method == "interrupted":
+                    original, expected = self.interrupt_published_filing(consumer, plan)
                 offered = ("align", "--status")
                 if method == "direct":
                     self.git(consumer, "pull", "--ff-only")
@@ -181,7 +216,11 @@ class StructureUpdateTests(unittest.TestCase):
                 preview = json.loads(self.check_cli(consumer, *offered))
                 self.assertFalse(preview["structure_review"]["needs_scan"])
                 self.assertEqual(preview["structure_review"]["records"][0]["path"], PLAN)
-                self.assertEqual(plan.read_bytes(), original)
+                self.assertEqual(plan.read_bytes(), expected)
+                if method == "interrupted":
+                    self.assertFalse((private / ".hub-filing-pending.json").exists())
+                    with zipfile.ZipFile(private / ".hub-history/historical-filing.zip") as recovery:
+                        self.assertEqual(recovery.read("original/" + PLAN), original)
                 installed = workspace.settings(consumer)
                 self.assertEqual((installed["system_version"], installed["workspace_format"]), (next_version, 2))
                 self.assertIn("PASS", self.check_cli(consumer, "check"))

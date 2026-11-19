@@ -30,6 +30,8 @@ jobs:
         run: python3 tools/pm.py check --system-only
       - name: Test PM workflows, consumer upgrades and recovery
         run: python3 -m unittest discover -s tests -v
+      - name: Check context retrieval, artifact structure and numeric behavior
+        run: python3 tests/context-evals/run.py --strict
       - name: Verify engineering and quality review evidence
         if: github.event_name == 'pull_request'
         run: python3 tools/release_review.py

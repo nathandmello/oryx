@@ -7,6 +7,7 @@ import json
 from pathlib import Path
 import re
 import time
+from urllib.parse import urlsplit
 
 import layout
 import metric_registry
@@ -23,8 +24,11 @@ STOP_WORDS = set("about again and api app are can from give have here how its ou
                  "which will with work workspace would draft context overview product write update support "
                  "should task rule note requirement area current review who did after before need for but has had "
                  "ingest utc file read data source captured pending questions owner follow".split())
-FOLLOW_UP = re.compile(r"^(?:please\s+)?(?:continue\b|resume\b|revise (?:it|that|this)\b|"
+FOLLOW_UP = re.compile(r"^(?:please\s+)?(?:(?:can|could|would) you\s+(?:please\s+)?)?"
+                       r"(?:continue\b|resume\b|revise (?:it|that|this)\b|"
                        r"update (?:it|that|this)\b|make (?:it|that|this)\b|what about\b)", re.I)
+SWITCH = re.compile(r"^(?:please\s+)?switch\s+from\b.+?\bto\s+", re.I)
+IDENTIFIER = re.compile(r"\b[a-z][\w-]*\.[a-z][\w.-]*[a-z0-9]\b", re.I)
 DATE = re.compile(r"\b(?:as of|on)\s+(\d{4}-\d{2}-\d{2}|"
                   r"(?:January|February|March|April|May|June|July|August|September|October|November|December)"
                   r" \d{1,2}, \d{4})\b", re.I)
@@ -76,7 +80,7 @@ def context_documents(private):
         documents[name] = {
             "record": name, "kind": kind[1], "title": title(relative, text), "product": product,
             "area": entity.name if entity.parts[3:4] == ("areas",) else None,
-            "initiative": initiative, "parent": parent, "text": text,
+            "initiative": initiative, "parent": parent, "text": text, "company": entity == Path(layout.COMPANY).parent,
             "sources": {row[0]: dict(zip(records.SOURCE_COLUMNS, row)) for row in sources
                         if re.fullmatch(r"S[1-9]\d*", row[0])},
         }
@@ -89,7 +93,7 @@ def context_documents(private):
 def resolved_artifact(name, documents):
     if name in documents:
         doc = documents[name]
-        if doc["kind"] == "company-context":
+        if doc["company"]:
             return {"product": None, "area": None, "initiative": None, "company": True}
         return {key: doc[key] for key in ("product", "area", "initiative")}
     parts = Path(name).parts
@@ -102,10 +106,39 @@ def resolved_artifact(name, documents):
     return {}
 
 
+def mentions(prompt, name):
+    phrase = r"[\s-]+".join(re.escape(part) for part in re.split(r"[\s-]+", name.strip()))
+    return bool(phrase and re.search(r"(?<!\w)" + phrase + r"(?!\w)", prompt, re.I))
+
+
+def source_matches(scoped, prompt, terms):
+    """Use a provider or exact identifier as a stronger signal than topical overlap."""
+    aliases = set()
+    identifiers = set(IDENTIFIER.findall(prompt.casefold()))
+    direct = False
+    for doc in scoped:
+        direct |= bool(identifiers.intersection(IDENTIFIER.findall(doc["text"].casefold())))
+        for row in doc["sources"].values():
+            reference = row["Source"]
+            label, separator, target = reference.partition("](")
+            aliases.update(words(label))
+            if separator and target.startswith(("https://", "http://")):
+                try:
+                    host = urlsplit(target[:-1]).hostname or ""
+                except ValueError:
+                    continue
+                labels = host.split(".")
+                if len(labels) > 1 and labels[-1] not in {"test", "example", "invalid", "localhost"}:
+                    provider = labels[-3] if len(labels) >= 3 and labels[-2] in {"co", "com", "org"} else labels[-2]
+                    direct |= bool(words(provider) & terms & words(label))
+    return direct, len(terms & aliases)
+
+
 def choose_scope(private, documents, prompt, cwd, previous, explicit):
     overview = {doc["product"]: doc for doc in documents.values() if doc["kind"] == "product-context"}
     if explicit:
         return explicit, []
+    prompt = SWITCH.sub("", prompt)
     artifacts = re.findall(r"(?:private/)?((?:context|workspace)/[\w./-]+?\.md)\b", prompt)
     known = [scope for name in artifacts if (scope := resolved_artifact(name, documents))]
     for value in re.findall(r"\bproduct/([a-z0-9-]+)(?:/area/([a-z0-9-]+))?", prompt):
@@ -120,35 +153,38 @@ def choose_scope(private, documents, prompt, cwd, previous, explicit):
         if len(scopes) > 1:
             specific = [item for item in known if item["area"] or item["initiative"]]
             if len(products) > 1 or len({(item["area"], item["initiative"]) for item in specific}) > 1:
-                return {}, sorted({"/".join(value for value in scope if value) for scope in scopes})
+                return {}, sorted({"/".join(value for value in scope if value) or "company" for scope in scopes})
             return (specific or known)[0], []
         return known[0], []
 
+    if re.search(r"\bcompany(?:-wide| context| overview| policy)\b", prompt, re.I):
+        return {"company": True}, []
+
     terms = words(prompt)
-    scores = {}
-    for product, doc in overview.items():
-        product_words = words(product.replace("-", " ")) | words(doc["title"])
-        scoped = [candidate for candidate in documents.values() if candidate["product"] == product]
-        evidence = " ".join(records.PLACEHOLDER.sub("", candidate["text"]) for candidate in scoped)
-        aliases = words(" ".join(row["Source"].split("](", 1)[0] for candidate in scoped
-                                 for row in candidate["sources"].values()))
-        score = 12 * len(terms & product_words) + 4 * len(terms & aliases) + len(terms & words(evidence))
-        if score >= 3:
-            scores[product] = score
-    if scores:
-        best = max(scores.values())
-        choices = sorted(product for product, score in scores.items() if score == best)
-        if len(choices) > 1:
-            return {}, choices
-        product = choices[0]
-        return inferred_scope(documents, product, terms), []
+    named = sorted(product for product, doc in overview.items()
+                   if mentions(prompt, product) or mentions(prompt, doc["title"]))
+    if len(named) == 1:
+        return inferred_scope(documents, named[0], terms), []
+    if named:
+        return {}, named
     if previous and FOLLOW_UP.match(prompt.strip()):
         return previous, []
     if cwd and cwd != private and private in cwd.parents:
-        return resolved_artifact((cwd / "scope.md").relative_to(private).as_posix(), documents), []
-    if re.search(r"\bcompany(?:-wide| context| overview| policy)\b", prompt, re.I):
-        return {"company": True}, []
-    return {}, []
+        scope = resolved_artifact((cwd / "scope.md").relative_to(private).as_posix(), documents)
+        if scope:
+            return scope, []
+
+    strong, suggestions = [], []
+    for product, doc in overview.items():
+        scoped = [candidate for candidate in documents.values() if candidate["product"] == product]
+        direct, related = source_matches(scoped, prompt, terms)
+        if direct:
+            strong.append(product)
+        elif related >= 2 or terms & words(doc["title"]):
+            suggestions.append(product)
+    if len(strong) == 1:
+        return inferred_scope(documents, strong[0], terms), []
+    return {}, sorted(strong or suggestions)
 
 
 def inferred_scope(documents, product, terms):
@@ -239,10 +275,11 @@ def resolve(private, prompt="", *, cwd=None, previous=None, explicit=None):
     terms = words(prompt)
     entries = []
     for name, doc in docs.items():
-        if name != company and not (product and doc["product"] == product and (doc["area"] is None or doc["area"] in areas)
-                                    and doc["initiative"] in (None, initiative)):
+        if not ((company and doc["company"]) or
+                (product and doc["product"] == product and (doc["area"] is None or doc["area"] in areas)
+                 and doc["initiative"] in (None, initiative))):
             continue
-        if doc["kind"] == "context-note" and not terms & words(doc["title"]):
+        if doc["kind"] == "context-note" and name not in prompt and not terms & words(doc["title"]):
             continue
         controls, _ = records.table(doc["text"], "Context controls", ("Field", "Value"))
         due = dict(controls).get("Review by", "")

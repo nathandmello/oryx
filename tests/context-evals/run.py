@@ -151,6 +151,42 @@ def checks(hub, evidence):
         detail = result.stderr.strip() if result.returncode else "Scope-specific guidance in hook output"
         yield "lookup", f"{event} | {prompt}", passed, detail
 
+    policy = "Escalate renewal approvals to the Cloud team."
+    decoy = {"policy": {"title": "Cloud Analytics Company Quarterly Retention Policy", "date": "undated",
+                        "url": "https://example.test/retention", "text": policy}}
+    capture(hub, "context/products/cloud/overview.md",
+            [{"scope": "product", "product": "cloud", "topic": "constraints", "rule": policy}], decoy, "policy")
+    analytics_rule = "Analytics renewal approvals go to the analytics owner."
+    decoy["policy"]["text"] = analytics_rule
+    capture(hub, "context/products/analytics/overview.md",
+            [{"scope": "product", "product": "analytics", "topic": "constraints", "rule": analytics_rule}], decoy, "policy")
+    for prompt, required, excluded in (
+        ("Draft the Analytics quarterly retention update.", analytics_rule, policy),
+        ("What about the quarterly retention policy?", analytics_rule, policy),
+        ("Can you make it shorter?", analytics_rule, policy),
+        ("Draft the company-wide quarterly retention update.", company_rule, policy),
+    ):
+        result = hook(hub, "UserPromptSubmit", session_id="explicit-scope", prompt=prompt)
+        yield "lookup", prompt, result.returncode == 0 and required in result.stdout and excluded not in result.stdout, (
+            "Named scope or session follow-up outranks a private source title"
+        )
+    result = hook(hub, "UserPromptSubmit", prompt="Draft the quarterly retention policy.")
+    yield "lookup", "Unconfirmed evidence match is a scope suggestion", (
+        result.returncode == 0 and "Context scope is uncertain" in result.stdout
+        and analytics_rule not in result.stdout and policy not in result.stdout
+    ), "Neither private rule was injected"
+
+    note = "context/company/pricing-review.md"
+    fact = "Pricing reviews occur on the first Tuesday of each quarter."
+    note_source = {"pricing": {"title": "Approved pricing calendar", "date": "undated",
+                               "url": "https://example.test/pricing", "text": fact}}
+    capture(hub, note, [{"scope": "company", "record": {"path": note, "parent": company,
+            "basis": "maintained-reference", "reason": "Keep the review calendar together.",
+            "trigger": "The review calendar changes."}}], note_source, "pricing")
+    for prompt in (f"Use {note} to answer when the reviews occur.", "When are company-wide pricing reviews?"):
+        result = hook(hub, "UserPromptSubmit", prompt=prompt)
+        yield "lookup", prompt, result.returncode == 0 and fact in result.stdout, "Retrieved the company reference note"
+
     bad_reply = "You can receive the additional $55 now."
     result = hook(hub, "Stop", session_id="payments", last_assistant_message=bad_reply)
     output = json.loads(result.stdout)

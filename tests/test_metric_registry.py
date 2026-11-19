@@ -23,8 +23,8 @@ class MetricRegistryTests(unittest.TestCase):
     product_context = Fixture.product_context
     today = Fixture.today
 
-    def definition(self, *args):
-        return json.loads(self.cli("metric", "show", "logo-churn", *args))
+    def definition(self, *args, metric="logo-churn"):
+        return json.loads(self.cli("metric", "show", metric, *args))
 
     @staticmethod
     def change(source, denominator, effective_on="2025-07-01"):
@@ -66,6 +66,7 @@ class MetricRegistryTests(unittest.TestCase):
             population="Opening subscribers and subscribers activated during the window.",
             period="Closed 30-day reporting window.",
             formula="100 × churned subscribers ÷ (beginning subscribers + new subscribers).",
+            calculation="proportion",
         )
         self.cli("metric", "set", "logo-churn", "--product", "example", "--write", value=definition)
         active = self.definition("--product", "example")
@@ -78,15 +79,46 @@ class MetricRegistryTests(unittest.TestCase):
         self.assertIn(active["reference"], json.loads(hook.stdout)["hookSpecificOutput"]["additionalContext"])
         observation = {"definition": active["reference"], "unit": "percent", "start": "2025-07-01", "end": "2025-07-31",
                        "complete": True, "basis": "rolling 30 days", "timezone": "UTC", "source": "Billing ledger",
-                       "population": "Eligible subscribers", "numerator": 100, "denominator": 1100,
+                       "population": active["population"], "numerator": 100, "denominator": 1100,
                        "denominator_basis": active["denominator"], "numerator_subset": True}
         payload = {"metric": "logo-churn", "product": "example", "kind": "proportion", "current": observation,
                    "reported": "9.1"}
         report = json.loads(self.cli("check-metric", value=payload))
         self.assertEqual(report["metric_reference"], active["reference"])
+        wrong_cohort = dict(payload, current=dict(observation, population="New trials only"))
+        self.cli("check-metric", value=wrong_cohort, error="population differs")
         observation.update(definition=default["reference"], denominator_basis=default["denominator"], denominator=1000)
         error = json.loads(self.cli("check-metric", value=payload, error="eligible denominator differs"))
         self.assertEqual(error["status"], "needs_review")
+
+    def test_registry_operation_unit_and_period_revision(self):
+        nrr = self.definition(metric="nrr")
+        cac = self.definition(metric="cac")
+        observation = {"definition": nrr["reference"], "population": nrr["population"], "unit": "percent",
+                       "start": "2025-07-01", "end": "2025-08-01", "complete": True, "basis": "calendar month",
+                       "timezone": "UTC", "source": "Billing ledger", "numerator": 120, "denominator": 100,
+                       "denominator_basis": nrr["denominator"], "same_cohort": True}
+        payload = {"metric": "nrr", "kind": "cohort_ratio", "current": observation, "reported": "120"}
+        self.assertEqual(json.loads(self.cli("check-metric", value=payload))["value"], "120")
+        self.cli("check-metric", value=dict(payload, current=dict(observation, same_cohort=False)), error="opening cohort")
+        cac_observation = dict(observation, definition=cac["reference"], population=cac["population"],
+                               denominator_basis=cac["denominator"], numerator=50, numerator_subset=True)
+        invalid = json.loads(self.cli("check-metric", value={"metric": "cac", "kind": "proportion",
+                                  "current": cac_observation}, error="approved formula"))
+        self.assertTrue(any("currency/customer" in issue for issue in invalid["issues"]))
+
+        old = self.definition()
+        self.cli("metric", "set", "logo-churn", "--write", value=self.change("Finance", "Opening paid accounts."))
+        new = self.definition()
+        current = dict(observation, definition=new["reference"], population=new["population"], value=9)
+        baseline = dict(current, start="2025-06-01", end="2025-07-01", value=8)
+        payload = {"metric": "logo-churn", "kind": "percentage_points", "current": current, "baseline": baseline}
+        report = json.loads(self.cli("check-metric", value=payload, error="Verify a restatement"))
+        self.assertTrue(any(old["reference"] in issue for issue in report["issues"]))
+        historical = dict(baseline, definition=old["reference"], population=old["population"], numerator=8,
+                          denominator_basis=old["denominator"], numerator_subset=True)
+        self.assertEqual(json.loads(self.cli("check-metric", value={"metric": "logo-churn", "kind": "proportion",
+                                               "current": historical}))["metric_reference"], old["reference"])
 
     def test_signed_snapshot_survives_a_definition_change(self):
         self.submit(self.setup_event(), self.capture(), {"type": "metric", "metric": "logo-churn"})

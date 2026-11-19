@@ -468,12 +468,12 @@ def sync_skills(root: Path = ROOT) -> int:
     return changed
 
 
-def filing_validator(root, *, legacy_replay=False):
+def filing_validator(root, *, legacy_replay=False, legacy_structure=False):
     private = workspace.private_root(root)
     def validate(edits, folds, archive, originals):
         changes = set(folds) | {name for name, row in edits.items() if row["text"].encode("utf-8") != originals[name]}
         governed = {name for name in changes if opportunities.path_kind(name) in records.OPPORTUNITY_KINDS}
-        if governed and not legacy_replay:
+        if governed and not (legacy_replay or legacy_structure):
             for product in initiative_store.products(root):
                 _, payload, _ = initiative_store.read(root, product)
                 for event in payload["events"]:
@@ -511,14 +511,15 @@ def filing_validator(root, *, legacy_replay=False):
                     filing.check_new(private, new_kind[1], name, None, retiring=folds)
             if not legacy_replay:
                 filing.verify_note(private, name, text)
-                if not records.MARKER.match(text) and layout.valid_work(name):
+                if not legacy_structure and not records.MARKER.match(text) and layout.valid_work(name):
                     problems.extend(f"{name}: {error}" for error in records.working_errors(text))
             texts[name] = text
             problems.extend(writing_errors(text) + link_errors(root, private / name, text, planned={archive, *(private / target for target in edits)}))
         conversion.verify_fragments(private, texts, edits, LINK)
-        for error in ([] if legacy_replay else records.validate(texts)):
-            if error not in previous or error.partition(":")[0] in edits:
-                problems.append(error)
+        if not legacy_replay:
+            for error in records.validate(texts, legacy_structure=texts if legacy_structure else ()):
+                if error not in previous or error.partition(":")[0] in edits:
+                    problems.append(error)
         if problems:
             raise ValueError("Invalid filing result: " + " | ".join(problems[:8]))
     return validate
@@ -547,7 +548,8 @@ def alignment(root, prepare=False, record=None, outcome=None, digest=None, note=
                         or upgrades.RULE not in state or not upgrades.scan_marker(private).exists()):
             recovery = snapshots.ensure(root, release["system_version"], layout_change=old_layout or moving)
         if prepare and review_pending:
-            conversion.resume(private, filing_validator(root, legacy_replay=old_layout), LINK, legacy=old_layout)
+            validator = filing_validator(root, legacy_replay=old_layout, legacy_structure=upgrades.STRUCTURE_RULE not in state)
+            conversion.resume(private, validator, LINK, legacy=old_layout)
         result = upgrades.run(private, inventory, prepare=prepare, record=record, outcome=outcome, digest=digest, note=note)
         if review_pending and not prepare:
             layout_plan = {"moves": {}, "outstanding": [], "changed": False, "awaiting_filing_recovery": True}
@@ -811,15 +813,22 @@ def main() -> int:
             return 0
         if args.command == "check-metric":
             payload = storage.json_input(os.sys.stdin.read())
-            definition = None
+            definitions = None
             if isinstance(payload, dict) and "metric" in payload:
                 key = layout.slug(payload["metric"])
-                definitions = metric_registry.effective(ROOT, workspace.private_root(ROOT),
-                                                        payload.get("product"), payload.get("as_of"))
-                if key not in definitions:
+                fallback = payload.get("as_of")
+                if fallback is not None:
+                    metric_registry.day(fallback)
+                labels = ("current", "baseline") if payload.get("kind") in ("growth", "percentage_points") else ("current",)
+                private = workspace.private_root(ROOT)
+                definitions = {
+                    label: metric_registry.effective(ROOT, private, payload.get("product"),
+                                                     metric_checks.observation_day(payload.get(label), fallback)).get(key)
+                    for label in labels
+                }
+                if not any(definitions.values()) and key not in metric_registry.effective(ROOT, private, payload.get("product")):
                     raise ValueError("Choose a metric ID from pm.py metric list")
-                definition = definitions[key]
-            result = metric_checks.check(payload, definition)
+            result = metric_checks.check(payload, definitions)
             print(json.dumps(result, indent=2))
             return int(result["status"] != "consistent")
         if args.command == "metric":

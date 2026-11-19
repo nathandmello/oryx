@@ -4,7 +4,7 @@
       "title": "Slack Developer Docs, May 2025 rate-limit announcement",
       "url": "https://docs.slack.dev/changelog/2025/05/29/rate-limit-changes-for-non-marketplace-apps/",
       "date": "2025-05-29",
-      "text": "For the two conversation history and reply methods, the 1-request-per-minute limit and 15-object cap apply to new commercially distributed unlisted app installs. Existing installs and Marketplace apps are outside this change."
+      "text": "For conversations.history and conversations.replies, the 1-request-per-minute limit and 15-object cap apply to new commercially distributed unlisted app installs. Existing installs and Marketplace apps are outside this change."
     },
     "slack-clarification": {
       "title": "Slack Developer Docs, June 2025 clarification",

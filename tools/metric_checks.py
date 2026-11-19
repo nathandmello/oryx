@@ -1,8 +1,10 @@
 """Check arithmetic and declared comparability for material numerical claims."""
 
-from datetime import date
+from datetime import date, timedelta
 from decimal import Decimal, DecimalException, localcontext
 import re
+
+from metric_registry import CALCULATIONS
 
 
 METRIC = re.compile(r"\b(?:churn|revenue|margin|retention|conversion|growth|forecast|denominator|numerator|"
@@ -87,42 +89,79 @@ def comparison(payload, kind, issues):
     return (value - previous) / previous * 100
 
 
-def proportion(payload, issues):
+def ratio(payload, kind, issues):
     current = observation(payload.get("current"), "rate", issues)
     numerator = amount(current.get("numerator"), "numerator", issues)
     denominator = amount(current.get("denominator"), "denominator", issues)
     denominator_basis = current.get("denominator_basis")
     if not isinstance(denominator_basis, str) or denominator_basis.strip().casefold() in {"", "unknown", "n/a", "tbd"}:
         issues.append("Say who is eligible for the denominator and when they are counted.")
-    if current.get("numerator_subset") is not True:
+    if kind == "proportion" and current.get("numerator_subset") is not True:
         issues.append("Check that the numerator only counts eligible members of the denominator.")
+    if kind == "cohort_ratio" and current.get("same_cohort") is not True:
+        issues.append("Check that numerator and denominator measure the same opening cohort.")
     if current.get("unit") != "percent":
-        issues.append("Use percent units for a proportion.")
+        issues.append("Use percent units for this calculation.")
     if denominator is not None and denominator <= 0:
-        issues.append("A proportion needs a positive denominator.")
-    if numerator is not None and denominator is not None and not 0 <= numerator <= denominator:
+        issues.append("This calculation needs a positive denominator.")
+    if kind == "proportion" and numerator is not None and denominator is not None and not 0 <= numerator <= denominator:
         issues.append("The numerator must be between zero and its eligible denominator.")
+    if kind == "cohort_ratio" and numerator is not None and numerator < 0:
+        issues.append("The closing cohort amount must be nonnegative.")
     return numerator / denominator * 100 if not issues else None
 
 
-def check(payload, metric=None):
-    if not isinstance(payload, dict) or payload.get("kind") not in ("growth", "percentage_points", "proportion"):
-        raise ValueError("Choose kind growth, percentage_points, or proportion")
+def observation_day(item, fallback):
+    if isinstance(item, dict):
+        try:
+            end = date.fromisoformat(item["end"])
+            if date.fromisoformat(item["start"]) < end:
+                return (end - timedelta(days=1)).isoformat()
+        except (KeyError, ValueError, TypeError):
+            pass
+    return fallback
+
+
+def registry_issues(payload, kind, definitions, issues):
+    for label, metric in definitions.items():
+        item = payload.get(label)
+        if not isinstance(item, dict):
+            continue
+        if not metric:
+            issues.append(f"No approved definition was effective for the {label} observation.")
+            continue
+        reference = metric["reference"]
+        if item.get("definition") != reference:
+            issues.append(f"The {label} definition differs from {reference}.")
+        if item.get("population") != metric["population"]:
+            issues.append(f"The {label} population differs from {reference}.")
+        unit = metric["unit"]
+        if unit.startswith("currency"):
+            matches = isinstance(item.get("unit"), str) and re.fullmatch(r"[A-Z]{3}" + re.escape(unit[8:]), item["unit"])
+        else:
+            matches = item.get("unit") == unit
+        if not matches:
+            issues.append(f"Use the {label} unit for {reference}: {unit}.")
+        if kind in CALCULATIONS:
+            if kind != metric.get("calculation"):
+                issues.append(f"The {kind} calculation does not match {reference}. Check its approved formula.")
+            if item.get("denominator_basis") != metric["denominator"]:
+                issues.append(f"The eligible denominator differs from {reference}.")
+    current, baseline = definitions.get("current"), definitions.get("baseline")
+    if current and baseline and current["reference"] != baseline["reference"]:
+        issues.append("The approved definition changed between periods. Verify a restatement on a shared basis before comparing.")
+
+
+def check(payload, definitions=None):
+    if not isinstance(payload, dict) or payload.get("kind") not in ("growth", "percentage_points", "proportion", "cohort_ratio"):
+        raise ValueError("Choose kind growth, percentage_points, proportion, or cohort_ratio")
     kind = payload["kind"]
     issues = []
     with localcontext() as context:
         context.prec = 40
-        computed = proportion(payload, issues) if kind == "proportion" else comparison(payload, kind, issues)
-        if metric:
-            for label in ("current",) if kind == "proportion" else ("current", "baseline"):
-                item = payload.get(label)
-                if not isinstance(item, dict):
-                    continue
-                if item.get("definition") not in (metric["reference"], metric["definition"]):
-                    issues.append(f"The {label} definition differs from {metric['reference']}.")
-            item = payload.get("current")
-            if kind == "proportion" and isinstance(item, dict) and item.get("denominator_basis") != metric["denominator"]:
-                issues.append(f"The eligible denominator differs from {metric['reference']}.")
+        computed = ratio(payload, kind, issues) if kind in CALCULATIONS else comparison(payload, kind, issues)
+        if definitions:
+            registry_issues(payload, kind, definitions, issues)
         reported = amount(payload["reported"], "reported result", issues) if "reported" in payload else None
         if computed is not None and reported is not None:
             precision = min(12, max(0, -reported.as_tuple().exponent))
@@ -131,6 +170,6 @@ def check(payload, metric=None):
         value = format(computed.normalize(), "f") if computed is not None else None
     result = {"status": "needs_review" if issues else "consistent", "value": value,
               "unit": "percentage points" if kind == "percentage_points" else "percent", "issues": issues}
-    if metric:
-        result["metric_reference"] = metric["reference"]
+    if definitions and definitions.get("current"):
+        result["metric_reference"] = definitions["current"]["reference"]
     return result

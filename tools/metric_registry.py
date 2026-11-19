@@ -12,6 +12,7 @@ import storage
 DEFAULTS = "playbook/saas-metrics.json"
 PRIVATE = "context/metrics.json"
 FIELDS = {"name", "aliases", "unit", "definition", "formula", "population", "period", "denominator", "notes", "source"}
+CALCULATIONS = {"proportion", "cohort_ratio"}
 APPROVAL = {"approved_by", "effective_on", "definition"}
 REFERENCE = "Metric registry "
 REFERENCE_PATTERN = re.compile(re.escape(REFERENCE) + r"([a-z0-9]+(?:-[a-z0-9]+)*)@[a-f0-9]{16}")
@@ -35,7 +36,7 @@ def day(value):
 
 def valid_definition(metric, definition):
     layout.slug(metric)
-    if not isinstance(definition, dict) or definition.keys() != FIELDS:
+    if not isinstance(definition, dict) or not FIELDS <= definition.keys() <= FIELDS | {"calculation"}:
         raise ValueError(f"{metric}: supply each metric definition field")
     aliases = definition["aliases"]
     if (not isinstance(aliases, list) or not aliases or not all(specific(alias) for alias in aliases)
@@ -43,6 +44,9 @@ def valid_definition(metric, definition):
         raise ValueError(f"{metric}: give distinct metric aliases")
     if not all(specific(definition[field]) for field in FIELDS - {"aliases"}):
         raise ValueError(f"{metric}: use specific metric values and a source reference")
+    if "calculation" in definition and (definition["unit"] != "percent" or
+            not isinstance(definition["calculation"], str) or definition["calculation"] not in CALCULATIONS):
+        raise ValueError(f"{metric}: use a supported calculation for a percent metric")
 
 
 def defaults(root):
@@ -117,7 +121,7 @@ def matching(definitions, query):
 def set_definition(root, private, metric, product, request, write):
     if (not isinstance(request, dict) or request.keys() != {"changes", "approved_by", "effective_on", "source"}
             or not isinstance(request["changes"], dict) or not request["changes"]
-            or not request["changes"].keys() <= FIELDS - {"source"}
+            or not request["changes"].keys() <= (FIELDS - {"source"}) | {"calculation"}
             or not specific(request["approved_by"]) or not specific(request["source"])):
         raise ValueError("Supply changes, the approving owner, an effective date, and the decision source")
     effective_on = day(request["effective_on"]).isoformat()
@@ -129,7 +133,9 @@ def set_definition(root, private, metric, product, request, write):
     def apply():
         original, data = history(private)
         old = effective(root, private, product, effective_on).get(metric, {})
-        definition = {field: old[field] for field in FIELDS if field in old}
+        definition = {field: old[field] for field in FIELDS | {"calculation"} if field in old}
+        if {"formula", "unit"} & request["changes"].keys():
+            definition.pop("calculation", None)
         definition.update(request["changes"], source=request["source"])
         valid_definition(metric, definition)
         entry = {"metric": metric, "product": product, "definition": definition,

@@ -28,15 +28,16 @@ Preview a change with `pm.py metric set ID` and JSON on standard input. Add `--p
   "changes": {
     "definition": "Share of the opening paid cohort that loses its last paid subscription.",
     "formula": "100 × opening cohort with a last-subscription cancellation ÷ opening paid customer count.",
+    "calculation": "proportion",
     "notes": "Count a cancellation in its effective period. Report reactivation as a separate movement."
   }
 }
 ```
 
-The example changes the treatment of reactivations for `logo-churn`. For a new metric, supply name, aliases, unit, definition, formula, population, period, denominator, and notes in `changes`.
+The example changes the treatment of reactivations for `logo-churn`. For a new metric, supply name, aliases, unit, definition, formula, population, period, denominator, and notes in `changes`. An approved definition can specify `calculation` for a formula supported by `check-metric`. Use `proportion` for a bounded subset and `cohort_ratio` for a closing amount divided by its opening cohort amount. When changing a formula or unit, reapprove the calculation type if it still applies.
 
 ## Use the same definition
 
-- Read the registry reference when calculating or reviewing a known metric. For `check-metric`, pass its `metric` ID and the observation's `definition` reference. Pass `product` and `as_of` when applicable.
+- For `check-metric`, pass the `metric` ID and `product` when applicable. Each observation needs the registry reference and population effective on its last included day. Use a currency code in observation units, such as `USD/month` for `currency/month`. Use `as_of` when looking up the definition if an observation date is missing. The checker flags a revision change between periods. Verify and document a restatement on a common definition before comparing those periods.
 - For a signed initiative metric, propose `{"type":"metric","metric":"logo-churn"}`. The proposal captures the effective definition and its revision.
 - If an initiative needs a revised definition, use a new local metric ID. For example, add `"registry_metric":"logo-churn"` to a proposal with `"metric":"logo-churn-v2"`. Existing signed records still explain how earlier outcomes were measured.

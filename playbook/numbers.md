@@ -32,7 +32,9 @@ State which checks ran, what they support, and which gap could change the conclu
 
 For structured inputs, run `python3 tools/pm.py check-metric` with JSON on standard input. It checks arithmetic and declared comparability. Inspect the underlying extract to verify its coverage, joins, and population.
 
-Each observation needs `definition`, `population`, `unit`, `basis`, `timezone`, `source`, `start`, `end`, and `complete`. Use an exclusive ISO end date. For `growth` and `percentage_points`, provide `current` and `baseline` observations with `value`. For `proportion`, provide `current` with `numerator`, `denominator`, `denominator_basis`, and `numerator_subset`. Set `numerator_subset` after checking membership. Supply `reported` to compare a stated result at its precision.
+Each observation needs `definition`, `population`, `unit`, `basis`, `timezone`, `source`, `start`, `end`, and `complete`. Use an exclusive ISO end date. For `growth` and `percentage_points`, provide `current` and `baseline` observations with `value`. Supply `reported` to compare a stated result at its precision.
+
+For `proportion` and `cohort_ratio`, provide `current` with `numerator`, `denominator`, and `denominator_basis`. Set `numerator_subset` for a proportion after checking membership. Set `same_cohort` for a cohort ratio after verifying the opening cohort on both sides. A cohort ratio can exceed 100%.
 
 | Reference | Adapted practice |
 | --- | --- |

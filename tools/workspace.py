@@ -67,8 +67,10 @@ def supports_update(settings, incoming):
         return False
     if settings["workspace_format"] == 2:
         return previous >= (0, 3, 0)
-    # The two released wrappers stamp the fetched 0.3.x version before the new migrator runs.
-    return settings["workspace_format"] == 1 and (previous in {(0, 1, 0), (0, 2, 0)} or previous[:2] == (0, 3))
+    # The old wrappers can stamp the incoming version before the new migrator runs.
+    return settings["workspace_format"] == 1 and (
+        previous in {(0, 1, 0), (0, 2, 0)} or (0, 3, 0) <= previous
+    )
 
 
 def check_relocation(root, previous):
