@@ -437,6 +437,8 @@ class HubTests(unittest.TestCase):
             (f"## Examples\n\n<!--\n{section}\n-->", "Ambiguous context section boundary"),
             (f"## Examples\n\n{fenced}\n<!-- Fixture -->## {heading}\n<!-- Fixture -->## Background",
              "Ambiguous context section boundary"),
+            (f"## Examples\n\n```text\nA note\n```\n<custom-example>\n{section}\n</custom-example>",
+             "Ambiguous context section boundary"),
             *((f"## Examples\n\n<{tag}>\n{section}\n</{tag}>", "Ambiguous context section boundary")
               for tag in ("pre", "script", "style", "textarea", "div", "custom-example")),
         ):

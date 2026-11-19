@@ -552,6 +552,9 @@ HTML_BLOCK_TAGS = (
     "menuitem|nav|noframes|noscript|ol|optgroup|option|p|param|search|section|summary|table|tbody|td|tfoot|th|thead|"
     "title|tr|track|ul"
 )
+HTML_TAG_ATTRIBUTE = r'''[a-z_:][a-z0-9_.:-]*(?:[ \t]*=[ \t]*(?:[^\s"'=<>`]+|"[^"\n]*"|'[^'\n]*'))?'''
+HTML_STANDALONE_TAG = rf"(?:<[a-z][a-z0-9-]*(?:[ \t]+{HTML_TAG_ATTRIBUTE})*[ \t]*/?>|</[a-z][a-z0-9-]*[ \t]*>)"
+HTML_TO_BLANK_LINE = r"(?:\n(?![ \t]*(?:\n|\Z))[^\n]*)*"
 HIDDEN_SECTION_MARKUP = re.compile(
     # Match a whole fence first so literal comments or tags inside it stay local to the example.
     r"^ {0,3}(?P<fence>(?P<mark>[`~])(?P=mark){2,})(?!(?P=mark))[^\n]*(?:\n|\Z)"
@@ -560,10 +563,10 @@ HIDDEN_SECTION_MARKUP = re.compile(
     r"|^ {0,3}<(?P<tag>pre|script|style|textarea)(?=[\s>/]).*?(?:</(?P=tag)\s*>|\Z)"
     # CommonMark declarations and processing instructions close with their own delimiters.
     r"|^ {0,3}(?:<\?.*?(?:\?>|\Z)|<!\[CDATA\[.*?(?:\]\]>|\Z)|<![a-z].*?(?:>|\Z))"
-    # Ordinary block tags and standalone custom tags end at the first blank line.
-    rf"|^ {{0,3}}</?(?:{HTML_BLOCK_TAGS})(?=[\s>/])[^\n]*(?:\n(?![ \t]*(?:\n|\Z))[^\n]*)*"
-    r"|(?:\A|(?<=\n)^[ \t]*\n) {0,3}</?[a-z][a-z0-9-]*(?:[ \t]+[^<>\n]*)?[ \t]*/?>[ \t]*"
-    r"(?:\n(?![ \t]*(?:\n|\Z))[^\n]*)*(?=\n|\Z)",
+    # Ordinary block tags end at a blank line. Treat a standalone custom tag the same
+    # way if there is a heading immediately after it that could be parsed as HTML.
+    rf"|^ {{0,3}}</?(?:{HTML_BLOCK_TAGS})(?=[\s>/])[^\n]*{HTML_TO_BLANK_LINE}"
+    rf"|^ {{0,3}}{HTML_STANDALONE_TAG}[ \t]*(?=\n|\Z){HTML_TO_BLANK_LINE}",
     re.I | re.M | re.S,
 )
 
