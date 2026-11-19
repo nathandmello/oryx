@@ -131,7 +131,7 @@ The checker compares the template index and the playbook's routing topics with t
 
 Semantic review covers clarity, accuracy, source authority, and decision quality. External change detection arrives when needed.
 
-Connect GitHub remotes after their destinations are known. Require the CI `check` job through branch protection when appropriate.
+Connect GitHub remotes after their destinations are known. Require `check` and `review` on the shared default branch. See [release setup and recovery](playbook/publication.md).
 
 ## Client references
 

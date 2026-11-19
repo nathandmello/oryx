@@ -4,8 +4,11 @@ import json
 import os
 import re
 import sys
-from urllib.parse import quote, urlencode
-from urllib.request import Request, urlopen
+from urllib.parse import urlencode
+
+
+class RetryPublication(ValueError):
+    """GitHub has not finished reporting the candidate or publication."""
 
 
 def review(pr):
@@ -58,41 +61,43 @@ def detached_pr_runs(pr, runs, api):
     return candidates
 
 
-def publication(event, ref, sha, api):
-    branch = event["repository"]["default_branch"]
-    number = event["inputs"]["release_pr"]
-    if not re.fullmatch(r"[1-9][0-9]*", str(number)) or ref != "refs/heads/" + branch:
-        raise ValueError("Select a merged pull request and run this check on the default branch")
-    pr = api(f"pulls/{number}")
-    review(pr)
-    if not (pr["merged"] and pr["base"]["ref"] == branch and pr["merge_commit_sha"] == sha
-            and api("git/ref/heads/" + quote(branch, safe="/"))["object"]["sha"] == sha):
-        raise ValueError("The selected pull request must match the installed default branch tip")
-    head = pr["head"]["sha"]
-    if api("git/commits/" + head)["tree"]["sha"] != api("git/commits/" + sha)["tree"]["sha"]:
-        raise ValueError("The merged tree differs from the reviewed tree")
-    query = urlencode({"head_sha": head, "event": "pull_request", "per_page": 100})
-    runs = api("actions/workflows/check.yml/runs?" + query)["workflow_runs"]
+def successful_run(pr, workflow, api):
+    query = urlencode({"head_sha": pr["head"]["sha"], "event": "pull_request", "per_page": 100})
+    runs = api(f"actions/workflows/{workflow}/runs?" + query)["workflow_runs"]
     matching = [run for run in runs if any(p["number"] == pr["number"] for p in run["pull_requests"])]
     matching.extend(detached_pr_runs(pr, runs, api))
     latest = max(matching, key=lambda run: (run["run_number"], run["run_attempt"]), default={})
+    if latest and latest.get("conclusion") is None:
+        raise RetryPublication(f"Waiting for the successful {workflow} run to finish")
     if latest.get("conclusion") != "success":
-        raise ValueError("The reviewed pull request needs a successful PM Hub checks run")
+        raise ValueError(f"The reviewed pull request needs a successful {workflow} run")
+
+    return latest
+
+
+def publication(pr, branch, sha, api):
+    review(pr)
+    if not (pr["merged"] and pr["base"]["ref"] == branch and pr["merge_commit_sha"] == sha):
+        raise ValueError("Select the merged pull request for this commit and default branch")
+    tree = api("git/commits/" + sha)["tree"]["sha"]
+    if api("git/commits/" + pr["head"]["sha"])["tree"]["sha"] != tree:
+        raise ValueError("The merged tree differs from the reviewed tree")
+    evidence = successful_run(pr, "review.yml", api)
+    review_jobs = api(f"actions/runs/{evidence['id']}/jobs?filter=latest&per_page=100")["jobs"]
+    if not any(job["name"] == "review" and job["conclusion"] == "success" for job in review_jobs):
+        raise ValueError("Missing successful review job for this PR")
+    run = successful_run(pr, "check.yml", api)
+    jobs = api(f"actions/runs/{run['id']}/jobs?filter=latest&per_page=100")["jobs"]
+    if not any(job["name"] == "check" and job["conclusion"] == "success"
+               and any(step["name"] == "Tested tree " + tree and step["conclusion"] == "success"
+                       for step in job["steps"]) for job in jobs):
+        raise ValueError("Missing successful CI evidence for the merged tree")
 
 
 def main():
     with open(os.environ["GITHUB_EVENT_PATH"], encoding="utf-8") as stream:
         event = json.load(stream)
-    if os.environ["GITHUB_EVENT_NAME"] == "pull_request":
-        review(event["pull_request"])
-    else:
-        base = os.environ["GITHUB_API_URL"] + "/repos/" + os.environ["GITHUB_REPOSITORY"] + "/"
-        def api(path):
-            request = Request(base + path, headers={"Authorization": "Bearer " + os.environ["GITHUB_TOKEN"],
-                                                    "Accept": "application/vnd.github+json"})
-            with urlopen(request, timeout=30) as response:
-                return json.load(response)
-        publication(event, os.environ["GITHUB_REF"], os.environ["GITHUB_SHA"], api)
+    review(event["pull_request"])
     print("PM Hub release review passed.")
 
 

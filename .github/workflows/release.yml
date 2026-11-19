@@ -1,0 +1,35 @@
+name: Publish PM Hub
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      release_pr:
+        description: Merged PR number to retry
+        required: true
+        type: string
+
+permissions: {}
+# Serialize Latest reconciliation as well as tag creation. Keep queued merges.
+concurrency:
+  group: hub-publication-${{ github.ref }}
+  queue: max
+
+jobs:
+  publish:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write
+      actions: read
+      pull-requests: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Verify candidate, publish, and reconcile Latest
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 tools/publish_release.py

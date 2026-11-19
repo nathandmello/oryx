@@ -116,8 +116,6 @@ Merging to the default branch makes changes available to consumers who pull it. 
 | Quality review | A separate reviewer exercises the PM requirements on fresh and upgraded installations. Include failure and restore scenarios. |
 | Pull request | Record both reviewers, decisions, evidence, user impact, recovery, and verification limits. Bind evidence to the full head SHA. |
 | Merge | Refresh reviews after candidate changes. Require green pull request checks and maintainer authorisation. |
-| Publication | Run “PM Hub checks” on the default branch with the merged release PR number. Publish that commit only after a pass and explicit authorisation. |
+| Publication | An authorised merge starts publication. Verify the tested tree and publish the version in the merged commit. |
 
-Use the merge gate for default-branch consumers. Use the publication check before tagging or announcing a release.
-
-The read-only publication check verifies the default branch tip, reviewed tree, merged pull request, and successful pull request checks.
+Require `check` and `review` before merging. Follow [release setup and recovery](publication.md).

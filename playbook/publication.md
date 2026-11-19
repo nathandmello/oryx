@@ -1,0 +1,48 @@
+# Tagged releases
+
+Each authorised merge into `main` publishes the version from that commit. Consumers can pull the shared system immediately after merge.
+
+## Enable publication
+
+Inspect GitHub Releases, remote tags, Actions permissions and rulesets before the first merge. Start with the next available version.
+
+Require pull requests and the GitHub Actions checks `check` and `review`. Require current branches and dismiss stale approvals.
+Publication stops while GitHub reports an unprotected default branch. Restrict merges to authorised maintainers. Apply the rules to administrators. Disable direct pushes, force pushes and branch deletion.
+
+Run the checks on the setup PR before selecting their names in branch protection. Protect `v*` tags against updates and deletion.
+Permit the publisher to create new tags and Releases. Use a disposable GitHub repository to rehearse before enabling publication.
+
+Record thirty days of Actions usage by operating system, merged PR count, full suite runs, and actual charges.
+Repeat after thirty days. Compare macOS minutes per merge, full runs per tested revision, and billed spend.
+
+From October 21 through November 19, 2026, GitHub recorded 32 runs and 10 merged PRs.
+Completed job timestamps cover 83.7 macOS minutes, 3.6 Ubuntu minutes and 0.9 Windows minutes.
+One macOS job and four self-hosted jobs lacked complete timestamps. The suite ran 28 times across 23 distinct run head SHAs.
+Standard hosted jobs are free for this public repository. Account billing totals require billing access.
+
+## Prepare the pull request
+
+Increase `system_version` in `playbook/release.json`. Use patch for fixes, documentation and CI, minor for features, and major for breaking changes.
+Update upgrade guidance when installation steps change. Describe the effect on existing workspaces in the PR. Keep private format metadata compatible with released updaters.
+
+Linux tests the proposed merge tree. Native-sensitive changes also exercise macOS relocation, upgrade and restore.
+Update the path selector when introducing a new platform dependency. Drafts defer tests until ready. Description edits refresh review evidence.
+
+Complete the engineering and quality reviews against the final head. Update the branch and version if another PR merges first.
+
+## Verify and recover
+
+The publisher checks the merged PR, both workflow runs, and the tested tree. It creates an annotated tag at the merged commit.
+The Release includes the change, PR, consumer impact, recovery and verification limits. Latest identifies the highest published stable version.
+
+Inspect the publication run summary for the tag, merge SHA and release link. Compare the tag target with the PR merge.
+
+Merging starts the hosted publisher automatically. Temporary GitHub failures retry twice inside that job.
+Agents monitor the run and handle authorised recovery. After fixing a failed gate, retry the existing run for that merge.
+For targeted recovery, dispatch **Publish PM Hub** on `main` with the original PR number.
+
+Older manual verification prompts expire when their candidate leaves the default branch tip. Automatic publication starts with 0.3.6.
+Retries verify existing tags and reuse completed releases. Inspect conflicting tags or missing review evidence before retrying.
+
+Rehearse two successive merges and a retry after tag creation. Verify one release per merge and confirm Latest after retrying the older release.
+For defective code, submit a corrective PR with a new version. Follow [installed workspace recovery](updates.md#recovery) when private records require restoration.

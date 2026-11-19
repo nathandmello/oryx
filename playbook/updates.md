@@ -2,10 +2,11 @@
 
 Open the updated Hub to align private records.
 
-Releases 0.3.1 through 0.3.5 use private format 2. Apply [brief review](brief-review.md) and [red-team methods](../.agents/skills/red-team/SKILL.md) at the next review.
+Releases 0.3.1 through 0.3.6 use private format 2. Apply [brief review](brief-review.md) and [red-team methods](../.agents/skills/red-team/SKILL.md) at the next review.
 
 0.3.4 adds [initiative meeting transcripts](../.agents/skills/summarize-meeting/SKILL.md).
 0.3.5 adds [context section leads](filing.md#when-a-section-earns-its-place).
+0.3.6 changes [publication](publication.md).
 
 `playbook/release.json` reports format 1 for older updaters. The private format is in `playbook/workspace-format.json`.
 
@@ -109,9 +110,9 @@ git -C "/path/to/new-recovery-directory/$private_name" fsck --full
 
 For GNU tar on Linux, use `--xattrs --xattrs-include='*'` when restoring extended attributes.
 
-Compare the recovered working files before switching installations.
+Compare recovered files before switching.
 
-Keep a private off-device copy for recovery after disk loss. The archive can contain credentials from ignored files. It stays local during Git operations.
+Keep a private off-device recovery copy. The archive can contain credentials from ignored files. It stays local during Git operations.
 
 Before conversion, the tool verifies a ZIP with the exact bytes of each existing affected file, including untracked files. It stores the plan alongside those originals.
 

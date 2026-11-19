@@ -1,40 +1,56 @@
 name: PM Hub checks
 
 on:
-  push:
-    branches: [main]
   pull_request:
-    types: [opened, reopened, synchronize, edited, ready_for_review]
-  workflow_dispatch:
-    inputs:
-      release_pr:
-        description: Merged release pull request to verify before publication
-        required: true
-        type: string
+    branches: [main]
+    types: [opened, reopened, synchronize, ready_for_review]
 
 permissions:
   contents: read
-  actions: read
-  pull-requests: read
+
+concurrency:
+  group: hub-tests-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
 
 jobs:
-  check:
-    runs-on: macos-latest
+  tests:
+    if: ${{ !github.event.pull_request.draft }}
+    runs-on: ubuntu-latest
     timeout-minutes: 10
+    outputs:
+      tree: ${{ steps.candidate.outputs.tree }}
+      native: ${{ steps.candidate.outputs.native }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
           fetch-depth: 0
-      - name: Check Hub structure, skills, templates, hooks and dependencies
-        run: python3 tools/pm.py check --system-only
-      - name: Test PM workflows, consumer upgrades and recovery
-        run: python3 -m unittest discover -s tests -v
-      - name: Verify engineering and quality review evidence
-        if: github.event_name == 'pull_request'
-        run: python3 tools/release_review.py
-      - name: Verify the merged release candidate before publication
-        if: github.event_name == 'workflow_dispatch'
+      - id: candidate
         env:
-          GITHUB_TOKEN: ${{ github.token }}
-        run: python3 tools/release_review.py
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: python3 tools/release_candidate.py >> "$GITHUB_OUTPUT"
+      - run: python3 tools/pm.py check --system-only
+      - run: python3 -m unittest discover -s tests -v
+
+  check:
+    needs: tests
+    if: ${{ always() && !cancelled() && !github.event.pull_request.draft }}
+    runs-on: ${{ needs.tests.outputs.native == 'true' && 'macos-latest' || 'ubuntu-latest' }}
+    timeout-minutes: 10
+    steps:
+      - name: Require successful Linux tests
+        env:
+          RESULT: ${{ needs.tests.result }}
+        run: test "$RESULT" = success
+      - if: needs.tests.outputs.native == 'true'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - name: Exercise native relocation, upgrade and restore
+        if: needs.tests.outputs.native == 'true'
+        env:
+          PYTHONPATH: tests
+        run: python3 -m unittest -v test_release.BackupTests test_repositories
+      - name: Tested tree ${{ needs.tests.outputs.tree }}
+        run: 'true'

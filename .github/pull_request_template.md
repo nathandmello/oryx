@@ -1,6 +1,6 @@
 ## Change
 
-<!-- Describe the user problem and the observable change. -->
+<!-- Describe the user problem and the observable change for the release notes. Bump system_version above main, including for CI and documentation. -->
 
 Reviewed commit: `<full PR head SHA>`
 
