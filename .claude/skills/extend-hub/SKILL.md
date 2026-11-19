@@ -34,6 +34,16 @@ Check discovery and execution through `pm.py action`. Compare with the base comm
 8. Run `python3 tools/pm.py check`. In a system-only checkout, use `--system-only` and verify affected private workflows in a disposable workspace.
 9. Report what you traced and corrected. Name the checks you ran and any remaining gaps.
 
+## Review browser impact
+
+For changes to roadmap, task, or launch checklist workflows, trace both the terminal and browser entry points.
+Use the same records, workflow handlers, and validation in both interfaces.
+Update affected browser views or controls in the same change. Check existing records when fields or rules change.
+
+Add or update a [Playwright scenario](../../../playbook/local-ui.md#browser-tests) when the browser behavior changes.
+Use the required [Browser impact section](../../../playbook/local-ui.md#review-workflow-changes).
+Check the review gate's path list when moving a workflow entry point.
+
 ## Prepare a release
 
 Test existing installations with arbitrary filenames, untracked records, missing evidence, and a second run when filing changes. Verify that original bytes remain recoverable.
