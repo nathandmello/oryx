@@ -8,7 +8,7 @@ Keep standing company facts and commitments in `private/context/company/overview
 
 Link product context to its company. Area and initiative briefs inherit their product. Record each decision and exception under its owner.
 
-Keep inherited commitments in force. Cite the decision owner’s approval for any exception.
+Keep inherited commitments in force. Cite the decision owner’s approval for any exception. Follow [evidence reviews](evidence-reviews.md) for conflicts and changed assumptions.
 
 Link existing goals, research, and delivery details. Apply [the filing rules](filing.md) before creating a note.
 

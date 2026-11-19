@@ -5,7 +5,7 @@ import os
 from pathlib import Path
 import subprocess
 import unittest
-from unittest.mock import patch
+from unittest.mock import mock_open, patch
 
 import test_pm
 import pm
@@ -164,6 +164,63 @@ Desktop sessions were outside this fixture.
 
     def gate(self):
         return release_review.publication(self.pr, "main", self.merge, self.api)
+
+    def test_browser_impact_requires_an_explanation_and_a_spec_for_changed_behavior(self):
+        files = "pulls/9/files?per_page=100&page=1"
+        unrelated = {"filename": "tools/preferences.py", "additions": 1}
+        tasks = {"filename": "tools/initiative_work.py", "additions": 1}
+        spec = {"filename": "tests/browser/pm-hub.spec.js", "additions": 4}
+        changed = "## Browser impact\nChanged: The task editor shows the review state.\n"
+        unchanged = "## Browser impact\nUnchanged: The task result is identical in both interfaces.\n"
+        cases = (
+            ([unrelated], "", None),
+            ([tasks], "", "Browser impact section"),
+            ([tasks], "## Browser impact\nUnchanged:", "explain the result"),
+            ([tasks], unchanged, None),
+            ([tasks], changed, "Playwright scenario"),
+            ([tasks, dict(spec, additions=0)], changed, "Playwright scenario"),
+            ([tasks, spec], changed, None),
+        )
+        for changes, section, error in cases:
+            with self.subTest(changes=changes, section=section):
+                self.responses[files] = changes
+                pr = dict(self.pr, changed_files=len(changes), body=self.pr["body"] + section)
+                if error:
+                    with self.assertRaisesRegex(ValueError, error):
+                        release_review.browser_impact(pr, self.api)
+                else:
+                    release_review.browser_impact(pr, self.api)
+
+    def test_browser_impact_checks_all_pages_and_previous_paths(self):
+        self.responses["pulls/9/files?per_page=100&page=1"] = [
+            {"filename": f"notes/{number}.md", "additions": 1} for number in range(100)
+        ]
+        self.responses["pulls/9/files?per_page=100&page=2"] = [
+            {"filename": "tools/moved.py", "previous_filename": "tools/local_ui/app.js", "additions": 0}
+        ]
+        pr = dict(self.pr, changed_files=101)
+        with self.assertRaisesRegex(ValueError, "Browser impact section"):
+            release_review.browser_impact(pr, self.api)
+        self.responses["pulls/9/files?per_page=100&page=2"] = []
+        with self.assertRaisesRegex(ValueError, "verify all changed paths"):
+            release_review.browser_impact(pr, self.api)
+
+    def test_pr_review_enforces_browser_impact_using_current_description(self):
+        pr = dict(self.pr, changed_files=1, base={"ref": "main", "sha": "c" * 40})
+        event = json.dumps({"pull_request": pr})
+        self.responses["pulls/9"] = pr
+        self.responses["pulls/9/files?per_page=100&page=1"] = [
+            {"filename": "templates/launch-checklist.json", "additions": 1}
+        ]
+        with patch.dict(os.environ, GITHUB_EVENT_PATH="fixture-event.json"), \
+                patch("builtins.open", mock_open(read_data=event)), patch.object(release_review, "github", self.api):
+            with self.assertRaisesRegex(ValueError, "Browser impact section"):
+                release_review.main()
+            pr["body"] += "## Browser impact\nUnchanged: Only the internal template description changed.\n"
+            release_review.main()
+            pr["head"] = {"sha": "d" * 40}
+            with self.assertRaisesRegex(ValueError, "commits changed"):
+                release_review.main()
 
     def test_checks_current_reviews_and_rejects_stale_or_missing_evidence(self):
         for key in self.state:

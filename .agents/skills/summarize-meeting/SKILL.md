@@ -60,7 +60,8 @@ Use [ingest-context](../ingest-context/SKILL.md) and the [filing rules](../../..
 - Preview `pm.py route-context` for reusable facts, constraints, decisions, and questions. Set the initiative and owning product.
 - Write authorised findings to the overview selected by the router. Use permitted excerpts and state verification limits.
 - Route unrelated agenda items as deferred. Use the owning record for any separately requested capture.
-- Preserve accepted decisions. Flag conflicts for review. Record meeting commitments as evidence and follow existing approval and work tracking workflows.
+- Preserve accepted decisions. Apply [evidence reviews](../../../playbook/evidence-reviews.md) to restrictions, partial accounts, or commitments affecting a plan.
+- Record meeting commitments as sourced evidence. Apply the existing approval and work tracking workflows.
 - Use a dated `context-note` beside the overview when readers need the meeting's history. Keep its content within initiative scope.
 - Link the note in a supported section of the overview. Cite the relevant source.
 - Keep source transcripts with their owners. File authorised exports in `sources/` beside the overview when data boundaries permit retention.

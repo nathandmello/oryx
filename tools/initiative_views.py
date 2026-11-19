@@ -2,23 +2,29 @@
 
 import csv
 from datetime import date
+from hashlib import sha256
 from html import escape
 from io import StringIO
 import json
 
+import brief_review
+import evidence_reviews
 import experiment_drafts
 import initiative_areas
 import layout
 import metric_registry
-from initiative_events import HORIZONS, IN_DEFINITION, PHASES, iso_date
+import outcome_evidence
+import records
+from initiative_events import HORIZONS, IN_DEFINITION, PHASES, iso_date, text
 
 BACKLOG_FIELDS = {
     "product", "id", "title", "problem", "audience", "phase", "rank", "effort", "unit",
-    "captured_on", "last_decision_on", "revisit", "sources", "areas",
+    "captured_on", "last_decision_on", "revisit", "sources", "areas", "evidence_reviews", "outcome_risks",
 }
 ROADMAP_FIELDS = {
     "product", "cycle", "horizon", "rank", "id", "title", "outcome", "success_metrics", "phase",
     "effort", "unit", "period_start", "period_end", "trade_off", "planning_record", "delivery", "areas",
+    "evidence_reviews",
 }
 
 
@@ -42,21 +48,108 @@ def view_template(root, view):
 
 
 def next_review(item, decision):
+    scheduled = decision.get("review_on") or decision.get("revisit")
+    dates = [change["on"] for change in item["evidence_changes"]]
     if decision.get("action") == "review-outcomes":
-        if decision["follow_up"]:
-            return decision["follow_up"]["on"]
+        follow = decision["follow_up"]
         triggers = item["review_trigger_measurements"]
-        return item["measurements"][triggers[0]]["observed_on"] if triggers else None
-    return decision.get("review_on") or decision.get("revisit")
+        if follow:
+            scheduled = follow["on"]
+        elif triggers:
+            scheduled = item["measurements"][triggers[0]]["observed_on"]
+        for revisions in item["guardrails"].values():
+            dates.extend(rule["effective_on"] for rule in revisions if rule["effective_on"] > decision["on"])
+    if dates:
+        if iso_date(scheduled):
+            dates.append(scheduled)
+        return min(dates)
+    return scheduled
 
 
-def backlog(registrations, phase=None, due=False, all_phases=False, *, area=None):
+def signal_claims(private, basis):
+    approval, selection = basis["approval"], basis["selection"]
+    brief = approval["brief"]
+    claims = []
+    if private is not None and brief:
+        path = private / brief["path"]
+        try:
+            if path.resolve() == path and path.is_file():
+                contents = path.read_bytes()
+                if sha256(contents).hexdigest() == brief["sha256"]:
+                    prose = brief_review.visible(contents.decode("utf-8"))
+                    for section in ("Assumptions and risks", "Approach and scope", "Proposal"):
+                        for line in (records.section(prose, section) or "").splitlines():
+                            claim = line.strip().removeprefix("- ")
+                            if text(claim):
+                                claims.append({"text": claim, "authority": "PM-approved Initiative Brief",
+                                               "record": brief["path"], "section": section, "revision": brief["sha256"],
+                                               "source": approval["source"]})
+        except (OSError, UnicodeError):
+            pass
+    for field in ("scope", "obligation", "reason"):
+        if approval[field]:
+            claims.append({"text": approval[field], "authority": "PM-signed " + approval["action"],
+                           "source": approval["source"]})
+    if selection:
+        claims.append({"text": selection["reason"], "authority": "PM-signed plan",
+                       "source": selection["source"], "record": selection["comparison"]["path"],
+                       "revision": selection["comparison"]["sha256"]})
+    return claims
+
+
+def signal_reviews(private, item):
+    reviews = []
+    for source, review in item.get("_signal_reviews", {}).items():
+        active = review["basis"]["approval"] == item["_plan_approval"]
+        last = review["history"][-1] if review["history"] else None
+        state, reason, follow_up, claims, review_on = (
+            "needs-triage", "Compare new evidence with the approved approach.", None, [],
+            review["evidence"]["observed_on"],
+        )
+        if last:
+            state = {"retain": "retained", "reopen": "reopened"}.get(last["action"], last["action"])
+            if state == "assess":
+                state = last["impact"]
+            reason, follow_up = last["reason"], last["follow_up"]
+            if last["references"]["claim"]:
+                claims = [last["references"]["claim"]]
+            if follow_up:
+                review_on = follow_up["on"]
+            elif state in {"routine", "retained", "reopened"}:
+                review_on = None
+        elif active and private is not None:
+            claims = signal_claims(private, review["basis"])[:5]
+        if not active and state in {"needs-triage", "material", "uncertain", "follow-up", "revise"}:
+            state = "archived"
+        reviews.append({
+            "id": source, "state": state, "reason": reason, "claims": claims, "active": active,
+            "evidence": review["evidence"], "basis": review["basis"], "follow_up": follow_up,
+            "review_on": review_on if active else None, "history": review["history"],
+            "residual_risk": last["residual_risk"] if last else None,
+        })
+    return reviews
+
+
+def evidence_review_labels(reviews):
+    labels = []
+    for review in reviews:
+        if not review["active"] or review["state"] == "routine":
+            continue
+        claim = f" ({review['claims'][0]['text']})" if review["claims"] else ""
+        evidence = review.get("evidence", {}).get("summary")
+        description = f"{evidence} — {review['reason']}" if evidence else review["reason"]
+        labels.append(f"{review['state']}: {review['id']}{claim} — {description}")
+    return labels
+
+
+def backlog(registrations, phase=None, due=False, all_phases=False, *, area=None, private=None):
     phases = IN_DEFINITION | {"candidate"}
     if phase is not None:
         phases = {phase}
     elif due or all_phases:
         phases = set(PHASES)
     rows = []
+    context_reviews = evidence_reviews.workspace_reviews(private)
     for product, register in registrations:
         for item in register.items.values():
             if item["phase"] not in phases or (area is not None and area not in item["areas"]):
@@ -64,6 +157,12 @@ def backlog(registrations, phase=None, due=False, all_phases=False, *, area=None
             decision = item["decisions"][-1] if item["decisions"] else {}
             revisit = next_review(item, decision)
             review_date = iso_date(revisit)
+            reviews = signal_reviews(private, item)
+            reviews += evidence_reviews.for_initiative(private, product, item, reviews=context_reviews)
+            review_dates = [iso_date(review["review_on"]) for review in reviews if review["review_on"]]
+            if review_dates and (not review_date or min(review_dates) < review_date):
+                review_date = min(review_dates)
+                revisit = review_date.isoformat()
             if due and (not review_date or review_date > date.today()):
                 continue
             description = item["description"] or {}
@@ -77,15 +176,18 @@ def backlog(registrations, phase=None, due=False, all_phases=False, *, area=None
                 "captured_on": item["signals"][0]["observed_on"],
                 "last_decision_on": decision.get("on"), "revisit": revisit,
                 "sources": [signal["source"] for signal in item["signals"]],
+                "outcome_risks": outcome_risks(item),
+                "evidence_reviews": evidence_review_labels(reviews),
             })
     return sorted(rows, key=lambda row: (
         row["product"], PHASES.index(row["phase"]), row["rank"] or float("inf"), row["captured_on"], row["id"],
     ))
 
 
-def roadmap(registrations, cycle_filter=None, *, area=None):
+def roadmap(registrations, cycle_filter=None, *, area=None, private=None):
     rows = []
     matched = False
+    context_reviews = evidence_reviews.workspace_reviews(private)
     for product, register in registrations:
         matched = matched or cycle_filter in register.cycles
         for item in register.items.values():
@@ -95,6 +197,8 @@ def roadmap(registrations, cycle_filter=None, *, area=None):
             if area is not None and area not in item["areas"]:
                 continue
             cycle = register.cycles[placement["cycle"]]
+            reviews = signal_reviews(private, item)
+            reviews += evidence_reviews.for_initiative(private, product, item, reviews=context_reviews)
             rows.append({
                 "product": product, "id": item["id"], "title": item["title"], "phase": item["phase"],
                 "areas": item["areas"],
@@ -103,12 +207,40 @@ def roadmap(registrations, cycle_filter=None, *, area=None):
                 "effort": placement["effort"], "unit": cycle["unit"], "trade_off": placement["reason"],
                 "period_start": cycle["starts_on"], "period_end": cycle["ends_on"],
                 "planning_record": cycle["references"]["path"], "delivery": item["delivery"],
+                "evidence_reviews": evidence_review_labels(reviews),
             })
     if cycle_filter is not None and not matched:
         raise ValueError(f"Unknown planning cycle: {cycle_filter}")
     return sorted(rows, key=lambda row: (
         row["product"], row["period_start"], row["cycle"], HORIZONS.index(row["horizon"]), row["rank"],
     ))
+
+
+def outcome_risks(item):
+    if item["phase"] != "shipped":
+        return []
+    summary = outcome_evidence.guardrail_summary(item, date.today().isoformat())
+    risks = []
+    for name, row in summary.items():
+        rule = row["bound"]
+        if row["status"] != "within":
+            label = f"{name}: {row['status']} ({outcome_evidence.SYMBOLS[rule['operator']]} {rule['threshold']} {rule['unit']})"
+            risks.append(label)
+        if row["missing_current_reading"] and row["status"] == "breached":
+            risks.append(f"{name}: no usable reading for the current bound")
+    for group in outcome_evidence.conflicting_readings(item):
+        risks.append("Conflicting target readings: " + ", ".join(group))
+    if item["decisions"][-1]["action"] == "review-outcomes":
+        for target, result in item["decisions"][-1]["outcomes"].items():
+            if result["status"] in {"inconclusive", "pending", "unmeasured"}:
+                risks.append(f"{target}: {result['status']}")
+    risks.extend(f"{change['type']}: {change['id']} awaits review" for change in item["evidence_changes"])
+    adopted = {rule["adopted_from"]["target"] for revisions in item["guardrails"].values()
+               for rule in revisions if "adopted_from" in rule}
+    for target, row in item["targets"].items():
+        if target not in adopted and row["guardrails"].strip().lower() not in {"none", "no guardrails"}:
+            risks.append(f"{target}: review guardrail note — {row['guardrails']}")
+    return risks
 
 
 def trace(product, register, identifier=None, *, private):
@@ -137,8 +269,19 @@ def trace(product, register, identifier=None, *, private):
     context["areas"] = initiative_areas.current_links(private, product, item["areas"])
     drafts = experiment_drafts.view(private, product, register, item)
     metric_ids = sorted(set(drafts) | set(item["targets"]) | {test["metric"] for test in item["experiments"].values()})
-    initiative = {**item, "experiment_drafts": drafts}
+    metric_ids = sorted(set(metric_ids) | {row["metric"] for revisions in item["guardrails"].values() for row in revisions})
+    initiative = {key: value for key, value in item.items() if not key.startswith("_")}
+    initiative.update(experiment_drafts=drafts, signal_reviews=signal_reviews(private, item),
+                      context_risks=evidence_reviews.for_initiative(private, product, item))
     if item["phase"] == "shipped":
+        ship = next(event for event in reversed(item["decisions"]) if event["action"] == "ship")
+        initiative["launch_review"] = ("Recorded in the signed ship decision." if "readiness" in ship
+                                       else "Readiness was not recorded in this historical ship decision.")
+        initiative["guardrail_results"] = outcome_evidence.guardrail_summary(item, date.today().isoformat())
+        initiative["outcome_risks"] = outcome_risks(item)
+        initiative["conflicting_readings"] = outcome_evidence.conflicting_readings(item)
+        initiative["unusable_measurements"] = [ref for ref in item["measurements"]
+                                               if not outcome_evidence.usable(item, ref, register.metrics)]
         decision = item["decisions"][-1]
         next_date = next_review(item, decision)
         initiative["outcome_review"] = {

@@ -2,11 +2,13 @@
 
 Open the updated Hub to verify compatibility.
 
-Releases 0.3.1 through 0.6.1 use private format 2.
+Releases 0.3.1 through 0.8.1 use private format 2.
 
 | Release | Change |
 | --- | --- |
-| 0.6.1 | Keeps [dated backlog reviews](initiative-views.md#read-the-views) visible when a signed approval needs review. |
+| 0.8.1 | Keeps [dated backlog reviews](initiative-views.md#read-the-views) visible when a signed approval needs review. |
+| 0.8.0 | Adds launch evidence history, decision conflict reviews, guardrail readings, and measurement corrections. |
+| 0.6.1 | Requires [browser impact evidence](local-ui.md#review-workflow-changes) for changes to roadmap, task, and launch checklist workflows. |
 | 0.6.0 | Opens [roadmaps, PM tasks, and launch checklists](local-ui.md) in a local browser. The app reads and updates existing private records. |
 | 0.5.0 | Adds [Hub commands](commands.md) and optional [reply preferences](working.md#reply-preferences). Existing profiles use Hub defaults. |
 | 0.4.2 | Automates [publication](publication.md). |
@@ -21,7 +23,8 @@ Release 0.3.5 adds [context section leads](filing.md#when-a-section-earns-its-pl
 
 Check [signed prototype compatibility](initiative-approvals.md#existing-private-work).
 
-Update every client before sharing newly formatted records, initiative JSON lists, or signed changes. The Hub reads existing format-2 signatures.
+Update every client before sharing new records. Older clients reject new transaction types. Existing format-2 signatures remain readable.
+Verify historical readiness and thresholds against dated sources.
 For an active discovery approved before source binding, review the plan and sources together. Sign a fresh `start-discovery` before concluding.
 
 ## What runs

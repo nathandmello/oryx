@@ -34,6 +34,8 @@ For structured inputs, run `python3 tools/pm.py check-metric` with JSON on stand
 
 Each observation needs `definition`, `population`, `unit`, `basis`, `timezone`, `source`, `start`, `end`, and `complete`. Use an exclusive ISO end date. For `growth` and `percentage_points`, provide `current` and `baseline` observations with `value`. Supply `reported` to compare a stated result at its precision.
 
+Use the [approved reporting window](metrics.md#confirm-the-reporting-window) as the observation basis. Check each observation's cutoff. If `approved_reporting_windows` shows null for a registry definition, verify its period against the source.
+
 For `proportion` and `cohort_ratio`, provide `current` with `numerator`, `denominator`, and `denominator_basis`. Set `numerator_subset` for a proportion after checking membership. Set `same_cohort` for a cohort ratio after verifying the opening cohort on both sides. A cohort ratio can exceed 100%.
 
 | Reference | Adapted practice |

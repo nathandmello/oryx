@@ -38,7 +38,7 @@ def board(root, product):
                "reserved": sum(place["effort"] for place in cycle["placements"] if place["reserved"])}
             for cycle in sorted(register.cycles.values(), key=lambda cycle: (cycle["starts_on"], cycle["cycle"]))
         ],
-        "rows": initiative_views.roadmap([(product, register)]),
+        "rows": initiative_views.roadmap([(product, register)], private=storage.private_root(root)),
         "candidates": [
             {"id": item["id"], "title": item["title"], "outcome": item["description"]["outcome"],
              "eligible_cycles": [cycle["cycle"] for cycle in register.cycles.values()

@@ -1,4 +1,4 @@
-const { execFileSync, spawn } = require("node:child_process");
+const { execFileSync, spawn, spawnSync } = require("node:child_process");
 const { once } = require("node:events");
 const path = require("node:path");
 const { createInterface } = require("node:readline");
@@ -48,6 +48,8 @@ const test = base.extend({
         cli: (command, input) => JSON.parse(execFileSync(python, ["-B", ...args, ...command], {
           cwd: data.root, env, encoding: "utf8", input: input === undefined ? undefined : JSON.stringify(input),
         })),
+        sign: proposal => spawnSync(python, ["-B", ...args, "initiative", "apply", "example", "--key", data.fixtureKey],
+          { cwd: data.root, env, encoding: "utf8", input: JSON.stringify(proposal) }),
         open: screen => launch([...args, ...action, "--no-open", "--screen", screen], { cwd: data.root, env }),
       });
     } finally {
@@ -123,11 +125,28 @@ test("compare and sign a cycle, filter the board, and approve a drag change", as
   await expect(lane(page, "now").getByRole("heading", { name: "Renewal delays" })).toBeVisible();
   await expect(lane(page, "later").getByRole("heading", { name: "Export turnaround" })).toBeVisible();
 
+  const renewalID = hub.cli(["roadmap", "--product", "example"]).find(row => row.title === "Renewal delays").id;
+  const reason = "Legal clearance is pending for the renewal audience.";
+  hub.cli(["route-context", "--write", "context/products/example/overview.md"], {
+    sources: [{ reference: "Fixture legal review, item 12", date: hub.today, checked_on: hub.today,
+      coverage: "read", text: "Confirm clearance for the renewal pilot." }],
+    entries: [{ scope: "product", product: "example", topic: "constraints", source: 1, location: "Item 12",
+      quote: "Confirm clearance for the renewal pilot.", risk: { reason, targets: [renewalID] } }],
+  });
+  const published = hub.cli(["roadmap", "--product", "example"]);
+  const [warning] = published.find(row => row.id === renewalID).evidence_reviews;
+  expect(warning).toContain(reason);
+  await button(page, "Refresh").click();
+  await expect(card(page, "Renewal delays").getByText(warning, { exact: true })).toBeVisible();
+  await expect(card(page, "Export turnaround").getByRole("list", { name: "Evidence to review" })).toHaveCount(0);
+
   await select(page, "Product area").selectOption("product/example/area/renewals");
   await expect(card(page, "Renewal delays")).toBeVisible();
   await expect(card(page, "Export turnaround")).toHaveCount(0);
   await button(page, "Present").click();
   await expect(page.locator("body")).toHaveClass(/presenting/);
+  await expect(card(page, "Renewal delays").getByText(warning, { exact: true })).toBeVisible();
+  expect(hub.cli(["roadmap", "--product", "example"])).toEqual(published);
   await button(page, "Exit presentation").click();
 
   await button(page, "Edit priorities").click();
@@ -209,4 +228,68 @@ test("the launch template stays a preview until saved and verification retains e
     status: "verified",
     verification: { by: "On-call lead", on: hub.today, evidence: "A test alert reached the on-call rotation." },
   });
+});
+
+test("withdrawing a verified task shows its launch impact and invalidates the reviewed ship", async ({ hub, page }) => {
+  const initiative = hub.cli(["initiative", "show", "example"]).context.product.id + "/renewal";
+  const decision = { type: "decision", initiative, on: hub.today, review_on: hub.today,
+    reason: "The PM confirmed the small regional pilot.", source: "PM release review" };
+  const propose = change => hub.cli(["initiative", "propose", "example"], [change]);
+  const expedite = propose({ ...decision, action: "expedite", owner: "Incident PM", obligation: "Restore EU alerts",
+    deadline: hub.today, scope: "Verify the European renewal pilot", delivery: "https://example.com/drill/42" });
+  expect(hub.sign(expedite).status).toBe(0);
+  const evidence = "Canary alert receipt EU-41.";
+  hub.cli(["task", "apply", ...scope, "--revision", "absent"], [{ action: "add", id: "canary",
+    fields: { title: "Run the canary", owner: "On-call lead", completion_criteria: "Receive the regional alert",
+      status: "done", resolution: evidence } }]);
+  const verification = { evidence, by: "Incident lead", on: hub.today };
+  hub.cli(["launch-checklist", "apply", ...scope, "--revision", "absent"], ["upstream", "launch"].map(phase => ({
+    action: "add", id: phase, fields: { title: "Check " + phase, phase, criterion: "Verify alert coverage",
+      status: "verified", owner: "Incident lead", tasks: phase === "launch" ? ["canary"] : [], verification },
+  })));
+  const ship = { ...decision, action: "ship" };
+  const ready = propose(ship);
+  const withdrawn = "The receipt covered the wrong region.";
+  await page.goto(hub.url);
+  await button(page, "Tasks").click();
+  await select(page, "Initiative").selectOption("renewal");
+  await button(page, "Edit Run the canary").click();
+  const task = dialog(page, "Edit Run the canary");
+  await select(task, "Status").selectOption("blocked");
+  await field(task, "Blocking reason").fill(withdrawn);
+  await button(task, "Preview edit").click();
+  const preview = dialog(page, "Review Run the canary");
+  const warnings = preview.getByRole("region", { name: "Launch checks to review" });
+  await expect(warnings).toContainText("Check launch");
+  await expect(warnings).toContainText(withdrawn);
+  expect(propose(ship)).toEqual(ready);
+  await button(preview, "Save edit").click();
+  await expect(page.locator(".row").filter({ hasText: "Run the canary" })).toContainText("Check launch");
+  const rejected = hub.sign(ready);
+  expect(rejected.status).not.toBe(0);
+  expect(rejected.stdout).toContain("proposal is stale");
+  await button(page, "Launch checklists").click();
+  await select(page, "Initiative").selectOption("renewal");
+  const readiness = page.getByRole("region", { name: "Launch readiness" });
+  await expect(readiness).toContainText(withdrawn);
+  const checkpoint = page.locator(".row").filter({ has: page.getByRole("heading", { name: "Check launch", exact: true }) });
+  await expect(checkpoint).toContainText("Verification needs review");
+  await expect(checkpoint).toContainText(evidence);
+
+  await button(checkpoint, "Edit Check launch").click();
+  const edit = dialog(page, "Edit Check launch");
+  await select(edit, "Evidence basis").selectOption("independent");
+  await field(edit, "Verification evidence").fill("Independent signed regional alert receipt EU-42.");
+  await button(edit, "Preview edit").click();
+  await button(dialog(page, "Review Check launch"), "Save edit").click();
+  await expect(readiness).toContainText("Ready for launch decision");
+
+  await button(checkpoint, "Edit Check launch").click();
+  await field(edit, "Due date").fill(hub.today);
+  await button(edit, "Preview edit").click();
+  const due = dialog(page, "Review Check launch");
+  await expect(due.getByRole("heading", { name: "Verification", exact: true })).toHaveCount(0);
+  await button(due, "Save edit").click();
+  await expect(edit).toHaveCount(0);
+  expect(checklist(hub).checkpoints.find(row => row.id === "launch").verification.basis_tasks).toEqual([]);
 });

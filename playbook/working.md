@@ -14,7 +14,7 @@ Keep the mode for the current work until the PM changes it. Save it in the work 
 
 A direct request overrides a saved mode. A requested red-team review permits that review; it does not change the mode for later work.
 
-Both modes retain source checks, ownership boundaries, and existing permissions.
+Both modes retain source checks, ownership boundaries, and existing permissions. Report known [evidence risks](evidence-reviews.md) that affect the requested work, including in quiet mode.
 
 ## Reply preferences
 
@@ -57,7 +57,9 @@ For area work, use `pm.py area-context PRODUCT AREA` to locate the product overv
 
 Take the recorded next action or follow the PM's current request. Recheck a source when it changed or its age affects the decision.
 
-Keep observations, assumptions, and unknowns distinct. Preserve earlier evidence and its date when a conclusion changes.
+Keep observations, assumptions, and unknowns distinct.
+Record material changes and risks beside the affected work. Keep the original evidence, source, date, and scope.
+Record who decided, their reason, and any outstanding risk or follow-up. Link later corrections to the original decision.
 
 ## Checkpoint
 

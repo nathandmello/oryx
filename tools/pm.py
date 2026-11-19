@@ -43,7 +43,7 @@ REQUIRED = (
     "AGENTS.md", "CLAUDE.md", "README.md", ".gitignore",
     "tools/pm.py", "tools/hook.py", "tools/workspace.py", "tools/git_ops.py",
     "tools/layout.py", "tools/layout_upgrade.py", "tools/pm_profile.py", "playbook/workspace-format.json", "tools/filing.py", "tools/conversion.py", "tools/snapshots.py", "playbook/filing.md", "playbook/writing.md",
-    "tools/context_capture.py", "tools/task_context.py", "tools/metric_checks.py", "tools/storage.py", "tools/upgrades.py",
+    "tools/context_capture.py", "tools/evidence_reviews.py", "playbook/evidence-reviews.md", "tools/task_context.py", "tools/metric_checks.py", "tools/storage.py", "tools/upgrades.py",
     "playbook/numbers.md", "playbook/metrics.md", "playbook/saas-metrics.json", "tools/metric_registry.py",
     "tools/preferences.py", ".agents/skills/pm/SKILL.md", ".claude/skills/pm/SKILL.md",
     "tools/hub_commands.py", "playbook/commands.md", hub_commands.CATALOG,
@@ -57,14 +57,14 @@ REQUIRED = (
     "playbook/git.md", "playbook/updates.md", "playbook/release.json", "tools/workspace-seed/README.md",
     "tools/workspace-seed/context/README.md", "tools/workspace-seed/workspace/README.md",
     "tools/workspace-seed/.gitignore", "tools/opportunities.py", "tools/brief_review.py", "playbook/opportunities.md",
-    "tools/initiative_events.py", "tools/initiative_store.py", "tools/initiatives_cli.py", "tools/initiative_views.py",
+    "tools/initiative_events.py", "tools/outcome_evidence.py", "tools/initiative_store.py", "tools/initiatives_cli.py", "tools/initiative_views.py",
     "tools/initiative_areas.py", "tools/initiative_intake.py", "tools/experiment_drafts.py",
-    "tools/initiative_work.py", "templates/launch-checklist.json", "playbook/initiative-work.md",
+    "tools/initiative_work.py", "tools/launch_readiness.py", "templates/launch-checklist.json", "playbook/initiative-work.md",
     "tools/local_ui.py", "tools/roadmap_edit.py", "playbook/local-ui.md",
     "tools/local_ui/index.html", "tools/local_ui/app.css", "tools/local_ui/app.js", "tools/local_ui/confirm.py",
     ".agents/skills/manage-initiative-work/SKILL.md",
     "templates/views/backlog.json", "templates/views/roadmap.json",
-    "playbook/initiative-approvals.md", "playbook/initiative-views.md",
+    "playbook/initiative-approvals.md", "playbook/initiative-views.md", "playbook/outcome-evidence.md",
     ".agents/skills/manage-backlog/SKILL.md", ".agents/skills/run-discovery/SKILL.md",
     ".agents/skills/run-discovery/plan.md", ".agents/skills/run-discovery/investigate.md",
     ".agents/skills/define-initiative/SKILL.md", ".agents/skills/prioritize-roadmap/SKILL.md",
@@ -744,6 +744,7 @@ def build_parser():
     task.add_argument("--area", type=layout.slug)
     task.add_argument("--initiative", type=layout.slug)
     task.add_argument("--company", action="store_true")
+    task.add_argument("--history", action="store_true", help="Include recorded risk dispositions in this scope")
     commands.add_parser("catalog", help="List private records by title, type, state, and scope")
     commands.add_parser("check-metric", help="Check a numerical claim from JSON on stdin")
     metrics = commands.add_parser("metric", help="Read and maintain the business metric registry")
@@ -886,7 +887,8 @@ def main() -> int:
                 explicit = {"company": True} if args.company else (
                     {"product": args.product, "area": args.area, "initiative": args.initiative} if args.product else None
                 )
-                result = task_context.resolve(private, args.prompt, cwd=Path.cwd().resolve(), explicit=explicit)
+                result = task_context.resolve(private, args.prompt, cwd=Path.cwd().resolve(), explicit=explicit,
+                                              include_history=args.history)
             print(json.dumps(result, indent=2, ensure_ascii=False))
             return 0
         if args.command == "check-metric":

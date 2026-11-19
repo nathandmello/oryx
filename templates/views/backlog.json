@@ -14,7 +14,9 @@
     "captured_on": "First signal date",
     "last_decision_on": "Last decision",
     "revisit": "Next review or trigger",
-    "sources": "Signal references"
+    "outcome_risks": "Outcome risks",
+    "sources": "Signal references",
+    "evidence_reviews": "Evidence review"
   },
   "sources": [
     "https://www.atlassian.com/software/jira/templates/product-backlog-template",

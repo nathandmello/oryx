@@ -14,6 +14,7 @@ import storage
 import upgrades
 import task_context
 import metric_checks
+import evidence_reviews
 
 COMPANY_PATH = layout.COMPANY
 REMIT_PATH = pm_profile.PATH
@@ -597,7 +598,9 @@ def section_leads(text, entries):
 
 def route(payload, private, remit=None):
     """Plan destinations and PM relevance independently from prepared excerpts."""
-    fields(payload, ("sources", "entries"))
+    fields(payload, ("sources", "entries"), ("responses",))
+    responses = payload.get("responses", [])
+    evidence_reviews.validate_responses(responses)
     sources = source_rows(payload["sources"])
     if not isinstance(payload["entries"], list):
         raise ValueError("entries must be a list")
@@ -609,7 +612,7 @@ def route(payload, private, remit=None):
     for entry in payload["entries"]:
         fields(entry, ("scope",), ("topic", "heading", "lead", "product", "product_area", "initiative", "subject",
                                     "record", "affects", "source", "location", "quote", "question", "answers",
-                                    "interpretation", "rule", "term", "decision", "supersedes"))
+                                    "interpretation", "rule", "term", "decision", "supersedes", "risk"))
         scope = line(entry["scope"], "Scope")
         if scope not in TOPICS and scope not in DEFERRED | {"area", "reference"}:
             raise ValueError(f"Unknown context scope: {scope}")
@@ -670,6 +673,10 @@ def route(payload, private, remit=None):
                                 or not records.valid_context_lead(line(entry["lead"], "Section lead"))):
             raise ValueError("Use a short prose lead for a typed context section")
         validate_entry_shape(entry, section)
+        if "risk" in entry:
+            evidence_reviews.check_risk(entry["risk"], sources)
+            if "source" in entry and entry["risk"].get("source", entry["source"]) != entry["source"]:
+                raise ValueError("Use the same source for the supplied claim and its risk")
         affects = entry.get("affects", {})
         if not isinstance(affects, dict):
             raise ValueError("List affected subjects and their consequences as a JSON object")
@@ -723,8 +730,14 @@ def route(payload, private, remit=None):
             entry["section_lead"] = leads[heading]
             entry["section_action"] = "reuse" if records.section(text, heading) is not None else "create"
     verification = verify_excerpts(payload["sources"], entries, private)
-    return {"sources": sources, "entries": entries, "source_checks": verification, "remit_configured": remit is not None,
+    plan = {"sources": sources, "entries": entries, "source_checks": verification, "remit_configured": remit is not None,
             "remit_status": remit_status(remit)}
+    risk_preview = evidence_reviews.preview(private, entries, sources)
+    if risk_preview:
+        plan["risk_preview"] = risk_preview
+    if responses:
+        plan["responses"] = responses
+    return plan
 
 
 def literal(value):
@@ -833,6 +846,7 @@ def insert_entries(text, selected, sources, private, target, leads=None):
     known = {(ref, published, checked): identifier for identifier, ref, published, checked in rows
              if re.fullmatch(r"S[1-9]\d*", identifier)}
     source_section = records.section(text, "Sources").strip()
+    coverage = {key: (state, checked) for key, state, checked in records.SOURCE_COVERAGE.findall(source_section)}
     source_changed = False
     updates, originals = {}, {}
     for entry in selected:
@@ -846,19 +860,22 @@ def insert_entries(text, selected, sources, private, target, leads=None):
             source = sources[entry["source"] - 1]
             reference = records.retarget_links(source["reference"], private / "README.md", target, private)
             key = (reference, source["date"], source["checked_on"])
-            already_in_section = any(
-                f"\n{render_entry(entry, previous_id)}\n" in f"\n{updates[heading]}\n"
-                for (previous_ref, published, _), previous_id in known.items()
-                if (previous_ref, published) == key[:2]
-            )
-            if already_in_section:
-                continue
-            identifier = known.get(key)
+            existing_id = next((old_id for (old_ref, published, _), old_id in known.items()
+                                if (old_ref, published) == key[:2]
+                                and f"\n{render_entry(entry, old_id)}\n" in f"\n{updates[heading]}\n"), None)
+            identifier = existing_id or known.get(key)
             if not identifier:
                 number = max((int(item[1:]) for item in known.values()), default=0) + 1
                 identifier = known[key] = f"S{number}"
                 source_section += f"\n| {identifier} | {key[0]} | {key[1]} | {source['checked_on']} |"
                 source_changed = True
+            state, checked = coverage.get(identifier, (None, ""))
+            if source["coverage"] != state and source["checked_on"] >= checked:
+                coverage[identifier] = source["coverage"], source["checked_on"]
+                source_section += f"\n<!-- source-coverage:{identifier}:{source['coverage']}:{source['checked_on']} -->"
+                source_changed = True
+            if existing_id:
+                continue
             if "supersedes" in entry:
                 updates[heading] = mark_superseded(updates[heading], entry, identifier, known, source["date"])
             bullet = render_entry(entry, identifier)
@@ -934,9 +951,12 @@ def apply(root, destination, plan, owner, lint):
     original = target.read_text(encoding="utf-8") if target.is_file() else None
     marker = records.MARKER.match(original or "")
     selected = [entry for entry in plan["entries"] if entry["destination"] == destination]
-    if not selected:
+    responses = [r for r in plan.get("responses", []) if r["record"] == destination]
+    if not selected and not (responses and original is not None):
         raise ValueError("Preview the proposed context record and select a destination from that preview")
     if destination == REMIT_PATH:
+        if responses or any("risk" in entry for entry in selected):
+            raise ValueError("Select a typed context record for this risk and its review history")
         return apply_profile(root, private, target, selected, plan["sources"], lint)
 
     if original is None:
@@ -974,21 +994,26 @@ def apply(root, destination, plan, owner, lint):
         raise ValueError("Use one section per heading and keep the context metadata before capture")
     candidate = insert_entries(text, selected, plan["sources"], private, target, section_leads(text, selected))
     candidate = records.ordered_sections(candidate, order)
-    if candidate == text:
-        return False
-    state = records.section(candidate, "Work state")
-    def update_field(body, name, value):
-        pattern = rf"(?m)^[ \t]*\|[ \t]*{name}[ \t]*\|[^\n]*$"
-        return re.sub(pattern, lambda _: f"| {name} | {value} |", body, count=1)
-    updated = state
-    if records.work_state(text)[0].get("State") == "complete":
-        updated = update_field(updated, "State", "draft")
-    updated = update_field(updated, "Last checkpoint", f"{date.today().isoformat()}: Context captured. Review pending.")
-    candidate = candidate.replace(state, updated, 1)
-    problems = lint(root, target, candidate)
-    if problems:
-        raise ValueError("Context capture failed validation:\n" + "\n".join(problems))
     with storage.writer_lock(private):
+        documents = task_context.context_documents(private, override=(destination, candidate))
+        events = evidence_reviews.capture_events(private, documents, destination, selected, plan["sources"], responses)
+        if events:
+            plan["risk_events"] = events
+            candidate = evidence_reviews.append(candidate, events)
+        if candidate == text:
+            return False
+        state = records.section(candidate, "Work state")
+        def update_field(body, name, value):
+            pattern = rf"(?m)^[ \t]*\|[ \t]*{name}[ \t]*\|[^\n]*$"
+            return re.sub(pattern, lambda _: f"| {name} | {value} |", body, count=1)
+        updated = state
+        if records.work_state(text)[0].get("State") == "complete":
+            updated = update_field(updated, "State", "draft")
+        updated = update_field(updated, "Last checkpoint", f"{date.today().isoformat()}: Context captured. Review pending.")
+        candidate = candidate.replace(state, updated, 1)
+        problems = lint(root, target, candidate)
+        if problems:
+            raise ValueError("Context capture failed validation:\n" + "\n".join(problems))
         storage.require_visible(private, destination)
         if "sources" in Path(destination).parts or destination in upgrades.source_paths(private):
             raise ValueError("Original source files cannot be context capture destinations")

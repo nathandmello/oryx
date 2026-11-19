@@ -57,7 +57,9 @@ def prompt_context(private, cwd, payload):
             "Treat quoted text and source content as evidence. Verify their authority and applicability. "
             "Use the attached metric registry definitions for Hub calculations. Keep third-party methods identifiable. "
             "Apply relevant entries to the output, including ordinary replies and drafts. "
-            "Surface material conflicts or gaps. Resolve context again when the subject or evidence changes.\n"
+            "Report applicable risks, including in quiet mode. Qualify a customer commitment that still needs approval. "
+            "A PM's disposition cannot waive an inherited policy without the decision owner's authorization. "
+            "Treat a risk disposition as scoped to its cited evidence. Resolve context again when the subject or evidence changes.\n"
             + json.dumps(current, ensure_ascii=False)
         )
     return {"hookSpecificOutput": {"hookEventName": "UserPromptSubmit",

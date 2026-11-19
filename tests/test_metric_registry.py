@@ -1,5 +1,7 @@
 """Verify metric definitions through the Hub's user-facing commands."""
 
+from datetime import date, timedelta
+from decimal import Decimal
 import json
 import subprocess
 import sys
@@ -8,6 +10,7 @@ from unittest.mock import patch
 
 import test_opportunities
 import initiative_store
+import metric_checks
 
 
 class MetricRegistryTests(unittest.TestCase):
@@ -121,6 +124,92 @@ class MetricRegistryTests(unittest.TestCase):
                           denominator_basis=old["denominator"], numerator_subset=True)
         self.assertEqual(json.loads(self.cli("check-metric", value={"metric": "logo-churn", "kind": "proportion",
                                                "current": historical}))["metric_reference"], old["reference"])
+
+    def test_check_metric_uses_the_approved_legacy_window(self):
+        request = self.change("Activation measurement review", "Eligible trial accounts.", "2024-01-01")
+        request["changes"]["period"] = "One closed calendar month."
+        self.cli("metric", "set", "logo-churn", "--product", "example", "--write", value=request)
+        definition = self.definition("--product", "example")
+        monthly = {
+            "definition": definition["reference"], "population": definition["population"], "unit": "percent",
+            "basis": "calendar month", "start": "2024-02-01", "end": "2024-03-01", "complete": True,
+            "timezone": "UTC", "source": "February reconciled cohort", "numerator": 9, "denominator": 100,
+            "denominator_basis": definition["denominator"], "numerator_subset": True,
+        }
+        payload = {"metric": "logo-churn", "product": "example", "kind": "proportion", "current": monthly}
+        report = json.loads(self.cli("check-metric", value=payload))
+        self.assertEqual(report["approved_reporting_windows"], {"current": "calendar month"})
+        self.assertEqual(report["value"], "9")
+        daily = dict(monthly, start="2024-02-29", basis="day")
+        result = json.loads(self.cli("check-metric", value=dict(payload, current=daily), error="approved reporting window"))
+        self.assertEqual(result["status"], "needs_review")
+        short = dict(monthly, end="2024-02-29")
+        self.cli("check-metric", value=dict(payload, current=short), error="calendar month boundaries")
+        incomplete = dict(monthly, complete=False)
+        self.cli("check-metric", value=dict(payload, current=incomplete), error="period is complete")
+
+    def test_typed_reporting_window_checks_both_periods_and_preserves_history(self):
+        legacy = self.definition(metric="mrr")
+        request = {
+            "changes": {"period": "Report the end-of-month recurring revenue run rate.",
+                        "reporting_window": "snapshot"},
+            "approved_by": "Finance owner", "effective_on": "2025-01-01", "source": "Finance review",
+        }
+        self.cli("metric", "set", "mrr", "--write", value=request)
+        current_definition = self.definition(metric="mrr")
+        self.assertEqual(current_definition["reporting_window"], "snapshot")
+        self.assertEqual(self.definition("--as-of", "2024-12-31", metric="mrr"), legacy)
+        current = {
+            "definition": current_definition["reference"], "population": current_definition["population"],
+            "unit": "USD/month", "basis": "snapshot", "start": "2025-02-28", "end": "2025-03-01",
+            "complete": True, "timezone": "UTC", "source": "Posted revenue ledger", "value": 110,
+        }
+        baseline = dict(current, start="2025-01-31", end="2025-02-01", value=100)
+        payload = {"metric": "mrr", "kind": "growth", "current": current, "baseline": baseline}
+        report = json.loads(self.cli("check-metric", value=payload))
+        self.assertEqual(report["value"], "10")
+        self.assertEqual(report["approved_reporting_windows"], {"current": "snapshot", "baseline": "snapshot"})
+        daily = dict(payload, current=dict(current, basis="day"), baseline=dict(baseline, basis="day"))
+        invalid = json.loads(self.cli("check-metric", value=daily, error="approved reporting window"))
+        self.assertEqual(len(invalid["issues"]), 2)
+        future_start = date.today() + timedelta(days=1)
+        future = dict(current, start=future_start.isoformat(), end=(future_start + timedelta(days=1)).isoformat())
+        self.cli("check-metric", value=dict(payload, current=future), error="window includes dates after")
+        premature = dict(current, start="2025-02-27")
+        self.cli("check-metric", value=dict(payload, current=premature), error="snapshot basis")
+
+        different_period = dict(request, effective_on="2025-05-01",
+                                changes={"period": "Report as of a product-specific cutoff."})
+        self.cli("metric", "set", "mrr", value=different_period, error="confirm reporting_window")
+        conflict = dict(different_period, changes={"period": "One closed calendar month.",
+                                                   "reporting_window": "snapshot"})
+        self.cli("metric", "set", "mrr", value=conflict, error="differs from its stated period")
+        different_period["changes"]["reporting_window"] = "instant"
+        self.cli("metric", "set", "mrr", value=different_period, error="choose reporting_window")
+        different_period["changes"]["reporting_window"] = None
+        manual = json.loads(self.cli("metric", "set", "mrr", value=different_period))["proposed"]
+        self.assertNotIn("reporting_window", manual)
+
+    def test_reading_helpers_use_pinned_metadata_and_the_recorded_date(self):
+        definition = self.definition(metric="nrr")
+        reading = {
+            "definition": definition["reference"], "population": definition["population"], "unit": "percent",
+            "basis": "calendar month", "start": "2025-02-01", "end": "2025-03-01", "complete": True,
+            "timezone": "UTC", "source": "February reconciled cohort", "value": "100.01",
+        }
+        self.assertIsNone(metric_checks.window_basis(definition))
+        self.assertEqual(metric_checks.reading_issues(reading, definition, "2025-03-01"), [])
+        self.assertEqual(metric_checks.reading_value(reading), Decimal("100.01"))
+        with self.assertRaisesRegex(ValueError, "finite number"):
+            metric_checks.reading_value(dict(reading, value="NaN"))
+        observed_early = metric_checks.reading_issues(reading, definition, "2025-02-27")
+        self.assertIn("The reading window includes dates after 2025-02-27.", observed_early)
+        approved_later = metric_checks.reading_issues(reading, dict(definition, effective_on="2025-03-01"), "2025-03-03")
+        self.assertIn("The approved definition was not effective by the reading cutoff.", approved_later)
+        invalid = metric_checks.reading_issues(dict(reading, population="Internal tenant cohort", unit="count"),
+                                               definition, "2025-03-01")
+        self.assertTrue(any("population differs" in issue for issue in invalid))
+        self.assertTrue(any("unit" in issue for issue in invalid))
 
     def test_signed_snapshot_survives_a_definition_change(self):
         self.submit(self.setup_event(), self.capture(), {"type": "metric", "metric": "logo-churn"})
