@@ -30,6 +30,8 @@ Protect Git metadata and register ancestors against agent writes. Check inherite
 Test `initiative show` and `initiative draft-experiment` as the agent after a signed revision.
 Verify write access to drafts and read-only access to registers and their parents. Tests check file modes and locking under one account.
 
+If the shared-write test skips, rerun with `TMPDIR` on a filesystem that preserves setgid.
+
 ## Register the product
 
 Create the company and product context records first. Check their parent link. Choose a maximum for open initiatives and concurrent discovery work. Use zero for discovery when no capacity is available.
