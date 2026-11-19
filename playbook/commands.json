@@ -14,6 +14,7 @@
     "check": "Inspect against stated rules and report failures.",
     "critique": "Challenge claims, trade-offs, or decision quality.",
     "draft": "Start or resume a working artifact.",
+    "open": "Launch a local interface for the named work.",
     "plan": "Prepare a comparison or plan for a future decision.",
     "preview": "Show a proposed change or sample without saving.",
     "reset": "Restore inherited defaults for selected settings.",
@@ -107,6 +108,12 @@
     "review artifact critique": {
       "summary": "Challenge a PM artifact or decision against its evidence.",
       "guide": ".agents/skills/red-team/SKILL.md"
+    },
+    "workspace browser open": {
+      "summary": "Open the local PM Hub browser app to a workspace screen.",
+      "effect": "read",
+      "cli": ["ui"],
+      "example": ["--screen", "roadmap"]
     },
     "workspace health check": {
       "summary": "Run Hub structure, content, and workflow checks.",

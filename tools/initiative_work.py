@@ -6,7 +6,6 @@ from hashlib import sha256
 import json
 from pathlib import Path
 import re
-import sys
 
 import launch_readiness
 import layout
@@ -380,23 +379,31 @@ def ship_snapshot(root, product, identifier, on, reviewed_on, advisories):
                                      reviewed_on=reviewed_on, advisories=advisories)
 
 
-def run(root, args, *, write=False):
-    product, initiative = args.product, args.initiative
-    filename = TASKS if args.command == "task" else CHECKLIST
+def render(result, output_format):
+    if output_format == "markdown":
+        markdown(result)
+    else:
+        print(json.dumps(result, indent=2, ensure_ascii=False))
+
+
+def execute(root, command, operation, product, initiative, *, expected=None, changes=None, write=False):
+    filename = {"task": TASKS, "launch-checklist": CHECKLIST}[command]
     relative = layout.initiative_work_path(product, initiative, filename)
     resolve_initiative(root, product, initiative)
     task_file, check_file = load_work(root, product, initiative)
     target, original, before, history = task_file if filename == TASKS else check_file
     previous_history = history
-    rows, changes = before, []
-    if args.operation == "apply":
-        if args.revision != revision(original):
+    rows = before
+    if operation == "apply":
+        if expected != revision(original):
             raise ValueError("The list changed. Read its current revision and review your edits")
-        changes = storage.json_input(sys.stdin.read())
         rows = edit(filename, before, changes)
-    elif args.operation == "init" and original is None:
-        rows = template(root)
-        changes = [{"id": key, "fields": row} for key, row in rows.items()]
+    elif operation == "init":
+        if expected is not None and expected != revision(original):
+            raise ValueError("The list changed. Read its current revision and review your edits")
+        if original is None:
+            rows = template(root)
+            changes = [{"id": key, "fields": row} for key, row in rows.items()]
     tasks = rows if filename == TASKS else task_file[2]
     checkpoints = rows if filename == CHECKLIST else check_file[2]
     relationships(tasks, checkpoints)
@@ -409,9 +416,6 @@ def run(root, args, *, write=False):
         if write and (original is None or rows != before or history != previous_history):
             original = save(target, original, product, initiative, rows, history)
     result = view(filename, relative, original, rows, history, tasks, task_file[3])
-    if args.operation == "apply" and original and storage.json_input(original)["version"] == 1:
+    if operation == "apply" and original and storage.json_input(original)["version"] == 1:
         result["format_note"] = "The first saved change creates version 2 and preserves the original file text in legacy_original."
-    if getattr(args, "format", "json") == "markdown":
-        markdown(result)
-    else:
-        print(json.dumps(result, indent=2, ensure_ascii=False))
+    return result
