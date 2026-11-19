@@ -40,9 +40,11 @@ Use [the upgrade review skill](../.agents/skills/review-hub-upgrade/SKILL.md). E
 
 ## Using two machines
 
-Save and push the verified private migration from one machine when authorised. On the second, update the shared Hub, then pull private work before committing its local migration. The pull can accept an identical migration from the same history. It checks staged work and preserves working files.
+When authorised, push the verified private migration from one machine. On the second, update the Hub, then pull private work. Pull can accept an identical layout migration before local commit.
 
-If changes differ, restore the remote private repository in a separate checkout. Reconcile both copies, including staged and untracked files.
+A format-2 version update can stop this pull. Keep both staged and untracked work.
+In a separate matching Hub, clone the confirmed private branch under `private/`.
+Run `python3 tools/pm.py check` and reconcile local work before switching.
 
 ## Convert existing work
 
