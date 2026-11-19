@@ -86,14 +86,17 @@ def initialise(root, owner="", delivery_system="Delivery workspace"):
                     remotes={"system": None, "workspace": None})
     (path / "settings.json").write_text(json.dumps(metadata, indent=2) + "\n", encoding="utf-8")
     seed = root / "tools/workspace-seed"
-    for source in sorted(seed.rglob("*")):
+    sources = sorted(seed.rglob("*"))
+    copies = {source.resolve(): path / source.relative_to(seed)
+              for source in sources if source.is_file() and not source.is_symlink()}
+    for source in sources:
         if source.is_symlink():
             raise ValueError("Workspace seeds must use regular files")
         if not source.is_file():
             continue
         target = path / source.relative_to(seed)
         target.parent.mkdir(parents=True, exist_ok=True)
-        text = records.retarget_links(source.read_text(encoding="utf-8"), source, target, root)
+        text = records.retarget_links(source.read_text(encoding="utf-8"), source, target, root, copies)
         with target.open("x", encoding="utf-8") as output:
             output.write(text)
     return path

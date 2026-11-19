@@ -18,6 +18,8 @@ To restore existing work, clone its private repository into `workspace/` instead
 
 Read `workspace/settings.json` for the owner, delivery system, system version, workspace format, and confirmed remote URLs.
 
+Read `workspace/README.md` for the current session checkpoint and next action. Keep that handoff current before ending a session.
+
 Company context, product context, and strategy start empty. Capture them in separate sessions, in that order.
 
 ## Placement

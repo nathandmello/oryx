@@ -6,6 +6,8 @@ Open the containing PM Hub directory in Codex or Claude. Read its [constitution]
 
 Read `settings.json` for the owner, delivery system, release, format, and expected remotes. Personal settings stay here.
 
+Keep the current session checkpoint and next action here. Use [the working practices](../../playbook/working.md) for work across sessions.
+
 Company context, product context, and strategy remain uncaptured. Start those activities in separate sessions, in that order.
 
 Use [context](context/README.md) for the organisation and [products](products/README.md) for product work.

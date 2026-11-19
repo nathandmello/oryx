@@ -79,6 +79,14 @@ class RepositoryTests(unittest.TestCase):
         self.assertEqual(self.git(self.work, "remote"), "")
         self.assertEqual(self.git(self.root, "remote"), "")
 
+    def test_workspace_navigation_opens_private_files_and_shared_rules(self):
+        links = {match[1]: (self.work / match[2]).resolve()
+                 for match in pm.LINK.finditer((self.work / "README.md").read_text())}
+        self.assertEqual(links["context"], self.work / "context/README.md")
+        self.assertEqual(links["products"], self.work / "products/README.md")
+        self.assertEqual(links["constitution"], self.root / "AGENTS.md")
+        self.assertEqual(links["the working practices"], self.root / "playbook/working.md")
+
     def test_new_command_uses_private_destination_and_configured_owner_from_nested_cwd(self):
         result = self.cli("new", "company-context", "context/company.md", "--title", "Company context",
                           cwd=self.work / "products")

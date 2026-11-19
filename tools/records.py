@@ -282,7 +282,7 @@ def validate(texts):
     return errors
 
 
-def retarget_links(text, source, target, root):
+def retarget_links(text, source, target, root, copies=None):
     """Keep links to shared rules valid after a template enters the workspace."""
     def retarget(match):
         label, link = match.groups()
@@ -290,6 +290,7 @@ def retarget_links(text, source, target, root):
         if parsed.scheme or parsed.netloc or not parsed.path:
             return match[0]
         linked = (source.parent / unquote(parsed.path)).resolve()
+        linked = (copies or {}).get(linked, linked)
         if root not in linked.parents and linked != root:
             raise ValueError("Template link leaves PM Hub")
         relative_link = Path(relpath(linked, target.parent)).as_posix()
