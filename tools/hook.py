@@ -11,6 +11,9 @@ import pm
 
 CAPTURE_GUIDANCE = (
     "For requests to capture or update context, automatically read .agents/skills/ingest-context/SKILL.md. "
+    "For meeting transcripts, read .agents/skills/summarize-meeting/SKILL.md before fetching sources. "
+    "Retrieve remote transcripts through the available provider connector and reuse its response for local processing. "
+    "If a transcript action is uncertain, ask for clarification and wait before proceeding with that action. "
     "Read the PM remit when available. Preview routes before writing to an authorised record. "
     "For intake, discovery, initiative briefs, or prioritization, read playbook/opportunities.md. "
     "Read the current records using pm.py initiative show. Use initiative propose for proposed changes. "
