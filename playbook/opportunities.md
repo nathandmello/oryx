@@ -67,6 +67,8 @@ Repeating the command or revising the target preserves edits. The draft stays ou
 
 Each signed update reconciles drafts for the affected initiative and metric pairs. Use `initiative sync-drafts PRODUCT` for product-wide recovery.
 
+Check that the linked metric answers the hypothesis. [Review the test and decision rule](brief-review.md#match-the-test-to-the-hypothesis).
+
 Propose `approve-experiment` with the initiative and metric IDs when the plan is ready.
 The PM reviews the resolved plan before signing. Approval records the same experiment ID and retires the draft file.
 Results use that ID. The [approval procedure](initiative-approvals.md) explains review and recovery.

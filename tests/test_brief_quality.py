@@ -100,3 +100,43 @@ class BriefReviewTests(unittest.TestCase):
         h.preview(h.plan(), error="Reopen the initiative")
         h.submit(h.decision("defer", revisit="After the next support review"))
         self.assertEqual(h.trace()["initiative"]["phase"], "deferred")
+
+    def test_experiment_approval_requires_distinct_visible_answers(self):
+        h = self.hub
+        self.capture()
+        hypothesis, plan, _, _ = h.evidence()
+        h.preview({**hypothesis, "statement": "Agreed."}, error="hypothesis.statement")
+        h.submit(hypothesis)
+        h.preview({**plan, "method": "TBD"}, error="experiment.method")
+        h.preview({**plan, "source": "Noted."}, error="experiment.source")
+        h.preview(plan)
+
+        approval = {"type": "approve-experiment", "initiative": h.i, "metric": plan["metric"]}
+        draft = h.trace()["initiative"]["experiment_drafts"][plan["metric"]]
+        path = h.work / draft["path"]
+        details = {**json.loads(path.read_text()), **{key: plan[key] for key in draft["missing"]}}
+        for criterion, reason in (("As above.", "needs a concrete answer"),
+                                  (plan["method"].lower() + ".", "needs a decision rule distinct from the test method")):
+            path.write_text(json.dumps({**details, "criterion": criterion}))
+            h.cli("check")
+            h.preview(approval, error=f"experiment.criterion {reason}")
+        path.write_text(json.dumps(details))
+        h.submit(approval)
+        self.assertFalse(path.exists())
+
+    def test_historical_experiment_with_weak_criterion_is_readable(self):
+        h = self.hub
+        self.capture()
+        hypothesis, plan, result, _ = h.evidence()
+        h.submit(hypothesis, plan)
+
+        envelope = json.loads(h.ledger.read_text())
+        event = next(event for event in envelope["record"]["events"] if event["type"] == "experiment")
+        event["criterion"] = "Noted."
+        with patch.dict(os.environ, h.env):
+            envelope["signature"] = pm.initiative_store.sign(h.root, envelope["record"], h.key)
+        h.ledger.write_text(json.dumps(envelope))
+
+        h.cli("check")
+        self.assertEqual(h.trace()["initiative"]["experiments"][plan["experiment"]]["criterion"], "Noted.")
+        h.submit(result)

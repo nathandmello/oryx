@@ -56,7 +56,7 @@ Run `python3 tools/pm.py initiative schema` for accepted fields and transitions.
 python3 tools/pm.py initiative propose example < changes.json > proposal.json
 ```
 
-Review every proposed transaction and referenced document. Check named evidence against its source. Leave missing facts unresolved and stop at any gate that requires them.
+Review each transaction and document. Verify evidence at its source. Stop when a gate requires missing facts.
 
 From the trusted PM account, apply the reviewed proposal. Use the PM signing key's absolute path.
 
@@ -90,6 +90,7 @@ After the first capture, review the [possible matches](initiative-views.md#revie
 
 `initiative show` lists the editable draft and its missing fields.
 A ready plan needs a linked hypothesis, method, decision criterion, planned date, and source.
+New proposals need visible answers. Give the method and criterion distinct content.
 
 ```json
 [{"type": "approve-experiment", "initiative": "product-context-0123456789ab/renewals", "metric": "renewal-rate"}]
@@ -105,6 +106,7 @@ After an interrupted file update, run `python3 tools/pm.py initiative sync-draft
 - Record the problem, audience, and outcome before discovery or proposal work advances.
 - Authorize a reviewed discovery plan with `start-discovery`. Give it a review date and record the hypotheses it addresses.
 - Assess each decision-critical hypothesis from 0 to 10 in the current timebox. Complete the findings before `prepare-brief`.
+- Apply [the brief-review checks](brief-review.md) before proposing a candidate.
 - Use `approve-initiative` with a complete Initiative Brief and a linked success target. This creates a roadmap candidate.
 - List each approved candidate in the comparison table once. Submit the same IDs in `cycle.options`. Describe existing commitments in prose.
 - Use `plan` with a reviewed cycle, unique rank, horizon, effort, and trade-off. Stay within signed cycle capacity.
@@ -117,7 +119,9 @@ An approved Initiative Brief, completed discovery brief, and planning comparison
 
 ## Existing private work
 
-New reviews require a distinct, visible answer in each relevant brief section. A short answer or named source can suffice.
+New reviews need distinct, visible answers. A short answer or named source can suffice.
+Prior signed hypotheses and experiments remain readable.
+
 Describe the discovery method in the brief. The signed `review_on` sets its next checkpoint.
 At selection and delivery start, the Hub checks the approved Initiative Brief again. Reopen weak briefs for revision and approval.
 

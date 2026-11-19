@@ -14,7 +14,8 @@ Read [the initiative workflow](../../../playbook/opportunities.md). Use `initiat
 5. Review value, usability, feasibility, and viability with the relevant owners. Give material gaps a next step.
 6. Reuse a product metric. Propose the initiative target, baseline, date, and guardrails with their sources.
 7. Inspect the metric's existing experiment or linked draft with `initiative show`. Keep unknown test details empty.
-8. Complete the brief when it supports an approval decision. Use `initiative propose` for `approve-initiative`.
-9. Hand the exact brief revision to the PM. Wait for the signed change before treating the work as a candidate.
+8. Apply [the brief-review checks](../../../playbook/brief-review.md). Resolve gaps that block approval or return them to the PM.
+9. Complete the brief when it supports approval. Use `initiative propose` for `approve-initiative`.
+10. Hand the exact brief revision to the PM. Wait for the signed change before treating the work as a candidate.
 
 Reopen for material changes. Keep approved source references and historical decisions visible.
