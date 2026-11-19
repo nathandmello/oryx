@@ -101,7 +101,7 @@ class ProductAreaTests(unittest.TestCase):
         self.assertIn("| Fee | Product area refunds — We will reimburse fees.", text)
         self.assertIn("| Refund the fee? | Product area refunds — Pilot <!-- product-area:refunds --> |", text)
         initiative = dict(fact, scope="initiative", initiative="returns", topic="constraints")
-        dest = "context/initiatives/returns/overview.md"
+        dest = "context/products/shop/initiatives/returns/overview.md"
         write([initiative], dest)
         self.assertIn("> We will reimburse fees.", (self.work / dest).read_text())
         self.assertEqual({p.relative_to(self.work).as_posix() for directory in ("context/products", "context/initiatives")
@@ -196,7 +196,7 @@ class ProductAreaTests(unittest.TestCase):
     def test_independent_area_brief_preserves_inline_evidence_and_answer_home(self):
         product = "context/products/shop/overview.md"
         area = "context/products/shop/areas/refunds/overview.md"
-        initiative = "context/initiatives/pilot/overview.md"
+        initiative = "context/products/shop/initiatives/pilot/overview.md"
         records.create(self.root, "company-context", "context/company/overview.md")
         source = {"reference": "Finance minutes", "date": "undated", "checked_on": "2025-01-01", "coverage": "read"}
         question = {"scope": "product", "product": "shop", "product_area": "refunds", "topic": "constraints",

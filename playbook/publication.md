@@ -15,7 +15,7 @@ Permit the publisher to create new tags and Releases. Use a disposable GitHub re
 Record thirty days of Actions usage by operating system, merged PR count, full suite runs, and actual charges.
 Repeat after thirty days. Compare macOS minutes per merge, full runs per tested revision, and billed spend.
 
-From October 21 through November 19, 2026, GitHub recorded 32 runs and 10 merged PRs.
+At the November 19, 2026 baseline, the preceding thirty days included 32 runs and 10 merged PRs.
 Completed job timestamps cover 83.7 macOS minutes, 3.6 Ubuntu minutes and 0.9 Windows minutes.
 One macOS job and four self-hosted jobs lacked complete timestamps. The suite ran 28 times across 23 distinct run head SHAs.
 Standard hosted jobs are free for this public repository. Account billing totals require billing access.
@@ -41,7 +41,7 @@ Merging starts the hosted publisher automatically. Temporary GitHub failures ret
 Agents monitor the run and handle authorised recovery. After fixing a failed gate, retry the existing run for that merge.
 For targeted recovery, dispatch **Publish PM Hub** on `main` with the original PR number.
 
-Older manual verification prompts expire when their candidate leaves the default branch tip. Automatic publication starts with 0.3.6.
+Older manual verification prompts expire when their candidate leaves the default branch tip. Automatic publication starts with the pipeline release.
 Retries verify existing tags and reuse completed releases. Inspect conflicting tags or missing review evidence before retrying.
 
 Rehearse two successive merges and a retry after tag creation. Verify one release per merge and confirm Latest after retrying the older release.

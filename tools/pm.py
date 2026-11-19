@@ -16,6 +16,9 @@ import red_team_eval
 import workspace
 import git_ops
 import context_capture
+import task_context
+import metric_checks
+import metric_registry
 import storage
 import snapshots
 from storage import inventory
@@ -36,7 +39,8 @@ REQUIRED = (
     "AGENTS.md", "CLAUDE.md", "README.md", ".gitignore",
     "tools/pm.py", "tools/hook.py", "tools/workspace.py", "tools/git_ops.py",
     "tools/layout.py", "tools/layout_upgrade.py", "tools/pm_profile.py", "playbook/workspace-format.json", "tools/filing.py", "tools/conversion.py", "tools/snapshots.py", "playbook/filing.md", "playbook/writing.md",
-    "tools/context_capture.py", "tools/storage.py", "tools/upgrades.py",
+    "tools/context_capture.py", "tools/task_context.py", "tools/metric_checks.py", "tools/storage.py", "tools/upgrades.py",
+    "playbook/numbers.md", "playbook/metrics.md", "playbook/saas-metrics.json", "tools/metric_registry.py",
     ".agents/skills/extend-hub/SKILL.md", ".claude/skills/extend-hub/SKILL.md",
     ".agents/skills/ingest-context/SKILL.md", ".claude/skills/ingest-context/SKILL.md",
     ".codex/hooks.json", ".codex/config.toml", ".claude/settings.json",
@@ -244,7 +248,7 @@ def hook_errors(texts: dict[str, str]) -> list[str]:
             handler = {"type": "command", "command": CODEX_COMMAND, "timeout": 15}
             if claude:
                 handler.update(command="python3", args=["-c", HOOK_SCRIPT])
-            for event in ("SessionStart", "Stop", "PreToolUse"):
+            for event in ("SessionStart", "UserPromptSubmit", "Stop", "PreToolUse"):
                 group = {"hooks": [dict(handler, timeout=600 if event == "SessionStart" else 15)]}
                 if event == "PreToolUse":
                     group["matcher"] = "Write|Edit|MultiEdit" if claude else "apply_patch"
@@ -266,7 +270,7 @@ def check_workspace(root: Path, system_texts: dict[str, str]) -> list[str]:
         workspace.settings(root)
     except (OSError, ValueError) as exc:
         return [f"private/: {exc}"]
-    legacy = {}
+    legacy, legacy_structure, structure_review = {}, set(), set()
     retained, original_paths = {}, set()
     try:
         state = upgrades.read_state(private)[1]
@@ -276,6 +280,8 @@ def check_workspace(root: Path, system_texts: dict[str, str]) -> list[str]:
         legacy = state.get(upgrades.RULE)
         if legacy is None:
             legacy = upgrades.candidates(private, inventory)
+        originals = original_paths | {name for name, item in legacy.items() if item.get("role") == "source"}
+        structure_review = set(upgrades.structure_review(root, private, state, originals))
         for identifier, digest in state.get(upgrades.TRANSACTIONS, {}).items():
             if upgrades.fingerprint(conversion.archive_path(private, identifier)) != digest:
                 errors.append(f"private/: missing or changed recovery archive for {identifier}")
@@ -289,6 +295,10 @@ def check_workspace(root: Path, system_texts: dict[str, str]) -> list[str]:
         context_capture.read_remit(private)
     except (OSError, ValueError) as exc:
         errors.append(f"private/{context_capture.REMIT_PATH}: {exc}")
+    try:
+        metric_registry.history(private)
+    except (OSError, ValueError) as exc:
+        errors.append(f"private/{metric_registry.PRIVATE}: {exc}")
     files = inventory(private)
     for path in files:
         rel = path.relative_to(private).as_posix()
@@ -302,6 +312,8 @@ def check_workspace(root: Path, system_texts: dict[str, str]) -> list[str]:
         if not path.is_file():
             continue
         parts = path.relative_to(private).parts
+        if rel == metric_registry.PRIVATE:
+            continue
         if parts[0] in {"context", "products", "workspace"} and any(part.startswith(".") for part in parts[1:]):
             continue  # Editor metadata and private local files are outside the artifact inventory.
         if len(parts) == 2 and parts[0] == conversion.HISTORY and path.suffix == ".zip" and conversion.IDENTIFIER.fullmatch(path.stem):
@@ -311,6 +323,8 @@ def check_workspace(root: Path, system_texts: dict[str, str]) -> list[str]:
         old_record = item.get("status") in ("pending", "waiting") and item.get("digest") == upgrades.fingerprint(path)
         if rel in retained and retained[rel]["digest"] == upgrades.fingerprint(path):
             old_record = True
+        if old_record or rel in structure_review:
+            legacy_structure.add(rel)
         if not old_record and not is_source and ((len(parts) == 1 and rel not in {"README.md", ".gitignore", "settings.json", upgrades.LEDGER, conversion.PENDING})
                 or (len(parts) > 1 and parts[0] not in {"context", "workspace"})):
             errors.append(f"{label}: use a home from the README placement map")
@@ -342,6 +356,8 @@ def check_workspace(root: Path, system_texts: dict[str, str]) -> list[str]:
                                     raise ValueError("Use a work type and subject from the workspace filing rules")
                                 elif parts[1] in layout.WORK_FOLDERS.values() and (not marker or layout.WORK_FOLDERS.get(marker[1]) != parts[1]):
                                     raise ValueError("Use the matching typed artifact for this working folder")
+                                elif not marker and rel not in structure_review:
+                                    errors.extend(f"{label}: {error}" for error in records.working_errors(content))
                         filing.verify_note(private, rel, texts[rel])
                 except ValueError as exc:
                     errors.append(f"{label}: {exc}")
@@ -364,7 +380,7 @@ def check_workspace(root: Path, system_texts: dict[str, str]) -> list[str]:
     except (OSError, ValueError, subprocess.SubprocessError) as exc:
         errors.append(f"private/: {exc}")
     templates = {p: t for p, t in system_texts.items() if p.startswith("templates/")}
-    errors.extend(f"private/{e}" for e in records.validate(dict(templates, **texts)))
+    errors.extend(f"private/{e}" for e in records.validate(dict(templates, **texts), legacy_structure=legacy_structure))
     return errors
 
 
@@ -414,6 +430,10 @@ def check(root: Path = ROOT, include_workspace=True) -> list[str]:
             initiative_views.view_template(root, view)
         except (OSError, ValueError) as exc:
             errors.append(f"templates/views/{view}.json: {exc}")
+    try:
+        metric_registry.defaults(root)
+    except (OSError, ValueError) as exc:
+        errors.append(f"{metric_registry.DEFAULTS}: {exc}")
     errors.extend(guidance_errors(root, texts))
     errors.extend(hook_errors(texts))
     errors.extend(records.validate(texts))
@@ -450,9 +470,18 @@ def sync_skills(root: Path = ROOT) -> int:
     return changed
 
 
-def filing_validator(root, *, legacy_replay=False):
+def filing_validator(root, *, legacy_replay=False, legacy_structure=False):
     private = workspace.private_root(root)
     def validate(edits, folds, archive, originals):
+        changes = set(folds) | {name for name, row in edits.items() if row["text"].encode("utf-8") != originals[name]}
+        governed = {name for name in changes if opportunities.path_kind(name) in records.OPPORTUNITY_KINDS}
+        if governed and not (legacy_replay or legacy_structure):
+            for product in initiative_store.products(root):
+                _, payload, _ = initiative_store.read(root, product)
+                for event in payload["events"]:
+                    reference = event.get("references", {})
+                    if reference.get("path") in governed and "sha256" in reference:
+                        raise ValueError(f"{reference['path']} binds signed evidence. Use the initiative review workflow.")
         texts = {f"templates/{kind}.md": (root / f"templates/{kind}.md").read_text() for kind in records.KINDS}
         for path in inventory(private):
             if path.suffix.lower() == ".md" and path.is_file() and path.resolve() == path:
@@ -484,12 +513,15 @@ def filing_validator(root, *, legacy_replay=False):
                     filing.check_new(private, new_kind[1], name, None, retiring=folds)
             if not legacy_replay:
                 filing.verify_note(private, name, text)
+                if not legacy_structure and not records.MARKER.match(text) and layout.valid_work(name):
+                    problems.extend(f"{name}: {error}" for error in records.working_errors(text))
             texts[name] = text
             problems.extend(writing_errors(text) + link_errors(root, private / name, text, planned={archive, *(private / target for target in edits)}))
         conversion.verify_fragments(private, texts, edits, LINK)
-        for error in ([] if legacy_replay else records.validate(texts)):
-            if error not in previous or error.partition(":")[0] in edits:
-                problems.append(error)
+        if not legacy_replay:
+            for error in records.validate(texts, legacy_structure=texts if legacy_structure else ()):
+                if error not in previous or error.partition(":")[0] in edits:
+                    problems.append(error)
         if problems:
             raise ValueError("Invalid filing result: " + " | ".join(problems[:8]))
     return validate
@@ -518,7 +550,8 @@ def alignment(root, prepare=False, record=None, outcome=None, digest=None, note=
                         or upgrades.RULE not in state or not upgrades.scan_marker(private).exists()):
             recovery = snapshots.ensure(root, release["system_version"], layout_change=old_layout or moving)
         if prepare and review_pending:
-            conversion.resume(private, filing_validator(root, legacy_replay=old_layout), LINK, legacy=old_layout)
+            validator = filing_validator(root, legacy_replay=old_layout, legacy_structure=upgrades.STRUCTURE_RULE not in state)
+            conversion.resume(private, validator, LINK, legacy=old_layout)
         result = upgrades.run(private, inventory, prepare=prepare, record=record, outcome=outcome, digest=digest, note=note)
         if review_pending and not prepare:
             layout_plan = {"moves": {}, "outstanding": [], "changed": False, "awaiting_filing_recovery": True}
@@ -536,11 +569,14 @@ def alignment(root, prepare=False, record=None, outcome=None, digest=None, note=
                 settings.update(release)
                 storage.replace_text(settings_file, original, json.dumps(settings, indent=2) + "\n")
         result["layout"] = layout_plan
+        result["structure_review"] = upgrades.align_structure(root, private, prepare=prepare)
         pending = {item["path"]: item for item in result["outstanding"]}
         for item in layout_plan["outstanding"]:
             pending.setdefault(item["path"], item)
         result["outstanding"] = list(pending.values())
-        result["needs_setup"] |= (changing or moving or layout_plan["changed"] or review_pending) and not prepare
+        result["needs_setup"] |= (
+            changing or moving or layout_plan["changed"] or review_pending or result["structure_review"]["needs_scan"]
+        ) and not prepare
         if recovery:
             result["installation_backup"] = str(recovery)
         if backup:
@@ -565,26 +601,35 @@ def alignment(root, prepare=False, record=None, outcome=None, digest=None, note=
 def prepare_private_write(root):
     private = workspace.repo(root, "workspace")
     settings = workspace.settings(root, compatible=False)
+    state = upgrades.read_state(private)[1]
     if (private.name == "workspace" or any(settings[key] != value for key, value in workspace.release(root).items())
             or not layout_upgrade.complete(private) or layout_upgrade.pending(private)
-            or upgrades.RULE not in upgrades.read_state(private)[1] or conversion.pointer(private).exists()):
+            or not {upgrades.RULE, upgrades.STRUCTURE_RULE} <= set(state) or conversion.pointer(private).exists()):
         alignment(root, prepare=True)
     return workspace.settings(root)
 
 
-def alignment_notice(root):
+def alignment_notice(root, result=None):
     try:
         if not workspace.private_root(root).exists():
             return ""
-        result = alignment(root)
+        if result is None:
+            result = alignment(root)
     except (OSError, ValueError, subprocess.SubprocessError) as exc:
         return f"Workspace alignment unavailable: {exc}"
     items = result["outstanding"]
-    if not result["needs_setup"] and not items:
-        return ""
-    return (f"Context upgrade: {len(items)} record(s) pending or waiting. "
-            "Agent: run python3 tools/pm.py align and execute playbook/updates.md now. "
-            "Read records and sources. Preview and apply verified conversions, and record specific unresolved evidence.")
+    review = result["structure_review"]
+    notices = []
+    if result["needs_setup"] or items:
+        notices.append(f"Workspace update has {len(items)} earlier review item(s). Follow playbook/updates.md. "
+                       "Inspect and explain the evidence. Seek the user's choice before transforming existing artifacts.")
+    if review["offer_handoff"] or review["needs_scan"] or review["records"]:
+        notices.append(f"Artifact audit found {len(review['records'])} existing record(s) with format differences. "
+                       "Read .agents/skills/review-hub-upgrade/SKILL.md and run align --status for paths and findings. "
+                       "Explain the benefits and expected improvements. Offer to leave artifacts in place or review a "
+                       "conversion preview. Apply only the plan the user explicitly approves. "
+                       "Respect any choice already recorded for this update.")
+    return "\n".join(notices)
 
 
 
@@ -640,6 +685,25 @@ def main() -> int:
     area = commands.add_parser("area-context", help="Locate a product area's context and its source records")
     area.add_argument("product")
     area.add_argument("area")
+    task = commands.add_parser("task-context", help="Read scoped guidance for a workspace task")
+    task.add_argument("prompt", nargs="?", default="")
+    task.add_argument("--product", type=layout.slug)
+    task.add_argument("--area", type=layout.slug)
+    task.add_argument("--initiative", type=layout.slug)
+    task.add_argument("--company", action="store_true")
+    commands.add_parser("catalog", help="List private records by title, type, state, and scope")
+    commands.add_parser("check-metric", help="Check a numerical claim from JSON on stdin")
+    metrics = commands.add_parser("metric", help="Read and maintain the business metric registry")
+    metric_commands = metrics.add_subparsers(dest="operation", required=True)
+    for operation in ("list", "show", "set"):
+        metric = metric_commands.add_parser(operation)
+        if operation != "list":
+            metric.add_argument("id", type=layout.slug)
+        metric.add_argument("--product", type=layout.slug)
+        if operation == "set":
+            metric.add_argument("--write", action="store_true", help="Save the PM-confirmed definition")
+        else:
+            metric.add_argument("--as-of")
     commands.add_parser("set-remit", help="Save a PM-confirmed remit from JSON on stdin")
     initialise = commands.add_parser("init-workspace")
     initialise.add_argument("--owner", default="")
@@ -736,6 +800,57 @@ def main() -> int:
             private = workspace.repo(ROOT, "workspace")
             print(json.dumps(context_capture.area_context(private, args.product, args.area), indent=2))
             return 0
+        if args.command in {"task-context", "catalog"}:
+            private = workspace.repo(ROOT, "workspace")
+            if args.command == "catalog":
+                result = task_context.catalog(private)
+            else:
+                if ((args.area or args.initiative) and not args.product) or (args.company and args.product):
+                    raise ValueError("Use a product for area or initiative scope, or choose company scope")
+                explicit = {"company": True} if args.company else (
+                    {"product": args.product, "area": args.area, "initiative": args.initiative} if args.product else None
+                )
+                result = task_context.resolve(private, args.prompt, cwd=Path.cwd().resolve(), explicit=explicit)
+            print(json.dumps(result, indent=2, ensure_ascii=False))
+            return 0
+        if args.command == "check-metric":
+            payload = storage.json_input(os.sys.stdin.read())
+            definitions = None
+            if isinstance(payload, dict) and "metric" in payload:
+                key = layout.slug(payload["metric"])
+                fallback = payload.get("as_of")
+                if fallback is not None:
+                    metric_registry.day(fallback)
+                labels = ("current", "baseline") if payload.get("kind") in ("growth", "percentage_points") else ("current",)
+                private = workspace.private_root(ROOT)
+                definitions = {
+                    label: metric_registry.effective(ROOT, private, payload.get("product"),
+                                                     metric_checks.observation_day(payload.get(label), fallback)).get(key)
+                    for label in labels
+                }
+                if not any(definitions.values()) and key not in metric_registry.effective(ROOT, private, payload.get("product")):
+                    raise ValueError("Choose a metric ID from pm.py metric list")
+            result = metric_checks.check(payload, definitions)
+            print(json.dumps(result, indent=2))
+            return int(result["status"] != "consistent")
+        if args.command == "metric":
+            private = workspace.private_root(ROOT)
+            if private.exists() or args.operation == "set":
+                private = workspace.repo(ROOT, "workspace")
+            if args.operation == "set":
+                request = storage.json_input(os.sys.stdin.read())
+                if args.write:
+                    prepare_private_write(ROOT)
+                    private = workspace.repo(ROOT, "workspace")
+                result = metric_registry.set_definition(ROOT, private, args.id, args.product, request, args.write)
+            else:
+                result = metric_registry.effective(ROOT, private, args.product, args.as_of)
+                if args.operation == "show":
+                    if args.id not in result:
+                        raise ValueError("Choose a metric ID from pm.py metric list")
+                    result = result[args.id]
+            print(json.dumps(result, indent=2, ensure_ascii=False))
+            return 0
         if args.command == "set-remit":
             prepare_private_write(ROOT)
             private = workspace.repo(ROOT, "workspace")
@@ -750,6 +865,16 @@ def main() -> int:
                 workspace.repo(ROOT, "workspace")
             remit, error = context_capture.inspect_remit(private)
             plan = context_capture.route(json.load(os.sys.stdin), private, remit)
+            definitions = {}
+            for entry in plan["entries"]:
+                text = entry.get("quote", "")
+                if metric_checks.is_claim(text):
+                    product = entry.get("product")
+                    if product not in definitions:
+                        definitions[product] = metric_registry.effective(ROOT, private, product)
+                    matched = metric_registry.matching(definitions[product], text)
+                    if matched:
+                        entry["metric_registry"] = [row["reference"] for row in matched]
             if error:
                 plan.update(remit_status="invalid", remit_error=error)
             plan["written"] = None

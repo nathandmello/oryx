@@ -31,6 +31,8 @@ jobs:
         run: python3 tools/release_candidate.py >> "$GITHUB_OUTPUT"
       - run: python3 tools/pm.py check --system-only
       - run: python3 -m unittest discover -s tests -v
+      - name: Check context retrieval, artifact structure and numeric behavior
+        run: python3 tests/context-evals/run.py --strict
 
   check:
     needs: tests

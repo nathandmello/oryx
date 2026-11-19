@@ -20,6 +20,10 @@ import records
 import workspace
 
 
+WORK_NOTE = ("# Notes\n\n## Scope\n\nCompare fixture offers.\n\n## Evidence\n\n{}\n\n"
+             "## Next action\n\nReview the offers.\n")
+
+
 def next_patch(version):
     major, minor, patch_version = map(int, version.split("."))
     return f"{major}.{minor}.{patch_version + 1}"
@@ -58,7 +62,7 @@ class RepositoryTests(unittest.TestCase):
             self.remotes[role] = remote
         (self.work / "settings.json").write_text(json.dumps(settings, indent=2) + "\n")
         (self.work / "workspace/backlogs").mkdir(parents=True)
-        (self.work / "workspace/backlogs/compare-offers.md").write_text("# Notes\n\nFictional PM fixture.\n")
+        (self.work / "workspace/backlogs/compare-offers.md").write_text(WORK_NOTE.format("Fictional PM fixture."))
         self.commit(self.root, "Initial shared system")
         self.commit(self.work, "Initial private fixture")
         pushed = self.cli("git", "system", "push")
@@ -281,7 +285,7 @@ class RepositoryTests(unittest.TestCase):
         self.connect()
         system_head = self.git(self.root, "rev-parse", "HEAD")
         source = self.contributor("workspace")
-        (source / "workspace/backlogs/compare-offers.md").write_text("# Notes\n\nUpdated fictional context.\n")
+        (source / "workspace/backlogs/compare-offers.md").write_text(WORK_NOTE.format("Updated fictional context."))
         self.commit(source, "Update private work")
         self.git(source, "push", "origin", "main")
         result = self.cli("git", "workspace", "pull")
@@ -316,12 +320,12 @@ class RepositoryTests(unittest.TestCase):
     def test_dirty_divergent_and_misdirected_tracking_stop_updates(self):
         self.connect()
         note = self.work / "workspace/backlogs/compare-offers.md"
-        note.write_text("# Notes\n\nUncommitted fictional context.\n")
+        note.write_text(WORK_NOTE.format("Uncommitted fictional context."))
         with self.assertRaisesRegex(ValueError, "preserve local changes"):
             git_ops.run(self.root, "workspace", "pull")
         self.commit(self.work, "Local change")
         source = self.contributor("workspace")
-        (source / "workspace/backlogs/compare-offers.md").write_text("# Notes\n\nRemote fictional context.\n")
+        (source / "workspace/backlogs/compare-offers.md").write_text(WORK_NOTE.format("Remote fictional context."))
         self.commit(source, "Remote change")
         self.git(source, "push", "origin", "main")
         with self.assertRaises(ValueError):

@@ -12,6 +12,8 @@ import records
 import filing
 import storage
 import upgrades
+import task_context
+import metric_checks
 
 COMPANY_PATH = layout.COMPANY
 REMIT_PATH = pm_profile.PATH
@@ -144,11 +146,6 @@ def verify_excerpts(inputs, entries, private):
 
 def product_path(slug):
     return layout.product(slug)
-
-
-def initiative_path(product, initiative):
-    layout.slug(product)
-    return layout.initiative(initiative)
 
 
 def brief_path(path):
@@ -435,8 +432,10 @@ def area_context(private, product, area):
             matches.append({"record": rel.as_posix(), "entries": entries,
                             "sources": [dict(zip(records.SOURCE_COLUMNS, row)) for row in rows if row[0] in ids],
                             "source_errors": errors})
+    inherited = task_context.resolve(private, explicit={"product": product, "area": area})
     return {"subject": f"product/{product}/area/{area}", "area_brief": area_name if exists else None,
-            "product_briefs": parents, "inline_entries": matches}
+            "product_briefs": parents, "inline_entries": matches,
+            "inherited_company": [row for row in inherited["entries"] if row["record"] == layout.COMPANY]}
 
 
 def route_home(private, entry, scope, canonical, section):
@@ -519,6 +518,13 @@ def note_filing(private, record):
 
 
 def validate_entry_shape(entry, section):
+    if "supersedes" in entry:
+        prior = entry["supersedes"]
+        fields(prior, ("source", "entry"))
+        line(prior["entry"], "Previous rule or decision")
+        if (not re.fullmatch(r"S[1-9]\d*", line(prior["source"], "Prior source ID"))
+                or not entry.keys() & {"rule", "decision"} or "answers" in entry):
+            raise ValueError("Use a rule or accepted decision to supersede one named entry from a local source ID")
     table_field = {"Vocabulary": "term", "Decisions already closed": "decision"}.get(section)
     expected = {table_field} if table_field else set()
     if (entry.keys() & {"term", "decision"}) != expected:
@@ -546,36 +552,11 @@ def validate_entry_shape(entry, section):
             raise ValueError("Keep the original wording of an exclusion in the rule; record its application separately")
 
 
-HTML_BLOCK_TAGS = (
-    "address|article|aside|base|basefont|blockquote|body|caption|center|col|colgroup|dd|details|dialog|dir|div|dl|dt|"
-    "fieldset|figcaption|figure|footer|form|frame|frameset|h[1-6]|head|header|hr|html|iframe|legend|li|link|main|menu|"
-    "menuitem|nav|noframes|noscript|ol|optgroup|option|p|param|search|section|summary|table|tbody|td|tfoot|th|thead|"
-    "title|tr|track|ul"
-)
-HTML_TAG_ATTRIBUTE = r'''[a-z_:][a-z0-9_.:-]*(?:[ \t]*=[ \t]*(?:[^\s"'=<>`]+|"[^"\n]*"|'[^'\n]*'))?'''
-HTML_STANDALONE_TAG = rf"(?:<[a-z][a-z0-9-]*(?:[ \t]+{HTML_TAG_ATTRIBUTE})*[ \t]*/?>|</[a-z][a-z0-9-]*[ \t]*>)"
-HTML_TO_BLANK_LINE = r"(?:\n(?![ \t]*(?:\n|\Z))[^\n]*)*"
-HIDDEN_SECTION_MARKUP = re.compile(
-    # Match a whole fence first so literal comments or tags inside it stay local to the example.
-    r"^ {0,3}(?P<fence>(?P<mark>[`~])(?P=mark){2,})(?!(?P=mark))[^\n]*(?:\n|\Z)"
-    r".*?(?:^ {0,3}(?P=fence)(?P=mark)*[ \t]*(?=\n|\Z)|\Z)"
-    r"|<!--.*?(?:-->|\Z)"
-    r"|^ {0,3}<(?P<tag>pre|script|style|textarea)(?=[\s>/]).*?(?:</(?P=tag)\s*>|\Z)"
-    # CommonMark declarations and processing instructions close with their own delimiters.
-    r"|^ {0,3}(?:<\?.*?(?:\?>|\Z)|<!\[CDATA\[.*?(?:\]\]>|\Z)|<![a-z].*?(?:>|\Z))"
-    # Ordinary block tags end at a blank line. Treat a standalone custom tag the same
-    # way if there is a heading immediately after it that could be parsed as HTML.
-    rf"|^ {{0,3}}</?(?:{HTML_BLOCK_TAGS})(?=[\s>/])[^\n]*{HTML_TO_BLANK_LINE}"
-    rf"|^ {{0,3}}{HTML_STANDALONE_TAG}[ \t]*(?=\n|\Z){HTML_TO_BLANK_LINE}",
-    re.I | re.M | re.S,
-)
-
-
 def section_leads(text, entries):
     pattern = r"(?m)^## (.+)$"
     raw = re.findall(pattern, text)
     # Keep comment padding so removing an inline comment cannot fabricate a matching heading.
-    visible = HIDDEN_SECTION_MARKUP.sub(lambda match: re.sub(r"[^\r\n]", " ", match[0]), text)
+    visible = records.visible_section_markup(text)
     if raw != re.findall(pattern, visible):
         raise ValueError("Ambiguous context section boundary. Indent level-two headings inside examples, HTML, or comments")
     headings = {heading.strip().casefold(): heading.rstrip() for heading in raw}
@@ -601,7 +582,8 @@ def section_leads(text, entries):
                     raise ValueError(f"{heading}: review the existing table before adding a lead. {'. '.join(errors)}")
             else:
                 previous, unlabelled = records.context_entries(body)
-                if unlabelled or any(label in {"Fact", "Rule", "Example"} and not records.SOURCE_REFERENCE.search(claim)
+                if unlabelled or any(label in {"Fact", "Rule", "Example", "Reported metric"}
+                                     and not records.SOURCE_REFERENCE.search(claim)
                                      for label, claim in previous):
                     raise ValueError(f"{heading}: verify and label legacy claims with citations before adding a lead")
         lead = next(iter(proposed), existing)
@@ -627,7 +609,7 @@ def route(payload, private, remit=None):
     for entry in payload["entries"]:
         fields(entry, ("scope",), ("topic", "heading", "lead", "product", "product_area", "initiative", "subject",
                                     "record", "affects", "source", "location", "quote", "question", "answers",
-                                    "interpretation", "rule", "term", "decision"))
+                                    "interpretation", "rule", "term", "decision", "supersedes"))
         scope = line(entry["scope"], "Scope")
         if scope not in TOPICS and scope not in DEFERRED | {"area", "reference"}:
             raise ValueError(f"Unknown context scope: {scope}")
@@ -640,7 +622,7 @@ def route(payload, private, remit=None):
             canonical = product_path(entry.get("product"))
             subject = f"product/{entry['product']}"
         elif scope == "initiative":
-            canonical = initiative_path(entry.get("product"), entry.get("initiative"))
+            canonical = records.initiative_home(private, entry.get("product"), entry.get("initiative"))
             if initiative_products.setdefault(canonical, entry["product"]) != entry["product"]:
                 raise ValueError("Use one accountable product for an initiative in this capture")
             subject = f"product/{entry['product']}"
@@ -711,6 +693,8 @@ def route(payload, private, remit=None):
                 filing.check_source_label(category, [sources[source - 1]["reference"]])
             if sources[source - 1]["coverage"] == "unavailable":
                 raise ValueError("An unavailable source cannot supply an excerpt")
+            if "supersedes" in entry and (scope == "pm" or sources[source - 1]["date"] in {"unknown", "undated"}):
+                raise ValueError("Use a dated source when replacing a rule or decision in a context brief")
             line(entry.get("location"), "Source location")
             line(entry.get("quote"), "Source excerpt")
             if "answers" in entry:
@@ -749,14 +733,12 @@ def literal(value):
 
 
 def edit_section(text, section_name, body):
-    pattern = rf"(^## {re.escape(section_name)}[ \t]*\n).*?(?=^## |\Z)"
-    if section_name == "Data boundaries":
-        text = re.sub(pattern, "", text, count=1, flags=re.M | re.S)
-        return re.sub(r"(?=^## )", lambda _: f"## {section_name}\n\n{body}\n\n", text, count=1, flags=re.M)
-    if records.section(text, section_name) is None:
-        return re.sub(r"(?=^## Context controls[ \t]*$)",
-                      lambda _: f"## {section_name}\n\n{body}\n\n", text, count=1, flags=re.M)
-    return re.sub(pattern, lambda match: match[1] + "\n" + body + "\n\n", text, count=1, flags=re.M | re.S)
+    blocks = {name: (start, body_start, end) for name, start, body_start, end in records.section_blocks(text)}
+    if section_name in blocks:
+        _, body_start, end = blocks[section_name]
+        return text[:body_start] + "\n" + body + "\n\n" + text[end:]
+    start = blocks["Context controls"][0]
+    return text[:start] + f"## {section_name}\n\n{body}\n\n" + text[start:]
 
 
 def table_row(values):
@@ -797,9 +779,47 @@ def render_entry(entry, identifier):
     elif "interpretation" in entry:
         label, statement = "Interpretation", literal(entry["interpretation"])
     else:
-        label = "Example" if entry.get("topic") == "examples" else "Fact"
+        label = ("Example" if entry.get("topic") == "examples" else
+                 "Reported metric" if metric_checks.is_claim(entry["quote"]) else "Fact")
         statement = "Source excerpt"
+    if label == "Reported metric":
+        return f"- {label}: {scoped_text(entry, quote)} {cite}"
     return f"- {label}: {scoped_text(entry, statement)} {cite}\n  > {quote}"
+
+
+def mark_superseded(body, entry, replacement, known, date):
+    previous = entry["supersedes"]
+    prior_id = previous["source"]
+    date_by_id = {ident: published for (_, published, _), ident in known.items()}
+    if (prior_id == replacement or prior_id not in date_by_id
+            or date_by_id[prior_id] not in {"undated", "unknown"} and date_by_id[prior_id] > date):
+        raise ValueError("Use a dated replacement source for an earlier local entry")
+    lines = body.splitlines()
+    matches = []
+    for index, row in enumerate(lines):
+        if f"[{prior_id}]" not in row or task_context.SUPERSEDED.search(row):
+            continue
+        if "decision" in entry:
+            columns = row.strip().strip("|").split("|")
+            if len(columns) == 5 and [item.strip() for item in columns[:2]] == [
+                literal(previous["entry"]), scoped_text(entry, literal(entry["decision"]["scope"]))
+            ]:
+                matches.append(index)
+        else:
+            old_rule = scoped_text(entry, literal(previous["entry"]))
+            if row.startswith(f"- Rule: {old_rule} [{prior_id}] "):
+                matches.append(index)
+    if len(matches) != 1:
+        raise ValueError("Identify exactly one active previous entry in the same section and scope")
+    index = matches[0]
+    status = f" *(Superseded by [{replacement}])*"
+    if "decision" in entry:
+        columns = lines[index].split("|")
+        columns[4] = columns[4].rstrip() + status + " "
+        lines[index] = "|".join(columns)
+    else:
+        lines[index] += status
+    return "\n".join(lines)
 
 
 def insert_entries(text, selected, sources, private, target, leads=None):
@@ -839,6 +859,8 @@ def insert_entries(text, selected, sources, private, target, leads=None):
                 identifier = known[key] = f"S{number}"
                 source_section += f"\n| {identifier} | {key[0]} | {key[1]} | {source['checked_on']} |"
                 source_changed = True
+            if "supersedes" in entry:
+                updates[heading] = mark_superseded(updates[heading], entry, identifier, known, source["date"])
             bullet = render_entry(entry, identifier)
         body = updates[heading]
         if f"\n{bullet}\n" not in f"\n{body}\n":
@@ -925,6 +947,10 @@ def apply(root, destination, plan, owner, lint):
         kind = marker[1] if marker else None
     if kind not in records.CONTEXT_KINDS or records.context_location(kind, destination):
         raise ValueError("Use the existing record's workflow, or select a typed context section")
+    template = (root / "templates" / f"{kind}.md").read_text(encoding="utf-8")
+    order = records.heading_order(kind, template)
+    if original is not None and records.structure_errors(kind, original, order):
+        raise ValueError(f"{destination} needs a format change before this capture. Review and approve a conversion first.")
     topics = records.context_sections(kind)
     if any(entry["section"] not in topics and "heading" not in entry for entry in selected):
         raise ValueError("Use the existing record's workflow, or select a typed context section")
@@ -943,10 +969,11 @@ def apply(root, destination, plan, owner, lint):
                           "", text, count=1, flags=re.M | re.S)
     else:
         text = original
-    headings = re.findall(r"^## (.+)$", text, re.M)
+    headings = [heading for heading, *_ in records.section_blocks(text)]
     if len(set(headings)) != len(headings) or not records.CONTEXT_METADATA <= set(headings):
         raise ValueError("Use one section per heading and keep the context metadata before capture")
     candidate = insert_entries(text, selected, plan["sources"], private, target, section_leads(text, selected))
+    candidate = records.ordered_sections(candidate, order)
     if candidate == text:
         return False
     state = records.section(candidate, "Work state")

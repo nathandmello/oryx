@@ -101,6 +101,8 @@ Provide a read-only check after a system pull and at session start. Support dire
 
 Preview affected paths and reasons. Preserve local edits and untracked records in a recoverable snapshot before applying approved changes.
 
+Explain the update's benefits and offer the user a choice before transforming existing artifacts.
+
 Verify links, stable IDs, citations, and the intended outcome. Keep missing evidence or deferred work visible at the affected record.
 
 Follow [the installed-workspace upgrade procedure](updates.md) for all existing private records, regardless of filename.

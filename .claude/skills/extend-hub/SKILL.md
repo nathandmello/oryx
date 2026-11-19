@@ -36,6 +36,8 @@ Test existing installations with arbitrary filenames, untracked records, missing
 
 For each change, record its effect on installed workspaces in the release or pull request description. Follow [the release process](../../../playbook/git.md#existing-workspaces-at-release).
 
+Use [review-hub-upgrade](../review-hub-upgrade/SKILL.md) for user handoff. Explain benefits, audit existing records, and offer a choice before conversion.
+
 Verify direct shared Git pulls and released wrappers against the actual release version and private format.
 
 Follow [the prepublication gates](../../../playbook/git.md#engineering-and-quality-review-before-publication). Record independent engineering and quality reviews for the current pull request commit. Retest fixes and state verification limits.

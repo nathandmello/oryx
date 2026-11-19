@@ -1,18 +1,20 @@
 # Updating an installed Hub
 
-Open the updated Hub to align private records.
+Open the updated Hub to verify compatibility.
 
-Releases 0.3.1 through 0.3.6 use private format 2. Apply [brief review](brief-review.md) and [red-team methods](../.agents/skills/red-team/SKILL.md) at the next review.
+Releases 0.3.1 through 0.4.1 use private format 2. Follow [brief review](brief-review.md) and [red-team methods](../.agents/skills/red-team/SKILL.md).
 
-0.3.4 adds [initiative meeting transcripts](../.agents/skills/summarize-meeting/SKILL.md).
-0.3.5 adds [context section leads](filing.md#when-a-section-earns-its-place).
-0.3.6 changes [publication](publication.md).
+0.4.1 changes [publication](publication.md).
+
+Release 0.4.0 adds task context, a [metric registry](metrics.md), and optional artifact conversion.
+
+Release 0.3.5 adds [context section leads](filing.md#when-a-section-earns-its-place). Release 0.3.4 adds [initiative meeting transcripts](../.agents/skills/summarize-meeting/SKILL.md).
 
 `playbook/release.json` reports format 1 for older updaters. The private format is in `playbook/workspace-format.json`.
 
-For signed prototype registers, read [workflow compatibility](initiative-approvals.md#existing-private-work) before upgrading.
+Check [signed prototype compatibility](initiative-approvals.md#existing-private-work).
 
-Update every client before sharing new intake, discovery, or outcome decisions. The updated Hub reads existing format-2 signatures.
+Update every client before sharing newly formatted records or signed changes. The updated Hub reads existing format-2 signatures.
 For an active discovery approved before source binding, review the plan and sources together. Sign a fresh `start-discovery` before concluding.
 
 ## What runs
@@ -26,21 +28,25 @@ For an active discovery approved before source binding, review the plan and sour
 
 `align --status` previews the upgrade. Older installations move from `workspace/` to `private/`.
 
+## Review artifact changes with the user
+
+Use [the upgrade review skill](../.agents/skills/review-hub-upgrade/SKILL.md). Explain benefits and audit with `align --status`. Offer a choice before conversion. The first alignment inventories and backs up older formats. It preserves artifact contents.
+
 ## Using two machines
 
 Save and push the verified private migration from one machine when authorised. On the second, update the shared Hub, then pull private work before committing its local migration. The pull can accept an identical migration from the same history. It checks staged work and preserves working files.
 
-If changes differ, keep the existing checkout. Restore the remote private repository in a separate Hub checkout. Compare both copies, including staged and untracked files. Reconcile unique local changes there before retiring either copy.
+If changes differ, restore the remote private repository in a separate checkout. Reconcile both copies, including staged and untracked files.
 
 ## Convert existing work
 
-Apply [the filing test](filing.md). Retain original evidence and purposeful records.
+Apply [the filing test](filing.md) and retain original evidence.
 
 Compare claims with inspected originals. Check actors, exclusions, scope, conditions, numbers, dates, and certainty. Separate decisions from proposals and source coverage from assumptions.
 
 Restore supported clauses, route mixed subjects, and retain unknowns beside affected claims. Use its current template.
 
-The agent submits JSON to `align --preview-plan`, then `align --apply-plan`.
+Preview the selected records with `align --preview-plan`. Apply the approved plan with `align --apply-plan`.
 
 | Plan field | Meaning |
 | --- | --- |
@@ -50,9 +56,7 @@ The agent submits JSON to `align --preview-plan`, then `align --apply-plan`.
 | `path`, `before`, `into` | Fold a derivative into the specified retained destination. Account for its substantive lines and update incoming references. |
 | `replacements[]` | For each superseded line, supply `line`, unchanged local primary `source`, its `digest`, the exact complete source line as `quote`, and its retained `destination`. |
 
-Keep original reports and registered evidence in place. Update links and preserve cited passages and anchors.
-
-An unchanged record needs a reviewed disposition with the evidence inspected. For a blocked correction, keep the existing record and identify the missing source or decision.
+Keep original reports, cited passages, links, and anchors. Record the evidence reviewed or the specific blocker.
 
 ```sh
 python3 tools/pm.py align --record PATH --digest CURRENT_DIGEST --outcome reviewed --note "Verified the exclusion against the approved board minutes, section 3."
@@ -110,7 +114,7 @@ git -C "/path/to/new-recovery-directory/$private_name" fsck --full
 
 For GNU tar on Linux, use `--xattrs --xattrs-include='*'` when restoring extended attributes.
 
-Compare recovered files before switching.
+Compare the recovered working files before switching installations.
 
 Keep a private off-device recovery copy. The archive can contain credentials from ignored files. It stays local during Git operations.
 

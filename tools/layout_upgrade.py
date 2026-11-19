@@ -531,6 +531,15 @@ def plan(private):
                 continue
             row["digest"] = digest(writes[new]["text"].encode())
             ledger[new] = row
+        migrated = writes[new]["text"]
+        kind = records.MARKER.match(migrated)
+        if kind and kind[1] in records.CONTEXT_KINDS:
+            template = private.parent / "templates" / f"{kind[1]}.md"
+            if template.is_file() and records.structure_errors(
+                kind[1], migrated, records.heading_order(kind[1], template.read_text(encoding="utf-8"))
+            ):
+                ledger[new] = {"status": "waiting", "note": "Review legacy headings and keep their source evidence.",
+                               "digest": digest(migrated.encode())}
     for name in notes:
         if name in writes:
             metadata[name] = (digest(writes[name]["text"].encode()), writes[name]["mode"])

@@ -58,12 +58,12 @@ If conflicting accounts affect a decision, owner, or deadline, ask which account
 Use [ingest-context](../ingest-context/SKILL.md) and the [filing rules](../../../playbook/filing.md) when capture is requested. For a summary-only request, return the summary.
 
 - Preview `pm.py route-context` for reusable facts, constraints, decisions, and questions. Set the initiative and owning product.
-- Write authorised findings to `context/initiatives/<initiative>/overview.md`. Use permitted excerpts and state verification limits.
+- Write authorised findings to the overview selected by the router. Use permitted excerpts and state verification limits.
 - Route unrelated agenda items as deferred. Use the owning record for any separately requested capture.
 - Preserve accepted decisions. Flag conflicts for review. Record meeting commitments as evidence and follow existing approval and work tracking workflows.
 - Use a dated `context-note` beside the overview when readers need the meeting's history. Keep its content within initiative scope.
-- Link the note from the overview where readers need the history.
-- Keep source transcripts with their owners. File authorised exports under `context/initiatives/<initiative>/sources/` when data boundaries permit retention.
+- Link the note in a supported section of the overview. Cite the relevant source.
+- Keep source transcripts with their owners. File authorised exports in `sources/` beside the overview when data boundaries permit retention.
 - Use source links or de-identified evidence to keep secrets and raw personal data out of Hub files.
 
 Use `YYYY-MM-DD-<meeting-slug>.md` for a standalone note. Use the meeting date or `undated` when unknown. Qualify recurring titles by date.
@@ -73,9 +73,9 @@ Record the canonical source link or stable provider ID. Search for that referenc
 If the overview is absent, establish it through the router or `pm.py new initiative-context` with the product overview as parent.
 
 ```sh
-python3 tools/pm.py new context-note context/initiatives/renewals/2026-10-06-pilot-review.md \
+python3 tools/pm.py new context-note context/products/checkout/initiatives/renewals/2026-10-06-pilot-review.md \
   --title "Pilot review (2026-10-06)" \
-  --parent context/initiatives/renewals/overview.md \
+  --parent context/products/checkout/initiatives/renewals/overview.md \
   --basis event-history \
   --reason "Readers revisit the pilot scope and commitments from this review." \
   --trigger "The transcript is corrected or the pilot scope changes."

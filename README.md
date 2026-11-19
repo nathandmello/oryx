@@ -20,7 +20,7 @@ Read `private/settings.json` for the owner, delivery system, system version, wor
 
 Read `private/README.md` for the current session checkpoint and next action. Keep that handoff current before ending a session.
 
-For first-time setup, start with company context, then product context and strategy. Mixed sources can inform several records in one session.
+Start with company context, product context, and strategy.
 
 For area work, read the product brief and its area-specific evidence. Maintain a separate [area brief](playbook/filing.md#product-area-context) when the work warrants it.
 
@@ -28,9 +28,7 @@ Use the [opportunity workflow](playbook/opportunities.md) for proposed investmen
 
 Agents automatically use [ingest-context](.agents/skills/ingest-context/SKILL.md) for context capture. The agent prompts for a missing or unfinished [PM remit](playbook/context.md#pm-remit). A remit can cover whole products or several areas within them.
 
-Ask the agent to ingest a meeting by initiative and meeting title, date range, source link, or transcript file. See [summarize-meeting](.agents/skills/summarize-meeting/SKILL.md).
-
-The agent discovers available connectors and asks you to clarify uncertain source or filing choices before it proceeds.
+For [meeting capture](.agents/skills/summarize-meeting/SKILL.md), give the initiative and a title, date range, link, or transcript file.
 
 ## Placement
 
@@ -39,7 +37,7 @@ Keep only `README.md`, `AGENTS.md`, `CLAUDE.md`, and `.gitignore` as root files.
 | Home | Purpose | Repository |
 | --- | --- | --- |
 | `private/context/` | Reference material organised by company, product, product area, initiative, or PM | Private |
-| `private/context/initiatives/<initiative>/` | Initiative overview and dated meeting summaries that qualify as event history | Private |
+| `private/context/products/<product>/initiatives/<initiative>/` | New initiative overviews and dated meeting notes | Private |
 | `private/context/pm/context.md` | PM profile, including responsibilities, goals, dependencies, and interests | Private |
 | `private/workspace/` | Work in progress and completed PM artifacts, organised by type | Private |
 | `private/workspace/backlogs/<product>/initiatives.json` | Signed initiative register used by the backlog and roadmap commands | Private |
@@ -55,7 +53,7 @@ Keep only `README.md`, `AGENTS.md`, `CLAUDE.md`, and `.gitignore` as root files.
 | `.agents/skills/` | Canonical shared skills | Shared system |
 | `.claude/`, `.codex/`, `.github/` | Native client and CI configuration | Shared system |
 
-Artifact paths are relative to `private/`. For example, `context/company/overview.md` holds company facts. An experiment testing a product choice belongs in `workspace/experiments/`.
+Artifact paths are relative to `private/`.
 
 Use [the filing rules](playbook/filing.md) to decide when a section earns a separate file. Keep records in place as work advances; their state changes, and their location follows their subject.
 
@@ -84,6 +82,11 @@ python3 tools/pm.py git workspace status
 python3 tools/pm.py git system status
 python3 tools/pm.py new company-context context/company/overview.md --title "Company context"
 ```
+
+Run the [context evaluations](tests/context-evals/README.md) to test artifact structure, context use, and fresh tasks after capture.
+Use `pm.py catalog` to find records. Use `pm.py task-context` to read task-specific guidance.
+Apply [the numerical evidence checks](playbook/numbers.md) to material numbers in any task.
+Find SaaS defaults and PM-approved definitions in the [metric registry](playbook/metrics.md).
 
 Shared Hub changes automatically use [extend-hub](.agents/skills/extend-hub/SKILL.md) to trace dependencies and correct stale guidance. Use `red-team` when you want a product decision challenged against its evidence.
 
