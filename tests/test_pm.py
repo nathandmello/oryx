@@ -429,12 +429,16 @@ class HubTests(unittest.TestCase):
             "scope": "company", "heading": heading, "lead": "Consult when preparing a UK rollout review.",
             "question": "Which region participated in the pilot?",
         }]}
+        fenced = f"```markdown\n{section}\n```"
         for body, expected in (
             (section, "verify and label legacy claims"),
             (section.replace("The UK pilot", "- Fact: The UK pilot"), "verify and label legacy claims"),
-            (f"## Examples\n\n```markdown\n{section}\n```", "Ambiguous context section boundary"),
+            (f"## Examples\n\n{fenced}", "Ambiguous context section boundary"),
             (f"## Examples\n\n<!--\n{section}\n-->", "Ambiguous context section boundary"),
-            (f"## Examples\n\n<pre>\n{section}\n</pre>", "Ambiguous context section boundary"),
+            (f"## Examples\n\n{fenced}\n<!-- Fixture -->## {heading}\n<!-- Fixture -->## Background",
+             "Ambiguous context section boundary"),
+            *((f"## Examples\n\n<{tag}>\n{section}\n</{tag}>", "Ambiguous context section boundary")
+              for tag in ("pre", "script", "style", "textarea")),
         ):
             with self.subTest(body=body):
                 text = original.replace("## Context controls", f"{body}\n\n## Context controls")
@@ -445,6 +449,11 @@ class HubTests(unittest.TestCase):
                     self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
                     self.assertIn(expected, result.stdout)
                     self.assertEqual(target.read_text(), text)
+        for example in ("Use `<pre>` in the publishing example.", "```html\n<textarea>\n<!--\n````"):
+            with self.subTest(example=example):
+                target.write_text(original.replace("## Context controls", f"{example}\n\n## Context controls"))
+                result = self.context_capture(payload)
+                self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
 
     def test_context_sources_require_unique_ids_and_honest_dates(self):
         target = self.context_record()
@@ -875,6 +884,25 @@ class HubTests(unittest.TestCase):
         self.assertEqual(json.loads(preview.stdout)["entries"][0]["disposition"], "existing")
         result = self.context_capture(payload, "--write", paths[0])
         self.assertIsNone(json.loads(result.stdout)["written"])
+        self.assertEqual(pm.check(self.root), [])
+
+        # Older notes could include structured sections without a navigation lead.
+        legacy_row = "| pilot | A limited programme. [S1] | Product | launch |"
+        table = "## Vocabulary\n\n| Term | Meaning | Owner | Avoid |\n| --- | --- | --- | --- |\n" + legacy_row
+        note.write_text(note.read_text().replace("## Context controls", f"{table}\n\n## Context controls"))
+        self.assertEqual(pm.check(self.root), [])
+        glossary = {"sources": [source], "entries": [dict(
+            payload["entries"][0], heading="Vocabulary", quote="A workspace is the access boundary.",
+            term={"name": "workspace", "owner": "Product", "avoid": "account"},
+        )]}
+        for args in ((), ("--write", paths[0])):
+            result = self.context_capture(glossary, *args)
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            self.assertEqual(json.loads(result.stdout)["entries"][0]["section_action"], "reuse")
+        lead, body = records.split_context_lead(records.section(note.read_text(), "Vocabulary"))
+        self.assertIn("Consult when", lead)
+        self.assertIn(legacy_row, body)
+        self.assertIn("| workspace | A workspace is the access boundary.", body)
         self.assertEqual(pm.check(self.root), [])
 
     def test_capture_records_a_product_implication_with_its_source(self):

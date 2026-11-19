@@ -7,7 +7,6 @@ from pathlib import Path
 import re
 from urllib.parse import unquote, urlsplit
 
-import brief_review
 import layout
 import records
 import filing
@@ -547,12 +546,23 @@ def validate_entry_shape(entry, section):
             raise ValueError("Keep the original wording of an exclusion in the rule; record its application separately")
 
 
+HIDDEN_SECTION_MARKUP = re.compile(
+    # Match a whole fence first so literal comments or tags inside it stay local to the example.
+    r"^ {0,3}(?P<fence>(?P<mark>[`~])(?P=mark){2,})(?!(?P=mark))[^\n]*(?:\n|\Z)"
+    r".*?(?:^ {0,3}(?P=fence)(?P=mark)*[ \t]*(?=\n|\Z)|\Z)"
+    r"|<!--.*?(?:-->|\Z)"
+    r"|^ {0,3}<(?P<tag>pre|script|style|textarea)(?=[\s>/]).*?(?:</(?P=tag)\s*>|\Z)",
+    re.I | re.M | re.S,
+)
+
+
 def section_leads(text, entries):
     pattern = r"(?m)^## (.+)$"
     raw = re.findall(pattern, text)
-    visible = brief_review.visible(re.sub(r"<pre\b[^>]*>.*?(?:</pre\s*>|\Z)", "", text, flags=re.I | re.S))
+    # Keep comment padding so removing an inline comment cannot fabricate a matching heading.
+    visible = HIDDEN_SECTION_MARKUP.sub(lambda match: re.sub(r"[^\r\n]", " ", match[0]), text)
     if raw != re.findall(pattern, visible):
-        raise ValueError("Ambiguous context section boundary. Indent level-two headings inside examples or comments")
+        raise ValueError("Ambiguous context section boundary. Indent level-two headings inside examples, HTML, or comments")
     headings = {heading.strip().casefold(): heading.rstrip() for heading in raw}
     marker = records.MARKER.match(text)
     standard = records.context_sections(marker[1]) if marker and marker[1] in records.CONTEXT_KINDS else set()
@@ -569,10 +579,16 @@ def section_leads(text, entries):
             raise ValueError(f"Give {heading} one lead for this capture")
         existing, body = records.split_context_lead(records.section(text, heading) or "")
         if existing is None and body and heading not in standard:
-            previous, unlabelled = records.context_entries(body)
-            if unlabelled or any(label in {"Fact", "Rule", "Example"} and not records.SOURCE_REFERENCE.search(claim)
-                                 for label, claim in previous):
-                raise ValueError(f"{heading}: verify and label legacy claims with citations before adding a lead")
+            if heading in records.CONTEXT_TABLES:
+                draft = records.work_state(text)[0].get("State") == "draft"
+                errors = records.context_table_errors(text, heading, draft)
+                if errors:
+                    raise ValueError(f"{heading}: review the existing table before adding a lead. {'. '.join(errors)}")
+            else:
+                previous, unlabelled = records.context_entries(body)
+                if unlabelled or any(label in {"Fact", "Rule", "Example"} and not records.SOURCE_REFERENCE.search(claim)
+                                     for label, claim in previous):
+                    raise ValueError(f"{heading}: verify and label legacy claims with citations before adding a lead")
         lead = next(iter(proposed), existing)
         if lead is None:
             lead = records.CONTEXT_LEADS.get(heading)
