@@ -113,7 +113,7 @@ After an interrupted file update, run `python3 tools/pm.py initiative sync-draft
 - List each approved candidate in the comparison table once. Submit the same IDs in `cycle.options`. Describe existing commitments in prose.
 - Use `plan` with a reviewed cycle, unique rank, horizon, effort, and trade-off. Stay within signed cycle capacity.
 - Compare a candidate again after the PM approves a revised Initiative Brief.
-- Use `start-delivery` with the delivery URL. Propose `ship` with [reviewed readiness](initiative-work.md#ship-decision) and a review date. Use `review-outcomes` to record the conclusion.
+- Use `start-delivery` with the delivery URL. Propose `ship` with [reviewed readiness](initiative-work.md#ship-decision) and a review date. Sign [the outcome review](outcome-evidence.md).
 - Use `defer` with a review date or event. Decline obsolete deferred work directly. Reopen work for material changes.
 - Use `expedite` only for verified urgent work. Provide the owner, obligation, deadline, scope, delivery link, and review date.
 

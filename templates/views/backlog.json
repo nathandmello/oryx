@@ -14,6 +14,7 @@
     "captured_on": "First signal date",
     "last_decision_on": "Last decision",
     "revisit": "Next review or trigger",
+    "outcome_risks": "Outcome risks",
     "sources": "Signal references"
   },
   "sources": [

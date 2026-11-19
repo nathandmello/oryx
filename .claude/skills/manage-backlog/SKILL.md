@@ -46,9 +46,8 @@ Use `signal` for new evidence and `reopen` for a decision to reconsider an exist
 1. Confirm delivery scope and the tracker URL with the owner. Include the initiative ID in the handoff.
 2. Propose `start-delivery` after implementation starts. Use `expedite` for a verified critical exception.
 3. Propose `ship` after release verification. Name a review date and cite the release evidence.
-4. Propose each `measurement` against its existing target and metric ID. Cite the observed result.
-5. Propose `review-outcomes` with the PM's assessment for every target. Link measurements for that target and explain guardrails or gaps.
-6. Use a dated `follow_up` for remaining work. Use null when the PM closes the review.
-7. Record `unmeasured` with the PM's reason when a target lacks observations and no further measurement is planned.
-8. Record new measurements after closure. The first new observation puts the initiative back in `--due`.
-9. Cite each measurement that reopened the review before closing again. Capture distinct opportunities through intake.
+4. Follow the [release evidence procedure](../../../playbook/outcome-evidence.md). Check success measurements and guardrail readings against their approved windows.
+5. Sign corrections against the original reading. Retain the source and cite any comparable replacement.
+6. Propose `review-outcomes` with the PM's assessment for each target. Explain each breached or unavailable guardrail.
+7. Use `unmeasured` when no usable reading exists. Schedule a dated `follow_up` for pending evidence.
+8. Check `backlog --due` for material evidence. Cite changed observations before closing or rescheduling.

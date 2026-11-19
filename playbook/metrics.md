@@ -36,6 +36,18 @@ Preview a change with `pm.py metric set ID` and JSON on standard input. Add `--p
 
 The example changes the treatment of reactivations for `logo-churn`. For a new metric, supply name, aliases, unit, definition, formula, population, period, denominator, and notes in `changes`. An approved definition can specify `calculation` for a formula supported by `check-metric`. Use `proportion` for a bounded subset and `cohort_ratio` for a closing amount divided by its opening cohort amount. When changing a formula or unit, reapprove the calculation type if it still applies.
 
+## Confirm the reporting window
+
+Use `period` to describe the timing and cutoff. Add `reporting_window` when the PM approves a fixed window.
+
+| Reporting window | Required dates |
+| --- | --- |
+| `day`, `week`, `rolling 30 days` | One, seven, or thirty days from start to exclusive end |
+| `calendar month`, `calendar quarter`, `calendar year` | First day of the period through the first day of the next period |
+| `snapshot` | Cutoff date as the start and the next day as the exclusive end |
+
+When changing `period` on a fixed definition, confirm `reporting_window` again. Set it to `null` for a definition whose period requires manual review. The checker recognizes exact legacy window descriptions, such as “One closed calendar month.” It reports a null approved window for other descriptions. Check those periods against the source before using the result.
+
 ## Use the same definition
 
 - For `check-metric`, pass the `metric` ID and `product` when applicable. Each observation needs the registry reference and population effective on its last included day. Use a currency code in observation units, such as `USD/month` for `currency/month`. Use `as_of` when looking up the definition if an observation date is missing. The checker flags a revision change between periods. Verify and document a restatement on a common definition before comparing those periods.

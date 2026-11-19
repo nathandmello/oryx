@@ -8,6 +8,7 @@ import brief_review
 import launch_readiness
 import initiative_intake
 import metric_registry
+import outcome_evidence
 from opportunities import SLUG
 from records import specific
 
@@ -36,7 +37,13 @@ RISKS = ("value", "usability", "feasibility", "viability")
 RESULTS = ("supported", "contradicted", "inconclusive")
 OUTCOME_STATUSES = ("met", "missed", "inconclusive", "pending", "unmeasured")
 AREA_SUBJECT = re.compile(rf"product/({SLUG.pattern})/area/({SLUG.pattern})")
-OPTIONAL_FIELDS = {"capture": {"areas": "product areas"}}
+OPTIONAL_FIELDS = {
+    "capture": {"areas": "product areas"},
+    "measurement": {"observation": "object", "restatement": "text"},
+    "guardrail-reading": {"restatement": "text"},
+    "guardrail": {"adopted_from": "object"},
+    "correct-measurement": {"replacement": "slug"},
+}
 
 FIELDS = {
     "setup": {"company": "path", "product_context": "path", "max_open": "positive", "max_discovery": "count"},
@@ -56,6 +63,12 @@ FIELDS = {
                "conclusion": "conclusion", "observed_on": "past date", "source": "text"},
     "measurement": {"initiative": "initiative ID", "measurement": "slug", "metric": "slug", "value": "text",
                     "observed_on": "past date", "source": "text"},
+    "guardrail": {"initiative": "initiative ID", "guardrail": "slug", "metric": "slug", "operator": "bound",
+                  "threshold": "number", "unit": "text", "basis": "window", "population": "text",
+                  "effective_on": "date", "source": "text"},
+    "guardrail-reading": {"initiative": "initiative ID", "guardrail": "slug", "metric": "slug", "measurement": "slug",
+                         "value": "number", "observed_on": "past date", "source": "text", "observation": "object"},
+    "correct-measurement": {"initiative": "initiative ID", "measurement": "slug", "reason": "text", "source": "text"},
     "cycle": {"cycle": "slug", "capacity": "count", "unit": "text", "starts_on": "date", "ends_on": "date", "options": "initiative IDs"},
     "decision": {"initiative": "initiative ID", "action": "transition", "on": "past date", "reason": "text", "source": "text"},
 }
@@ -103,6 +116,10 @@ def is_url(value):
 
 
 VALIDATORS = {
+    "bound": lambda v: isinstance(v, str) and v in outcome_evidence.BOUNDS,
+    "window": lambda v: isinstance(v, str) and v in metric_registry.REPORTING_WINDOWS,
+    "number": lambda v: outcome_evidence.number(v) is not None,
+    "object": lambda v: isinstance(v, dict),
     "text": text, "path": text, "slug": lambda v: isinstance(v, str) and SLUG.fullmatch(v) is not None,
     "experiment ID": lambda v: isinstance(v, str) and SLUG.fullmatch(v.removeprefix("experiment.")) is not None,
     "initiative ID": lambda v: isinstance(v, str) and re.fullmatch(r"[a-z0-9-]+/[a-z0-9]+(?:-[a-z0-9]+)*", v) is not None,
@@ -166,6 +183,19 @@ def validate_event(event, approved=False):
         if not VALIDATORS["transition"](action):
             raise ValueError("Choose a supported decision action")
         fields = {**fields, **DECISION_FIELDS.get(action, {})}
+    if kind == "decision" and event["action"] == "review-outcomes" and "guardrail_dispositions" in event:
+        fields = {**fields, "guardrail_dispositions": "object"}
+    if kind == "measurement" and "observation" in event:
+        fields = {**fields, "value": "number"}
+    if approved and kind in outcome_evidence.READINGS | {"guardrail", "correct-measurement"}:
+        if "recorded_on" in event:
+            fields = {**fields, "recorded_on": "past date"}
+        elif kind != "measurement":
+            raise ValueError("Expected the signed transaction date")
+    if approved and kind in outcome_evidence.READINGS | {"metric", "guardrail"} and "contract" in event:
+        fields = {**fields, "contract": "object"}
+    if approved and kind == "decision" and event["action"] == "review-outcomes" and "evidence_review" in event:
+        fields = {**fields, "evidence_review": "object"}
     known = {"type", *fields}
     if kind == "decision" and action == "ship":
         if "exceptions" in event:
@@ -342,7 +372,7 @@ class Register:
             "areas": sorted(event.get("areas", [])), "areas_source": event["source"] if "areas" in event else None,
             "signals": [], "hypotheses": {}, "assessments": {}, "experiments": {}, "results": {},
             "targets": {}, "measurements": {}, "decisions": [], "planning": None, "delivery": None, "released_on": None,
-            "review_trigger_measurements": [],
+            "review_trigger_measurements": [], "guardrails": {}, "corrections": {}, "evidence_changes": [],
             "discovery": None, "initiative_brief": None, "discovery_findings": None,
         }
         if "intake_review" in event:
@@ -387,14 +417,13 @@ class Register:
             if event["observed_on"] < experiment["planned_on"]:
                 raise ValueError("Experiment results must follow their test plan")
             unique(item["results"], event["result"], event, "result in this initiative")
-        elif kind == "measurement":
-            linked(item["targets"], event["metric"], "success measure in this initiative")
-            if item["phase"] != "shipped" or event["observed_on"] < item["released_on"]:
-                raise ValueError("Outcome measurements must follow the verified release")
-            unique(item["measurements"], event["measurement"], event, "measurement in this initiative")
-            previous = item["decisions"][-1]
-            if previous["action"] == "review-outcomes" and previous["follow_up"] is None:
-                item["review_trigger_measurements"].append(event["measurement"])
+        elif kind == "guardrail":
+            outcome_evidence.add_rule(item, event, self.metrics.get(event["metric"]))
+        elif kind in outcome_evidence.READINGS:
+            metric = linked(self.metrics, event["metric"], "product metric")
+            outcome_evidence.add_reading(item, event, metric)
+        elif kind == "correct-measurement":
+            outcome_evidence.correct(item, event)
         else:
             self.decide(item, event, index)
 
@@ -458,15 +487,21 @@ class Register:
         outcomes = event["outcomes"]
         if outcomes.keys() != item["targets"].keys():
             raise ValueError("Review every initiative target exactly once using its metric ID")
+        checked = "evidence_review" in event
+        if checked and event["evidence_review"] != outcome_evidence.review_snapshot(item, event, self.metrics):
+            raise ValueError("The signed outcome review must match its evidence and guardrails")
         measured = set()
-        for measurement in item["measurements"].values():
+        for identifier, measurement in item["measurements"].items():
             if measurement["observed_on"] > event["on"]:
                 raise ValueError("The outcome review cannot predate the recorded measurements")
-            measured.add(measurement["metric"])
+            if not measurement.get("guardrail") and outcome_evidence.usable(item, identifier, self.metrics, checked=checked):
+                measured.add(measurement["metric"])
         for metric, review in outcomes.items():
             for identifier in review["measurements"]:
                 measurement = linked(item["measurements"], identifier, "measurement in this initiative")
-                if measurement["metric"] != metric:
+                if not outcome_evidence.usable(item, identifier, self.metrics, checked=checked):
+                    raise ValueError(f"{identifier} is unusable evidence; cite an active checked measurement")
+                if measurement.get("guardrail") or measurement["metric"] != metric:
                     raise ValueError(f"{identifier} measures a different target than {metric}")
             if review["status"] == "unmeasured" and metric in measured:
                 raise ValueError(f"{metric} has recorded measurements and cannot be marked unmeasured")
@@ -475,12 +510,15 @@ class Register:
         follow_up = event["follow_up"]
         if follow_up is None:
             cited = {ref for review in outcomes.values() for ref in review["measurements"]}
-            missing = set(item["review_trigger_measurements"]) - cited
+            missing = {key for key in item["review_trigger_measurements"]
+                       if outcome_evidence.usable(item, key, self.metrics, checked=checked)} - cited
             if missing:
                 raise ValueError("Cite the new measurements that reopened the review: " + ", ".join(sorted(missing)))
             item["review_trigger_measurements"].clear()
         elif follow_up["on"] < event["on"]:
             raise ValueError("The follow-up date must be on or after the outcome review")
+        if checked:
+            item["evidence_changes"].clear()
 
     def plan(self, item, event):
         cycle = linked(self.cycles, event["cycle"], "planning cycle")

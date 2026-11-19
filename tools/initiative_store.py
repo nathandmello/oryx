@@ -20,6 +20,7 @@ import layout
 import layout_upgrade
 import metric_registry
 import opportunities
+import outcome_evidence
 import records
 import storage
 import upgrades
@@ -262,6 +263,29 @@ def read(root, product):
     return original, payload, register
 
 
+def pinned_definition(root, product, metric):
+    """Find an older signed registry snapshot without substituting a newer definition."""
+    if "contract" in metric:
+        return metric["contract"]
+    name = metric_registry.reference_metric(metric)
+    if not name:
+        return None
+    reference = metric["source"].removeprefix(metric_registry.REFERENCE)
+    private = storage.private_root(root)
+    bundled = metric_registry.defaults(root).get(name)
+    if bundled:
+        row = metric_registry.describe(name, bundled)
+        if row["reference"] == reference:
+            return row
+    for entry in metric_registry.history(private)[1]["revisions"]:
+        if entry["metric"] == name and entry["product"] in (None, product):
+            row = metric_registry.describe(name, entry["definition"], product=entry["product"],
+                                           approved_by=entry["approved_by"], effective_on=entry["effective_on"])
+            if row["reference"] == reference:
+                return row
+    raise ValueError(f"Recover the approved metric revision {reference} before recording new evidence")
+
+
 def prepare(root, product, changes, *, review_dates=None):
     if not isinstance(changes, list) or not changes:
         raise ValueError("Provide a nonempty JSON array of transactions")
@@ -280,6 +304,27 @@ def prepare(root, product, changes, *, review_dates=None):
         if isinstance(event, dict) and event.get("type") == "metric":
             event = metric_registry.snapshot(root, storage.private_root(root), product, event)
         validate_event(event)
+        kind = event["type"]
+        if kind == "metric" and metric_registry.reference_metric(event):
+            event = {**event, "contract": pinned_definition(root, product, event)}
+        if kind in outcome_evidence.READINGS | {"guardrail", "correct-measurement"}:
+            event = {**event, "recorded_on": date.today().isoformat()}
+            if kind != "correct-measurement":
+                definition = register.metrics.get(event["metric"])
+                if definition and metric_registry.reference_metric(definition) and (
+                        kind == "guardrail" or "observation" in event and "contract" not in definition):
+                    event["contract"] = pinned_definition(root, product, definition)
+                if definition and metric_registry.reference_metric(definition) and "observation" in event:
+                    cutoff = outcome_evidence.measurement_cutoff(event)
+                    current = metric_registry.effective(root, storage.private_root(root), product, cutoff)
+                    effective = current.get(metric_registry.reference_metric(definition))
+                    if effective and definition["source"] != metric_registry.REFERENCE + effective["reference"]:
+                        if not brief_review.has_answer(event.get("restatement", "")):
+                            raise ValueError("The registry changed at this cutoff. Cite the source of a restatement on the signed basis.")
+        if kind == "decision" and event["action"] == "review-outcomes":
+            item = register.items.get(event["initiative"])
+            if item:
+                event = {**event, "evidence_review": outcome_evidence.review_snapshot(item, event, register.metrics)}
         if event["type"] == "target" and (existing := register.metrics.get(event["metric"])):
             if definitions is None:
                 definitions = metric_registry.effective(root, storage.private_root(root), product)
