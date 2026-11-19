@@ -182,3 +182,48 @@ Desktop sessions were outside this fixture.
         self.pr["merged"] = False
         with self.assertRaisesRegex(ValueError, "merged|tip"):
             self.gate()
+
+    def detached(self):
+        self.pr["head"].update(ref="codex/release-fix", repo={"id": 123, "owner": {"login": "fixture"}})
+        self.pr["created_at"] = "2026-04-07T10:00:00Z"
+        query = "pulls?state=all&head=fixture%3Acodex%2Frelease-fix&per_page=100"
+        self.responses[query] = [self.pr]
+        self.runs[0].update(pull_requests=[], event="pull_request", head_sha=self.head,
+                            head_branch="codex/release-fix", head_repository={"id": 123},
+                            created_at="2026-04-07T10:00:00Z")
+        return query
+
+    def test_post_merge_run_without_association_requires_unique_exact_pr_head(self):
+        query = self.detached()
+        self.gate()
+
+        for previous_head in (self.head, "c" * 40):
+            self.responses[query] = [self.pr, {"number": 4, "head": {"sha": previous_head}}]
+            with self.subTest(previous_head=previous_head), self.assertRaisesRegex(ValueError, "uniquely associate"):
+                self.gate()
+
+        self.responses[query] = [self.pr] * 100
+        with self.assertRaisesRegex(ValueError, "uniquely associate"):
+            self.gate()
+
+    def test_post_merge_run_rejects_wrong_source_or_explicit_association(self):
+        self.detached()
+        original = self.runs[0]
+        for changed in ({"head_sha": "c" * 40}, {"head_branch": "other"}, {"head_repository": {"id": 456}},
+                        {"event": "push"}, {"pull_requests": [{"number": 10}]},
+                        {"created_at": "2026-04-07T09:59:59Z"}, {"created_at": None}):
+            with self.subTest(changed=changed):
+                self.runs[0] = dict(original, **changed)
+                with self.assertRaisesRegex(ValueError, "successful"):
+                    self.gate()
+
+    def test_later_detached_failure_or_pending_attempt_blocks_publication(self):
+        self.detached()
+        self.gate()
+        self.runs.append(dict(self.runs[0], run_attempt=3, conclusion="failure"))
+        self.runs[0]["pull_requests"] = [{"number": 9}]
+        with self.assertRaisesRegex(ValueError, "successful"):
+            self.gate()
+        self.runs[-1]["conclusion"] = None
+        with self.assertRaisesRegex(ValueError, "successful"):
+            self.gate()
