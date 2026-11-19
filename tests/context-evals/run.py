@@ -206,6 +206,12 @@ def checks(hub, evidence):
     yield "lookup", "Hidden identifiers cannot select private scope", (
         result.returncode == 0 and custom not in result.stdout and analytics not in result.stdout
     ), "The commented identifier was unavailable to scope resolution"
+    hidden_source = "| S90 | [PayPal rates](https://docs.paypal.com/rates) | undated | 2026-01-01 |"
+    path.write_text(path.read_text().replace("## Work state", f"<!--\n{hidden_source}\n-->\n\n## Work state", 1))
+    result = hook(hub, "UserPromptSubmit", prompt="Check PayPal rates.")
+    yield "lookup", "Hidden sources cannot select private scope", (
+        result.returncode == 0 and custom not in result.stdout and analytics not in result.stdout
+    ), "The commented source provider was unavailable to scope resolution"
 
     bad_reply = "You can receive the additional $55 now."
     result = hook(hub, "Stop", session_id="payments", last_assistant_message=bad_reply)

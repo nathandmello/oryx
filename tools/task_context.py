@@ -76,7 +76,7 @@ def context_documents(private):
             initiative = entity.name
             if parent and layout.brief_kind(parent) == "product-context":
                 product = Path(parent).parts[2]
-        sources, _ = records.table(text, "Sources", records.SOURCE_COLUMNS)
+        sources, _ = records.table(records.visible_section_markup(text), "Sources", records.SOURCE_COLUMNS)
         documents[name] = {
             "record": name, "kind": kind[1], "title": title(relative, text), "product": product,
             "area": entity.name if entity.parts[3:4] == ("areas",) else None,
@@ -230,6 +230,10 @@ def linked_entries(doc, areas, through):
                 continue
             refs = records.SOURCE_REFERENCE.findall(SUPERSEDED.sub("", value))
             sources = [doc["sources"][ref[1:-1]] for ref in dict.fromkeys(refs) if ref[1:-1] in doc["sources"]]
+            requires_source = section == "Decisions already closed" or value.startswith(
+                ("- Fact:", "- Rule:", "- Example:", "- Reported metric:"))
+            if requires_source and (not sources or len(sources) != len(set(refs))):
+                continue
             if any(source["Source date"] not in {"unknown", "undated"} and
                    source["Source date"] > through.isoformat() for source in sources):
                 continue
