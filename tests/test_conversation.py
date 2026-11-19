@@ -77,7 +77,7 @@ class ConversationTests(unittest.TestCase):
                 self.prompt(client, client, "Draft the Billing plan")
                 scoped, _ = self.prompt(client, client, "Switch from Billing to Shipping")
                 self.assertEqual(scoped["scope"]["product"], "shipping")
-                empty, guidance = self.prompt(client, client, "Switch to Unknown")
+                empty, guidance = self.prompt(client, client, "Let’s switch to Unknown")
                 self.assertFalse(empty)
                 self.assertIn("Context scope is uncertain", guidance)
                 self.assertFalse(self.prompt(client, client, "Can you make it shorter?")[0])
@@ -136,9 +136,26 @@ class ConversationTests(unittest.TestCase):
             scoped, guidance = self.prompt(client, client, f"Resume Billing with {self.record}")
             self.assertEqual(scoped["conversation"]["mode"], "quiet")
             self.assertIn("Keep optional explanation brief", guidance)
+            unscoped, _ = self.prompt(client, client, "What do we know about displacement?")
+            self.assertEqual(unscoped["conversation"]["mode"], "quiet")
+            resumed, _ = self.prompt(client, client, "Can you make it shorter?")
+            self.assertEqual(resumed["conversation"]["mode"], "quiet")
             scoped, _ = self.prompt(client, client, "Switch to Shipping")
             self.assertEqual(scoped["conversation"]["mode"], "thought-partner")
         self.assertEqual(self.checkpoint.read_bytes(), written)
+
+    def test_standalone_checkpoint_resumes_without_borrowing_product_scope(self):
+        receipt = self.cli("conversation", "checkpoint", "preview", self.record, payload={"mode": "quiet"})
+        self.cli("conversation", "checkpoint", "apply", self.record, payload=receipt)
+        for client in ("Codex", "Claude"):
+            self.prompt(client, client, "Review Billing.")
+            result, _ = self.prompt(client, client, f"Resume {self.record}")
+            self.assertEqual(result["scope"], {})
+            self.assertEqual(result["conversation"]["checkpoint"]["record"], self.record)
+            self.prompt(client, client, "Thanks!")
+            follow_up, guidance = self.prompt(client, client, "Can you make it shorter?")
+            self.assertFalse(follow_up)
+            self.assertIn("Quiet mode is active", guidance)
 
     def test_changes_are_checked_before_private_file_is_written(self):
         before = self.checkpoint.read_bytes()
@@ -180,6 +197,25 @@ class ConversationTests(unittest.TestCase):
         changed = {**candidate, "revision": conversation.fingerprint("New authoritative ruling")}
         self.assertIs(conversation.select_offer([other, changed], scope, deferrals=durable, on=first), changed)
 
+    def test_clear_deferral_removes_only_the_reviewed_scope_and_source(self):
+        first = {"workflow": "context-health", "scope": {"product": "billing"},
+                 "source": "Legal memo, page 1", "revision": conversation.fingerprint("Original"),
+                 "review_on": None}
+        same_source = {**first, "scope": {"product": "shipping"}}
+        same_scope = {**first, "source": "Product review, item 2"}
+        for item in (first, same_source, same_scope):
+            receipt = self.cli("conversation", "checkpoint", "preview", self.record,
+                               payload={"deferral": item})
+            self.cli("conversation", "checkpoint", "apply", self.record, payload=receipt)
+        self.cli("conversation", "checkpoint", "preview", self.record,
+                 payload={"clear_deferral": {**first, "revision": conversation.fingerprint("New evidence")}},
+                 error="no longer current")
+        receipt = self.cli("conversation", "checkpoint", "preview", self.record,
+                           payload={"clear_deferral": first})
+        self.cli("conversation", "checkpoint", "apply", self.record, payload=receipt)
+        state = self.cli("conversation", "checkpoint", "show", self.record)
+        self.assertEqual(state["deferrals"], [same_source, same_scope])
+
     def test_source_linked_conflict_offer_stays_quiet_for_routine_work(self):
         scope = {"product": "billing"}
         question = "Can the UK rollout start?"
@@ -200,6 +236,8 @@ class ConversationTests(unittest.TestCase):
         self.assertIsNone(conversation.context_offer(prompt, result, [], True))
         deferral = {**{key: offer[key] for key in ("workflow", "scope", "source", "revision")},
                     "review_on": None}
+        self.assertIsNone(conversation.context_offer(prompt, result, [deferral], False))
+        result["conflicts"][0]["entries"].reverse()
         self.assertIsNone(conversation.context_offer(prompt, result, [deferral], False))
 
     def test_native_forecast_edits_use_reviewed_commands(self):

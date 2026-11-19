@@ -133,6 +133,11 @@ def select_offer(candidates, scope, *, deferrals=(), quiet=False, on=None):
     return min(eligible, key=lambda row: WORKFLOWS.index(row["workflow"]), default=None)
 
 
+def evidence_revision(rows):
+    evidence = sorted(json.dumps(row, ensure_ascii=False, sort_keys=True) for row in rows)
+    return fingerprint("\n".join(evidence))
+
+
 def context_offer(prompt, result, deferrals, quiet):
     """Offer an existing evidence check for a consequential, sourced finding."""
     if quiet or ROUTINE.match(prompt.strip()) or not CONSEQUENTIAL.search(prompt):
@@ -145,7 +150,7 @@ def context_offer(prompt, result, deferrals, quiet):
         if locator and len(locator) <= 400:
             candidates.append({
                 "workflow": "context-health", "scope": result["scope"], "source": locator,
-                "revision": fingerprint(json.dumps(entries, ensure_ascii=False, sort_keys=True)),
+                "revision": evidence_revision(entries),
                 "reason": "Scoped decisions give different next steps.",
                 "next_action": "Compare the decision sources and verify which authority applies.",
             })
@@ -158,7 +163,7 @@ def context_offer(prompt, result, deferrals, quiet):
         if evidence:
             candidates.append({
                 "workflow": "context-health", "scope": result["scope"], "source": source,
-                "revision": fingerprint(json.dumps(evidence, ensure_ascii=False, sort_keys=True)),
+                "revision": evidence_revision(evidence),
                 "reason": warning, "next_action": "Verify the applicable claims and their current source.",
             })
     return select_offer(candidates, result["scope"], deferrals=deferrals)
@@ -237,15 +242,19 @@ def updated_text(text, changes):
             raise ValueError(f"Resolve the {field} row before saving a checkpoint")
 
     if "deferral" in changes or "clear_deferral" in changes:
-        saved = changes.get("deferral")
-        workflow = (valid_deferral(saved)["workflow"] if "deferral" in changes
-                    else changes["clear_deferral"])
-        if workflow not in WORKFLOWS:
-            raise ValueError("Choose an available workflow")
-        if saved:
-            deferrals = [row for row in state["deferrals"] if offer_key(row) != offer_key(saved)] + [saved]
-        else:
-            deferrals = [row for row in state["deferrals"] if row["workflow"] != workflow]
+        save = "deferral" in changes
+        selected = valid_deferral(changes["deferral" if save else "clear_deferral"])
+        selected_key = offer_key(selected)
+        deferrals = []
+        for row in state["deferrals"]:
+            matching = offer_key(row) == selected_key
+            if not matching or (not save and (
+                    row["revision"] != selected["revision"] or row["review_on"] != selected["review_on"])):
+                deferrals.append(row)
+        if save:
+            deferrals.append(selected)
+        elif len(deferrals) == len(state["deferrals"]):
+            raise ValueError("The deferral is no longer current. Show the checkpoint and review the current entry.")
         body = BLOCK.sub("", body)
         if deferrals:
             newline = "\r\n" if "\r\n" in body else "\n"

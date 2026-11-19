@@ -29,7 +29,9 @@ STOP_WORDS = set("about again and api app are can from give have here how its ou
 FOLLOW_UP = re.compile(r"^(?:please\s+)?(?:(?:can|could|would) you\s+(?:please\s+)?)?"
                        r"(?:continue\b|resume\b|revise (?:it|that|this)\b|"
                        r"update (?:it|that|this)\b|make (?:it|that|this)\b|what about\b)", re.I)
-SWITCH = re.compile(r"^(?:please\s+)?switch\s+(?:from\b.+?\b)?to\s+", re.I)
+SWITCH = re.compile(
+    r"^(?:(?:please|now|let's|let’s)\s+)*(?:switch|move)\s+(?:from\b.+?\b)?to\s+", re.I
+)
 WORK_RECORD = re.compile(r"(?:private/)?(workspace/[\w./-]+?\.md)\b")
 IDENTIFIER = re.compile(r"\b[a-z][\w-]*\.[a-z][\w.-]*[a-z0-9]\b", re.I)
 DATE = re.compile(r"\b(?:as of|on)\s+(\d{4}-\d{2}-\d{2}|"
@@ -419,9 +421,15 @@ def turn_context(private, prompt, *, cwd=None, saved=None, explicit=None, work_r
             prior_scope = {}
     can_continue = previous.get("can_continue", True)
     docs = context_documents(private)
+    named = WORK_RECORD.search(prompt) if work_record is None else None
+    selected_owner = work_record or (named[1] if named else None)
+    record_scope = resolved_artifact(selected_owner, docs) if selected_owner else {}
+    selected_new_owner = selected_owner is not None and selected_owner != previous.get("record")
+    if selected_new_owner and not record_scope:
+        # A newly named standalone record has its own context.
+        prior_scope, cwd = {}, None
     if work_record is not None:
         checkpoint = conversation.read_checkpoint(private, work_record)
-        record_scope = resolved_artifact(work_record, docs)
         if explicit and not scope_contains(record_scope, explicit):
             raise ValueError("Choose a work record in the current scope")
         explicit = explicit or record_scope or None
@@ -432,6 +440,7 @@ def turn_context(private, prompt, *, cwd=None, saved=None, explicit=None, work_r
     scope = result["scope"]
     switched = bool(SWITCH.match(prompt))
     neutral = conversation.acknowledgement(prompt)
+    follows = bool(FOLLOW_UP.match(prompt.strip()))
     same_work = same_scope(scope, prior_scope)
     if scope:
         active = scope
@@ -439,26 +448,34 @@ def turn_context(private, prompt, *, cwd=None, saved=None, explicit=None, work_r
     else:
         active = prior_scope
         can_continue = (can_continue and not result["choices"] and not switched
-                        and conversation.continues_work(prompt))
+                        and (follows or conversation.continues_work(prompt)))
         same_work = can_continue
 
     if work_record is None and not switched:
-        path = WORK_RECORD.search(prompt)
-        candidate = path[1] if path else previous.get("record") if same_work else None
-        if candidate and scope and scope_contains(resolved_artifact(candidate, docs), scope):
-            try:
-                checkpoint = conversation.read_checkpoint(private, candidate)
-            except (OSError, ValueError):
-                if path:
-                    result["warnings"].append("The named work record has no readable conversation checkpoint.")
+        candidate = selected_owner or (previous.get("record") if same_work else None)
+        if candidate:
+            candidate_scope = resolved_artifact(candidate, docs)
+            can_read = (scope_contains(candidate_scope, scope) if scope else
+                        bool(named and follows and not result["choices"] and not candidate_scope))
+            if can_read:
+                try:
+                    checkpoint = conversation.read_checkpoint(private, candidate)
+                except (OSError, ValueError):
+                    # A routine read can name Markdown without selecting a checkpoint.
+                    pass
     if checkpoint and scope and not scope_contains(resolved_artifact(checkpoint["record"], docs), scope):
         raise ValueError("Choose a work record in the current scope")
+    if checkpoint and not result["choices"] and not switched:
+        can_continue = True
 
-    still_same_record = checkpoint is None or previous.get("record") in (None, checkpoint["record"])
+    retains_mode = same_work and not selected_new_owner and not switched
     mode_override = conversation.requested_mode(prompt)
-    if mode_override is None and same_work and still_same_record:
+    if mode_override is None and retains_mode:
         mode_override = previous.get("mode")
-    mode = mode_override or (checkpoint["work_state"]["Mode"] if checkpoint else "thought-partner")
+    work_mode = previous.get("work_mode") if retains_mode else None
+    if checkpoint:
+        work_mode = checkpoint["work_state"]["Mode"]
+    mode = mode_override or work_mode or "thought-partner"
     turn = {"mode": mode}
     if neutral:
         turn["acknowledgment"] = True
@@ -476,9 +493,11 @@ def turn_context(private, prompt, *, cwd=None, saved=None, explicit=None, work_r
         if offer is not None:
             turn["suggestion"] = offer
     result["conversation"] = turn
-    record = checkpoint["record"] if checkpoint else previous.get("record") if same_work and not scope else None
+    record = previous.get("record") if same_work and not scope and not selected_new_owner else None
+    if checkpoint:
+        record = checkpoint["record"]
     return result, {"scope": active, "can_continue": can_continue, "record": record,
-                    "mode": mode_override, "binding": [
+                    "mode": mode_override, "work_mode": work_mode, "binding": [
                         {"record": row["record"], "section": row["section"]}
                         for row in result["entries"] if row["binding"]
                     ], "warnings": result["warnings"]}

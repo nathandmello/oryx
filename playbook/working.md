@@ -101,7 +101,7 @@ Set the permitted fields the PM confirmed. A pause might use:
 ```
 
 An explicit deferral can save `deferral` with the offered workflow, scope, source, evidence revision, and `review_on`.
-Use an ISO date or null to revisit on changed evidence. Use `clear_deferral` with the workflow name when the PM asks.
+Use an ISO date or null to revisit on changed evidence. Copy the chosen entry into `clear_deferral` when the PM asks.
 
 Keep the open question, agreed facts, and sources beside the work. Use an editable owner when a signature binds the current file.
 A stale preview needs a new review. A permission error leaves the checkpoint unsaved.
