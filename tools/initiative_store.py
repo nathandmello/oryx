@@ -217,11 +217,13 @@ def capture_references(root, product, event, register):
     return {}
 
 
-def live_errors(root, register, initiative=None, *, investment=False):
+def live_errors(root, register, initiative=None, *, investment=False, area=None):
     """Check exact revisions for live gates while preserving historical signed decisions."""
     errors = []
     for item in register.items.values():
         if initiative is not None and item["id"] != initiative:
+            continue
+        if area is not None and area not in item["areas"]:
             continue
         phase = item["phase"]
         references = []
