@@ -84,8 +84,12 @@ def audit(run, baseline, turn):
         allowed = {p for p in current if Path(p).parent == Path("workspace/forecasts") and p.endswith(".json")}
         expected = len(allowed) == 1 and allowed == changed
         if expected:
-            forecast = json.loads((hub / "private" / next(iter(allowed))).read_text(encoding="utf-8"))
-            expected = (forecast["authority"]["record"] == "context/products/billing/overview.md"
+            try:
+                records = json.loads(hub_command(hub, "forecast", "list", "--product", "billing"))
+            except subprocess.CalledProcessError:
+                records = []
+            forecast = records[0] if len(records) == 1 else {}
+            expected = (forecast.get("authority", {}).get("record") == "context/products/billing/overview.md"
                         and forecast["probability"] == 75 and forecast["made_on"] == baseline["made_on"]
                         and forecast["resolve_on"] == baseline["resolve_on"]
                         and not forecast["revisions"] and forecast["resolution"] is None)
