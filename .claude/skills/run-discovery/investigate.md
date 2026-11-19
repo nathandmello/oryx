@@ -2,6 +2,9 @@
 
 **Entry condition.** The signed record authorizes the current timebox.
 
+Keep approved plan citations in Sources. Cite new observations in Findings and recommendation.
+If plan sources change, obtain a fresh signed `start-discovery` decision. Older timeboxes need this review before `prepare-brief`.
+
 1. Gather approved evidence. Link results to the initiative and protect customer data.
 2. Resume the metric-linked draft from `initiative show`, or start one with `initiative draft-experiment`.
 3. Fill known details. Propose `approve-experiment` when ready. Obtain signed approval before running the test.

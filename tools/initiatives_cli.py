@@ -3,7 +3,8 @@
 import json
 import sys
 
-from initiative_events import DECISION_FIELDS, EVALUATION_FIELDS, FIELDS, HORIZONS, OPTIONAL_FIELDS, PHASES, RESULTS, RISKS, TRANSITIONS
+from initiative_events import (DECISION_FIELDS, EVALUATION_FIELDS, FIELDS, HORIZONS, OPTIONAL_FIELDS,
+                               OUTCOME_STATUSES, PHASES, RESULTS, RISKS, TRANSITIONS)
 import experiment_drafts
 import initiative_areas
 import storage
@@ -30,6 +31,8 @@ def add_commands(commands):
     apply = operations.add_parser("apply", help="PM approval using a signing key outside this checkout")
     apply.add_argument("product")
     apply.add_argument("--key", required=True)
+    apply.add_argument("--confirm-distinct", action="append", default=[], metavar="NEW_ID",
+                       help="PM confirmation that one reviewed capture describes a distinct problem")
 
     backlog = commands.add_parser("backlog", help="Generate the current initiative backlog")
     scope = backlog.add_mutually_exclusive_group()
@@ -50,13 +53,21 @@ def run(root, args):
             "input": "array of objects with type and all required fields",
             "fields_by_type": {**FIELDS, "approve-experiment": experiment_drafts.APPROVAL},
             "optional_fields_by_type": OPTIONAL_FIELDS,
+            "intake_review": "Proposals compare new IDs against this product's history. The PM confirms distinct captures at apply.",
             "extra_fields_by_decision": DECISION_FIELDS,
             "evaluation_fields": EVALUATION_FIELDS,
+            "target_review_fields": {
+                "status": "PM judgment using an allowed outcome status",
+                "measurements": "distinct release measurement IDs for this initiative and target; met, missed and inconclusive require evidence",
+                "assessment": "PM interpretation of the outcome, guardrails or missing evidence",
+            },
             "transitions": {action: {"from": sorted(start), "to": end} for action, (start, end) in TRANSITIONS.items()},
             "horizons": HORIZONS,
             "allowed_values": {"risk": RISKS, "conclusion": RESULTS, "horizon": HORIZONS,
-                               "transition": sorted(TRANSITIONS)},
+                               "transition": sorted(TRANSITIONS), "outcome status": OUTCOME_STATUSES},
             "formats": {
+                "target reviews": "object keyed by every initiative target metric ID, using target_review_fields; empty for a release without targets",
+                "review follow-up": "null to close, or an object with on (date) and action (text); required for pending outcomes",
                 "initiative ID": "registered product context ID, a slash, and an initiative slug",
                 "initiative IDs": "nonempty array of distinct initiative IDs",
                 "product areas": "array of distinct product/<product>/area/<area> subjects in this product; [] clears the links",
@@ -106,7 +117,8 @@ def run(root, args):
                 print("Experiment drafts are current.")
         return
     else:
-        revision = initiative_store.apply(root, args.product, initiative_store.json_input(sys.stdin.read()), args.key)
+        revision = initiative_store.apply(root, args.product, initiative_store.json_input(sys.stdin.read()),
+                                          args.key, args.confirm_distinct)
         print(f"Recorded PM-signed revision {revision}.")
         return
     print(initiative_views.render(initiative_views.view_template(root, args.command), rows, args.format))

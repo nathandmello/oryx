@@ -6,6 +6,9 @@ Release 0.3.0 uses private format 2. Both updaters read the release version in `
 
 For signed prototype registers, read [workflow compatibility](initiative-approvals.md#existing-private-work) before upgrading.
 
+Update every client before sharing new intake, discovery, or outcome decisions. The updated Hub reads existing format-2 signatures.
+For an active discovery approved before source binding, review the plan and sources together. Sign a fresh `start-discovery` before concluding.
+
 ## What runs
 
 1. The trusted session-start hook calls `python3 tools/pm.py align`. With hooks disabled, the agent follows AGENTS.md.

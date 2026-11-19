@@ -9,9 +9,11 @@ import re
 import subprocess
 from tempfile import TemporaryDirectory
 
-from initiative_events import Register, needs_reference, validate_event
+from initiative_events import DISCOVERY_PLAN_SCOPE, Register, needs_reference, validate_event
+import brief_review
 import experiment_drafts
 import initiative_areas
+import initiative_intake
 import layout
 import layout_upgrade
 import opportunities
@@ -119,17 +121,32 @@ def brief_path(product, initiative, kind):
     return layout.initiative_brief(product, initiative.split("/")[1], kind)
 
 
-def doc_reference(root, name, kind, plan_only=False, *, options=None, initiative=None):
+def doc_reference(root, name, kind, *, plan_scope=None, options=None, initiative=None, review=False):
     text, identifier, contents = local_markdown(root, name, kind)
     if kind in opportunities.BRIEFS:
         parent_error = opportunities.brief_parent_error(name, text, initiative)
         if parent_error:
             raise ValueError(parent_error)
-    headings = opportunities.DISCOVERY_PLAN if plan_only else opportunities.REQUIRED_SECTIONS[kind]
-    missing = opportunities.missing(text, headings if not plan_only else (*headings, "Sources"))
+    if plan_scope == DISCOVERY_PLAN_SCOPE:
+        # The section reader treats column-zero "## " lines as boundaries, including inside examples.
+        headings_pattern = r"(?m)^## [^\n]*"
+        if re.findall(headings_pattern, text) != re.findall(headings_pattern, brief_review.visible(text)):
+            raise ValueError(f"{name}: ambiguous discovery section boundary. To resolve it, indent example headings inside code or comments.")
+    headings = (*opportunities.DISCOVERY_PLAN, "Sources") if plan_scope else opportunities.REQUIRED_SECTIONS[kind]
+    missing = opportunities.missing(text, headings)
     if missing:
         raise ValueError(f"{name} needs content in {', '.join(missing)}")
-    if plan_only:
+    if review and kind in opportunities.BRIEFS:
+        brief_review.check_review_content(text, kind, headings, root=root)
+    reference = {"path": name, "id": identifier}
+    if plan_scope:
+        if plan_scope == DISCOVERY_PLAN_SCOPE:
+            reference["scope"] = DISCOVERY_PLAN_SCOPE
+        elif plan_scope == "legacy-plan":
+            # An older signed timebox covered the plan sections alone.
+            headings = opportunities.DISCOVERY_PLAN
+        else:
+            raise ValueError("Unknown signed discovery plan scope")
         revision = digest(canonical([records.section(text, heading).strip() for heading in headings]))
     else:
         if records.work_state(text)[0].get("State") != "complete":
@@ -137,7 +154,7 @@ def doc_reference(root, name, kind, plan_only=False, *, options=None, initiative
         if options is not None:
             opportunities.check_comparison(text, options)
         revision = digest(contents)
-    return {"path": name, "id": identifier, "sha256": revision}
+    return {**reference, "sha256": revision}
 
 
 def capture_references(root, product, event, register):
@@ -159,20 +176,25 @@ def capture_references(root, product, event, register):
     if initiative not in register.items:
         raise ValueError(f"Unknown initiative in this product: {initiative}")
     if action == "approve-initiative":
-        return doc_reference(root, brief_path(product, initiative, "initiative-brief"), "initiative-brief", initiative=initiative)
+        return doc_reference(root, brief_path(product, initiative, "initiative-brief"), "initiative-brief",
+                             initiative=initiative, review=True)
 
     discovery = brief_path(product, initiative, "discovery-brief")
     if action == "start-discovery":
-        return doc_reference(root, discovery, "discovery-brief", plan_only=True, initiative=initiative)
+        return doc_reference(root, discovery, "discovery-brief", plan_scope=DISCOVERY_PLAN_SCOPE,
+                             initiative=initiative, review=True)
     item = register.items[initiative]
     if item["phase"] == "in discovery":
-        if doc_reference(root, discovery, "discovery-brief", plan_only=True, initiative=initiative) != item["discovery"][1]:
+        signed_plan = item["discovery"][1]
+        if "scope" not in signed_plan:
+            raise ValueError("The prior timebox did not bind Sources. Review the citations and sign start-discovery before prepare-brief.")
+        if doc_reference(root, discovery, "discovery-brief", plan_scope=DISCOVERY_PLAN_SCOPE, initiative=initiative) != signed_plan:
             raise ValueError("The discovery plan changed. Authorize the revised timebox before concluding.")
-        return doc_reference(root, discovery, "discovery-brief", initiative=initiative)
+        return doc_reference(root, discovery, "discovery-brief", initiative=initiative, review=True)
     return {}
 
 
-def live_errors(root, register, initiative=None):
+def live_errors(root, register, initiative=None, *, investment=False):
     """Check exact revisions for live gates while preserving historical signed decisions."""
     errors = []
     for item in register.items.values():
@@ -181,21 +203,25 @@ def live_errors(root, register, initiative=None):
         phase = item["phase"]
         references = []
         if phase == "in discovery":
-            references.append((item["discovery"][1], "discovery-brief", True))
+            signed_plan = item["discovery"][1]
+            references.append((signed_plan, "discovery-brief", signed_plan.get("scope", "legacy-plan")))
         elif phase in {"defining", "candidate", "planned", "delivery"} and item["discovery_findings"]:
-            references.append((item["discovery_findings"], "discovery-brief", False))
+            references.append((item["discovery_findings"], "discovery-brief", None))
         if phase in {"candidate", "planned", "delivery"} and item["initiative_brief"]:
-            references.append((item["initiative_brief"], "initiative-brief", False))
+            references.append((item["initiative_brief"], "initiative-brief", None))
         if phase in {"planned", "delivery"} and item["planning"]:
             cycle = register.cycles[item["planning"]["cycle"]]
-            references.append((cycle["references"], "prioritization", False))
-        for reference, kind, plan_only in references:
+            references.append((cycle["references"], "prioritization", None))
+        for reference, kind, plan_scope in references:
+            review_brief = investment and kind == "initiative-brief"
             try:
-                current = doc_reference(root, reference["path"], kind, plan_only, initiative=item["id"])
+                current = doc_reference(root, reference["path"], kind, plan_scope=plan_scope, initiative=item["id"],
+                                        review=review_brief)
                 if current != reference:
                     raise ValueError(f"{reference['path']} differs from the reviewed revision")
             except (OSError, ValueError) as exc:
-                errors.append(f"{item['id']}: {exc}")
+                recovery = " Reopen the initiative, revise its brief, and obtain a new approval." if review_brief else ""
+                errors.append(f"{item['id']}: {exc}{recovery}")
     return errors
 
 
@@ -232,6 +258,7 @@ def prepare(root, product, changes):
     original, payload, register = read(root, product)
     previous_events = payload["events"]
     accepted = []
+    intake_reviews = {}
     proposed_experiments = set()
     for event in changes:
         if isinstance(event, dict) and event.get("type") == "approve-experiment":
@@ -240,6 +267,11 @@ def prepare(root, product, changes):
               and str(event.get("experiment", "")).startswith("experiment.")):
             raise ValueError("Use approve-experiment to review the named draft")
         validate_event(event)
+        if event["type"] == "capture" and register.items:
+            shortlist = initiative_intake.candidates(register.items, event)
+            intake_reviews[event["initiative"]] = shortlist
+            event = {**event, "intake_review": {"considered": len(register.items),
+                                                "candidates": [row["id"] for row in shortlist]}}
         initiative_areas.check_change(storage.private_root(root), product, register, event)
         if event["type"] == "experiment":
             if event["planned_on"] < date.today().isoformat():
@@ -248,7 +280,7 @@ def prepare(root, product, changes):
         elif event["type"] == "result" and (event["initiative"], event["experiment"]) in proposed_experiments:
             raise ValueError("Apply the experiment approval before proposing its results")
         if event["type"] == "decision" and event["action"] in {"approve-initiative", "plan", "start-delivery", "ship"}:
-            problems = live_errors(root, register, event["initiative"])
+            problems = live_errors(root, register, event["initiative"], investment=event["action"] in {"plan", "start-delivery"})
             if problems:
                 raise ValueError("Resolve the existing review gates:\n" + "\n".join(problems))
         if needs_reference(event):
@@ -267,17 +299,21 @@ def prepare(root, product, changes):
         "product": product, "base": digest(canonical(payload)) if original is not None else None,
         "changes": changes, "reviewed_transactions": accepted, "revision": digest(canonical(candidate)),
     }
+    if intake_reviews:
+        proposal["intake_reviews"] = intake_reviews
     return proposal, original, candidate, register
 
 
-def apply(root, product, proposal, key):
+def apply(root, product, proposal, key, confirmations=()):
     private = storage.private_root(root)
-    if not isinstance(proposal, dict) or set(proposal) != {"product", "base", "changes", "reviewed_transactions", "revision"}:
+    if (not isinstance(proposal, dict)
+            or set(proposal) - {"intake_reviews"} != {"product", "base", "changes", "reviewed_transactions", "revision"}):
         raise ValueError("Apply requires the complete JSON from initiative propose")
     with storage.writer_lock(private):
         expected, original, candidate, _ = prepare(root, product, proposal["changes"])
         if proposal != expected:
             raise ValueError("The proposal is stale or was modified. Preview it and review the new revision.")
+        initiative_intake.confirm_distinct(expected["reviewed_transactions"], confirmations)
         target = register_path(root, product)
         storage.require_visible(private, target.relative_to(private))
         signature = sign(root, candidate, key)

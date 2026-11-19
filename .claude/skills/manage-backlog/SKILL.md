@@ -14,7 +14,7 @@ For product-wide work, omit `areas`. Use sourced `set-areas` to replace existing
 
 1. Search `backlog --product PRODUCT --all-phases` for the source, problem, and audience. Include deferred and closed work.
 2. If the same observation is already recorded, return its initiative ID. Use `signal` for new evidence about that problem.
-3. For a distinct problem, propose `capture` with the observed date and source locator. Resolve uncertain ownership with the PM.
+3. For a possible new problem, propose `capture` with the observed date and source locator.
 4. Use `describe` for the supported problem, audience, and intended outcome. Leave missing facts open.
 5. For `evaluate`, put `value`, `strategic_fit`, `urgency`, `sources`, and `unknowns` inside the `evaluation` object. Cite locators already captured on this initiative.
 6. Identify which unknown could change the next decision. State when customer value, urgency, or strategic fit remains unverified.
@@ -26,7 +26,12 @@ For product-wide work, omit `areas`. Use sourced `set-areas` to replace existing
 | Work can wait | Propose `defer` with the reason and a date or event for review. |
 | Further investment has no current justification | Propose `decline` with the PM's reason and source. |
 
-Use `initiative propose` to validate changes. The PM reviews and signs them. In quiet mode, complete the requested task without unsolicited advice.
+Use `initiative propose` to validate changes. For each new ID, review `intake_reviews` with the PM when the product already has work.
+The shortlist includes up to five existing initiatives. It compares wording and confirmed areas across all phases. Other initiatives can describe the same problem.
+
+Read the closest records with `initiative show`. Search the full backlog when the shortlist misses the likely owner.
+For a shared problem, propose `signal` on its existing ID. For a distinct problem, the PM supplies `--confirm-distinct NEW_ID` when signing.
+Leave uncertain ownership in the proposal, including in quiet mode.
 
 ## Reassess
 
@@ -42,4 +47,8 @@ Use `signal` for new evidence and `reopen` for a decision to reconsider an exist
 2. Propose `start-delivery` after implementation starts. Use `expedite` for a verified critical exception.
 3. Propose `ship` after release verification. Name a review date and cite the release evidence.
 4. Propose each `measurement` against its existing target and metric ID. Cite the observed result.
-5. Capture a distinct follow-up problem through intake. Link the release or outcome review as its source.
+5. Propose `review-outcomes` with the PM's assessment for every target. Link measurements for that target and explain guardrails or gaps.
+6. Use a dated `follow_up` for remaining work. Use null when the PM closes the review.
+7. Record `unmeasured` with the PM's reason when a target lacks observations and no further measurement is planned.
+8. Record new measurements after closure. The first new observation puts the initiative back in `--due`.
+9. Cite each measurement that reopened the review before closing again. Capture distinct opportunities through intake.

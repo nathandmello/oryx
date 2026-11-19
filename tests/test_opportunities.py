@@ -75,7 +75,11 @@ class InitiativeTests(unittest.TestCase):
 
     def apply(self, proposal, key=None, error=None):
         before = self.ledger.read_bytes() if self.ledger.exists() else None
-        self.cli("initiative", "apply", "example", "--key", str(key or self.key), value=proposal, error=error)
+        confirmations = []
+        for identifier in proposal.get("intake_reviews", {}):
+            confirmations.extend(("--confirm-distinct", identifier))
+        self.cli("initiative", "apply", "example", "--key", str(key or self.key), *confirmations,
+                 value=proposal, error=error)
         if error:
             self.assertEqual(self.ledger.read_bytes() if self.ledger.exists() else None, before)
 

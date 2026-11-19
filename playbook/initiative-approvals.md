@@ -1,6 +1,6 @@
 # Approve initiative transactions
 
-Use a trusted Hub installation and OpenSSH with `ssh-keygen -Y sign` and `ssh-keygen -Y verify`.
+Use a trusted Hub and OpenSSH with `ssh-keygen -Y sign` and `ssh-keygen -Y verify`.
 
 Keep the PM signing key and trusted allowed-signers file outside both repositories. List `pm-hub-pm` and its public key on one line. Set `PM_HUB_ALLOWED_SIGNERS` to the file's absolute path.
 
@@ -64,9 +64,9 @@ From the trusted PM account, apply the reviewed proposal. Use the PM signing key
 python3 tools/pm.py initiative apply example --key "$PM_SIGNING_KEY" < proposal.json
 ```
 
-The command revalidates the transaction and signed revision before changing the register. A changed proposal or reviewed document requires a new preview. Read the register again after approval.
+Changes to a proposal, register, or reviewed document require a fresh preview.
 
-A capture request uses the product context ID shown by `initiative show` and a stable slug.
+Use the registered product context ID and a stable initiative slug.
 
 ```json
 [
@@ -82,21 +82,21 @@ A capture request uses the product context ID shown by `initiative show` and a s
 ]
 ```
 
-Omit `areas` for a product-wide initiative. Supply qualified subjects only for confirmed areas of this product.
-A sourced `set-areas` transaction replaces the current list. Submit `[]` to clear it. The initiative keeps its ID.
+Omit `areas` for product-wide work. Use `set-areas` to replace confirmed area links or `[]` to clear them.
+
+After the first capture, review the [possible matches](initiative-views.md#review-an-incoming-idea). To authorize a separate initiative, add `--confirm-distinct NEW_ID` to `initiative apply`.
 
 ## Experiment drafts
 
-Use `initiative show` to find the draft file and its missing fields. The agent may save partial edits there.
+`initiative show` lists the editable draft and its missing fields.
 A ready plan needs a linked hypothesis, method, decision criterion, planned date, and source.
 
 ```json
 [{"type": "approve-experiment", "initiative": "product-context-0123456789ab/renewals", "metric": "renewal-rate"}]
 ```
 
-Use the standard proposal and signing commands above. Review the resolved experiment under `reviewed_transactions`.
-Changes to plan details after preview require a fresh proposal. A new plan can start on the signing date or later.
-Run the test after signed approval. Submit its results in a later proposal.
+Review the experiment under `reviewed_transactions` before signing. Schedule the test for the signing date or later.
+Run the approved test and submit its results in a later proposal.
 
 After an interrupted file update, run `python3 tools/pm.py initiative sync-drafts example`. This also creates drafts for eligible existing targets.
 
@@ -109,15 +109,19 @@ After an interrupted file update, run `python3 tools/pm.py initiative sync-draft
 - List each approved candidate in the comparison table once. Submit the same IDs in `cycle.options`. Describe existing commitments in prose.
 - Use `plan` with a reviewed cycle, unique rank, horizon, effort, and trade-off. Stay within signed cycle capacity.
 - Compare a candidate again after the PM approves a revised Initiative Brief.
-- Use `start-delivery` with the delivery record URL. Use `ship` after release verification. Give the outcome review a date.
+- Use `start-delivery` with the delivery URL. After verification, use `ship` with a review date. Use `review-outcomes` to record the conclusion.
 - Use `defer` with a review date or event. Decline obsolete deferred work directly. Reopen work for material changes.
 - Use `expedite` only for verified urgent work. Provide the owner, obligation, deadline, scope, delivery link, and review date.
 
-An approved Initiative Brief, completed discovery brief, and planning comparison are bound to their reviewed bytes. Keep notes outside those files after approval. A discovery timebox pins its plan sections and allows findings to evolve.
+An approved Initiative Brief, completed discovery brief, and planning comparison are bound to their reviewed bytes. Keep notes outside those files after approval. A new discovery timebox binds its plan and Sources. Findings can evolve. Renew older timeboxes with `start-discovery` before concluding.
 
 ## Existing private work
 
-Existing Markdown remains readable. For onboarded work, cite its sources and link the original analysis. Use the generated roadmap for registered initiatives.
+New reviews require a distinct, visible answer in each relevant brief section. A short answer or named source can suffice.
+Describe the discovery method in the brief. The signed `review_on` sets its next checkpoint.
+At selection and delivery start, the Hub checks the approved Initiative Brief again. Reopen weak briefs for revision and approval.
+
+For existing work, cite the original analysis. Registered initiatives use the generated roadmap.
 
 Use [installed Hub updates](updates.md) for private format alignment.
 

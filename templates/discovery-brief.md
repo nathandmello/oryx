@@ -23,11 +23,11 @@
 
 ## Findings and recommendation
 
-{{Summarize results against learning goals and reference hypothesis assessments by ID. State the recommendation and residual risks.}}
+{{Summarize results against learning goals. Cite new evidence and hypothesis assessments by ID. State the recommendation and residual risks.}}
 
 ## Sources
 
-{{Dated sources, test results, and their claims. Identify gaps and source limits.}}
+{{Dated sources supporting the investigation plan. Identify the relevant claims, evidence gaps, and source limits.}}
 
 ## Work state
 

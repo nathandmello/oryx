@@ -40,6 +40,15 @@ def view_template(root, view):
     return data
 
 
+def next_review(item, decision):
+    if decision.get("action") == "review-outcomes":
+        if decision["follow_up"]:
+            return decision["follow_up"]["on"]
+        triggers = item["review_trigger_measurements"]
+        return item["measurements"][triggers[0]]["observed_on"] if triggers else None
+    return decision.get("review_on") or decision.get("revisit")
+
+
 def backlog(registrations, phase=None, due=False, all_phases=False, *, area=None):
     phases = IN_DEFINITION | {"candidate"}
     if phase is not None:
@@ -52,7 +61,7 @@ def backlog(registrations, phase=None, due=False, all_phases=False, *, area=None
             if item["phase"] not in phases or (area is not None and area not in item["areas"]):
                 continue
             decision = item["decisions"][-1] if item["decisions"] else {}
-            revisit = decision.get("review_on") or decision.get("revisit")
+            revisit = next_review(item, decision)
             review_date = iso_date(revisit)
             if due and (not review_date or review_date > date.today()):
                 continue
@@ -124,7 +133,15 @@ def trace(product, register, identifier=None, *, private):
     context["areas"] = initiative_areas.current_links(private, product, item["areas"])
     drafts = experiment_drafts.view(private, product, register, item)
     metric_ids = sorted(set(drafts) | set(item["targets"]) | {test["metric"] for test in item["experiments"].values()})
-    return {"product": product, "context": context, "files": files, "initiative": {**item, "experiment_drafts": drafts},
+    initiative = {**item, "experiment_drafts": drafts}
+    if item["phase"] == "shipped":
+        decision = item["decisions"][-1]
+        next_date = next_review(item, decision)
+        initiative["outcome_review"] = {
+            "status": "open" if next_date else "closed", "next_review_on": next_date,
+            "reviewed_on": decision["on"] if decision["action"] == "review-outcomes" else None,
+        }
+    return {"product": product, "context": context, "files": files, "initiative": initiative,
             "metric_definitions": {key: register.metrics[key] for key in metric_ids}}
 
 

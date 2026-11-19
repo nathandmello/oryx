@@ -118,7 +118,7 @@ Use `unplan` to release a reservation before delivery. The initiative returns to
 
 Review active discovery weekly against its learning goals. Supply dates or event triggers for deferrals. Review dated items with `backlog --due`. Review event triggers when they occur.
 
-The PM supplies open backlog limits, discovery limits, and capacity for each planning cycle. Review existing work when a limit is reached. Reopen eligible work when evidence or constraints change. Shipping records release verification. Measure outcomes after release where applicable.
+The PM supplies open backlog limits, discovery limits, and capacity for each planning cycle. Review existing work when a limit is reached. Reopen eligible work when evidence or constraints change. Shipping starts the outcome review. Record measurements, then use `review-outcomes` to close it or schedule follow-up.
 
 ## Source frameworks
 
