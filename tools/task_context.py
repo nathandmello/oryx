@@ -9,6 +9,7 @@ import re
 import time
 from urllib.parse import urlsplit
 
+import conversation
 import layout
 import metric_registry
 import records
@@ -27,7 +28,8 @@ STOP_WORDS = set("about again and api app are can from give have here how its ou
 FOLLOW_UP = re.compile(r"^(?:please\s+)?(?:(?:can|could|would) you\s+(?:please\s+)?)?"
                        r"(?:continue\b|resume\b|revise (?:it|that|this)\b|"
                        r"update (?:it|that|this)\b|make (?:it|that|this)\b|what about\b)", re.I)
-SWITCH = re.compile(r"^(?:please\s+)?switch\s+from\b.+?\bto\s+", re.I)
+SWITCH = re.compile(r"^(?:please\s+)?switch\s+(?:from\b.+?\b)?to\s+", re.I)
+WORK_RECORD = re.compile(r"(?:private/)?(workspace/[\w./-]+?\.md)\b")
 IDENTIFIER = re.compile(r"\b[a-z][\w-]*\.[a-z][\w.-]*[a-z0-9]\b", re.I)
 DATE = re.compile(r"\b(?:as of|on)\s+(\d{4}-\d{2}-\d{2}|"
                   r"(?:January|February|March|April|May|June|July|August|September|October|November|December)"
@@ -94,14 +96,14 @@ def resolved_artifact(name, documents):
     if name in documents:
         doc = documents[name]
         if doc["company"]:
-            return {"product": None, "area": None, "initiative": None, "company": True}
+            return {"company": True, "product": None, "area": None, "initiative": None}
         return {key: doc[key] for key in ("product", "area", "initiative")}
     parts = Path(name).parts
     products = {doc["product"] for doc in documents.values() if doc["product"]}
     if len(parts) >= 3 and parts[0] == "workspace":
         product = parts[2] if len(parts) >= 4 else Path(parts[2]).stem
         if product in products:
-            initiative = parts[3] if len(parts) >= 4 and parts[1] in {"initiatives", "experiments"} else None
+            initiative = parts[3] if len(parts) >= 5 and parts[1] in {"initiatives", "experiments"} else None
             return {"product": product, "initiative": initiative, "area": None}
     return {}
 
@@ -138,6 +140,9 @@ def choose_scope(private, documents, prompt, cwd, previous, explicit):
     overview = {doc["product"]: doc for doc in documents.values() if doc["kind"] == "product-context"}
     if explicit:
         return explicit, []
+    if conversation.acknowledgement(prompt):
+        return {}, []
+    switched = bool(SWITCH.match(prompt))
     prompt = SWITCH.sub("", prompt)
     artifacts = re.findall(r"(?:private/)?((?:context|workspace)/[\w./-]+?\.(?:md|json))\b", prompt)
     known = [scope for name in artifacts if (name.endswith(".md") or layout.initiative_work_identity(name))
@@ -168,9 +173,10 @@ def choose_scope(private, documents, prompt, cwd, previous, explicit):
         return inferred_scope(documents, named[0], terms), []
     if named:
         return {}, named
-    if previous and FOLLOW_UP.match(prompt.strip()):
-        return previous, []
-    if cwd and cwd != private and private in cwd.parents:
+    if previous and not switched and FOLLOW_UP.match(prompt.strip()):
+        if previous.get("company") or previous.get("product") in overview:
+            return previous, []
+    if not switched and cwd and cwd != private and private in cwd.parents:
         scope = resolved_artifact((cwd / "scope.md").relative_to(private).as_posix(), documents)
         if scope:
             return scope, []
@@ -258,8 +264,8 @@ def linked_entries(doc, areas, through):
                    "binding": binding}
 
 
-def resolve(private, prompt="", *, cwd=None, previous=None, explicit=None):
-    docs = context_documents(private)
+def resolve(private, prompt="", *, cwd=None, previous=None, explicit=None, documents=None):
+    docs = context_documents(private) if documents is None else documents
     scope, choices = choose_scope(private, docs, prompt, cwd, previous, explicit)
     status = "ambiguous" if choices else "resolved" if scope else "unscoped"
     result = {"status": status, "scope": scope, "choices": choices, "entries": [], "warnings": []}
@@ -354,17 +360,106 @@ def session_state(private, session):
 
 def previous_scope(private, session):
     path = session_state(private, session)
-    if path and path.is_file() and time.time() - path.stat().st_mtime < 86400:
-        return json.loads(path.read_text(encoding="utf-8"))
+    if path:
+        try:
+            if time.time() - path.stat().st_mtime < 86400:
+                state = json.loads(path.read_text(encoding="utf-8"))
+                if isinstance(state, dict):
+                    return state
+        except (OSError, ValueError):
+            pass
     return {}
 
 
-def remember_scope(private, session, result, numeric):
+def same_scope(first, second):
+    if not first or not second:
+        return not first and not second
+    return conversation.scope_key(first) == conversation.scope_key(second)
+
+
+def scope_contains(record_scope, scope):
+    return all(value is None or scope.get(key) == value for key, value in record_scope.items())
+
+
+def turn_context(private, prompt, *, cwd=None, saved=None, explicit=None, work_record=None):
+    """Resolve the current task separately from the turn's resumable work pointer."""
+    previous = saved or {}
+    prior_scope = previous.get("scope", {})
+    if prior_scope:
+        try:
+            conversation.scope_key(prior_scope)
+        except (TypeError, ValueError):
+            prior_scope = {}
+    can_continue = previous.get("can_continue", True)
+    docs = context_documents(private)
+    if work_record is not None:
+        checkpoint = conversation.read_checkpoint(private, work_record)
+        record_scope = resolved_artifact(work_record, docs)
+        if explicit and not scope_contains(record_scope, explicit):
+            raise ValueError("Choose a work record in the current scope")
+        explicit = explicit or record_scope or None
+    else:
+        checkpoint = None
+    result = resolve(private, prompt, cwd=cwd, explicit=explicit, documents=docs,
+                     previous=prior_scope if can_continue else None)
+    scope = result["scope"]
+    switched = bool(SWITCH.match(prompt))
+    neutral = conversation.acknowledgement(prompt)
+    same_work = same_scope(scope, prior_scope)
+    if scope:
+        active = scope
+        can_continue = True
+    else:
+        active = prior_scope
+        can_continue = (can_continue and not result["choices"] and not switched
+                        and conversation.continues_work(prompt))
+        same_work = can_continue
+
+    if work_record is None and not switched:
+        path = WORK_RECORD.search(prompt)
+        candidate = path[1] if path else previous.get("record") if same_work else None
+        if candidate and scope and scope_contains(resolved_artifact(candidate, docs), scope):
+            try:
+                checkpoint = conversation.read_checkpoint(private, candidate)
+            except (OSError, ValueError):
+                if path:
+                    result["warnings"].append("The named work record has no readable conversation checkpoint.")
+    if checkpoint and scope and not scope_contains(resolved_artifact(checkpoint["record"], docs), scope):
+        raise ValueError("Choose a work record in the current scope")
+
+    still_same_record = checkpoint is None or previous.get("record") in (None, checkpoint["record"])
+    mode_override = conversation.requested_mode(prompt)
+    if mode_override is None and same_work and still_same_record:
+        mode_override = previous.get("mode")
+    mode = mode_override or (checkpoint["work_state"]["Mode"] if checkpoint else "thought-partner")
+    turn = {"mode": mode}
+    if neutral:
+        turn["acknowledgment"] = True
+    if switched and not scope:
+        turn["unresolved_switch"] = True
+    if checkpoint:
+        deferrals = [row for row in checkpoint["deferrals"] if scope and same_scope(row["scope"], scope)]
+        turn["checkpoint"] = {**checkpoint, "deferrals": deferrals}
+    else:
+        deferrals = []
+    if not checkpoint and can_continue and active and not scope and not neutral:
+        turn["scope_to_confirm"] = active
+    if not neutral and scope:
+        offer = conversation.context_offer(prompt, result, deferrals, mode == "quiet")
+        if offer is not None:
+            turn["suggestion"] = offer
+    result["conversation"] = turn
+    record = checkpoint["record"] if checkpoint else previous.get("record") if same_work and not scope else None
+    return result, {"scope": active, "can_continue": can_continue, "record": record,
+                    "mode": mode_override, "binding": [
+                        {"record": row["record"], "section": row["section"]}
+                        for row in result["entries"] if row["binding"]
+                    ], "warnings": result["warnings"]}
+
+
+def remember_scope(private, session, state):
     path = session_state(private, session)
     if path:
         with storage.writer_lock(private):
-            storage.replace_text(path, path.read_text(encoding="utf-8") if path.is_file() else None,
-                                 json.dumps({"scope": result["scope"], "binding": [
-                                     {"record": row["record"], "section": row["section"]}
-                                     for row in result["entries"] if row["binding"]
-                                 ], "warnings": result["warnings"], "numeric": numeric}))
+            original = path.read_text(encoding="utf-8") if path.is_file() else None
+            storage.replace_text(path, original, json.dumps(state), mode=0o600)

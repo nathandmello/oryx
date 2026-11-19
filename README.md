@@ -69,6 +69,7 @@ Start reference material in the entity overview. Create a topic folder only for 
 - [Templates](templates/README.md): company context, product context, and PM artifacts.
 - [Context rules](playbook/context.md) cover routing, sources, parent links, dates, and gaps.
 - [Hub commands](playbook/commands.md) and [working practices](playbook/working.md) cover actions, preferences, and checkpoints.
+- [Decision coaching](playbook/conversation.md).
 - [Git rules](playbook/git.md): the correct repository for saves, updates, and contributions.
 
 The Git command name `workspace` selects the entire private repository.

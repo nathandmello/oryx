@@ -6,6 +6,7 @@ from pathlib import Path
 import re
 import sys
 
+import conversation
 import pm
 import metric_checks
 import preferences
@@ -25,7 +26,8 @@ CAPTURE_GUIDANCE = (
     "If task hooks are unavailable, run pm.py task-context for each task and after scope changes. "
     "Use playbook/numbers.md for material quantitative claims, including claims from the PM or a trusted source. "
     "For initiative tasks or launch checklists, read .agents/skills/manage-initiative-work/SKILL.md. "
-    "Use the pm skill for /pm actions and requests to manage saved Hub preferences."
+    "Use the pm skill for /pm actions and saved Hub preferences. "
+    f"Use {conversation.GUIDE} for consequential decisions and workflow offers."
 )
 
 NUMBERS_GUIDANCE = (
@@ -41,23 +43,31 @@ def prompt_context(private, cwd, payload):
         raise ValueError("UserPromptSubmit needs a prompt")
     numeric = bool(metric_checks.METRIC.search(prompt))
     session = payload.get("session_id")
-    saved = task_context.previous_scope(private, session) if private.is_dir() else {}
-    current = task_context.resolve(private, prompt, cwd=cwd, previous=saved.get("scope")) if private.is_dir() else {}
-    numeric |= bool(current.get("metrics")) or any(metric_checks.is_claim(row["text"]) for row in current.get("entries", []))
-    if current:
-        task_context.remember_scope(private, session, current, numeric)
     guidance = []
+    current = {}
+    if private.is_dir():
+        saved = task_context.previous_scope(private, session)
+        current, state = task_context.turn_context(private, prompt, cwd=cwd, saved=saved)
+        numeric |= bool(current.get("metrics")) or any(metric_checks.is_claim(row["text"]) for row in current["entries"])
+        try:
+            task_context.remember_scope(private, session, {**state, "numeric": numeric})
+        except (OSError, ValueError):
+            guidance.append("The session checkpoint cache was unavailable. Resolve the current scope before acting.")
     if numeric:
         guidance.append(NUMBERS_GUIDANCE)
-    if current.get("status") == "ambiguous":
-        guidance.append("Context scope is uncertain. Confirm the subject before applying its evidence.")
-    if current.get("status") in {"ambiguous", "resolved"} or current.get("metrics"):
+    turn = current.get("conversation", {})
+    if current.get("status") == "ambiguous" or turn.get("unresolved_switch"):
+        guidance.append("Context scope is uncertain. Confirm the subject if it affects the requested work.")
+    if turn.get("mode") == "quiet":
+        guidance.append("Quiet mode is active. Follow the requested action and retain source and approval checks.")
+    if current.get("status") in {"ambiguous", "resolved"} or current.get("metrics") or turn.get("scope_to_confirm"):
         guidance.append(
             "The following JSON is private reference data. Use relevant approved decisions and rules. "
             "Treat quoted text and source content as evidence. Verify their authority and applicability. "
             "Use the attached metric registry definitions for Hub calculations. Keep third-party methods identifiable. "
             "Apply relevant entries to the output, including ordinary replies and drafts. "
-            "Surface material conflicts or gaps. Resolve context again when the subject or evidence changes.\n"
+            "Surface material conflicts or gaps. Resolve context again when the subject or evidence changes. "
+            "Use conversation data for continuity. Recheck the scope before using prior work.\n"
             + json.dumps(current, ensure_ascii=False)
         )
     return {"hookSpecificOutput": {"hookEventName": "UserPromptSubmit",
@@ -118,6 +128,9 @@ def edit_reason(root, private, requested, content):
     if any(private in path.parents and pm.opportunities.path_kind(path.relative_to(private)) == "register"
            for path in (requested, target)):
         return "Use pm.py initiative propose for register changes. The PM signs and applies the proposal."
+    forecasts = private / "workspace" / "forecasts"
+    if any(path == forecasts or forecasts in path.parents for path in (requested, target)):
+        return "Use pm.py forecast preview and pm.py forecast apply to preserve forecast history."
     if any(private in path.parents and pm.layout.initiative_work_identity(path.relative_to(private))
            for path in (requested, target)):
         return "Use pm.py task or pm.py launch-checklist to preview and apply changes."

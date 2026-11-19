@@ -22,6 +22,8 @@ A catalog description with effect `guided` identifies the shared guide and task.
 Read that guide and run the named task with the PM's arguments as inputs.
 Verify the required scope and source before writing. Observe the guide's existing permission and decision gates.
 
+For ordinary requests about product choices, use the [conversation guide](../../../playbook/conversation.md).
+
 ## Preferences
 
 Use `action workspace preferences show` to display effective settings.

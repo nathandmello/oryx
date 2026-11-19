@@ -6,6 +6,8 @@ argument-hint: "<initiative> <meeting title, date range, source link, or transcr
 
 # Summarize and ingest initiative meetings
 
+Keep transcript work direct. Use the [conversation guide](../../../playbook/conversation.md) for an ensuing consequential product decision.
+
 Adapted from [Summarize Meeting by Tom Rochette](https://github.com/tomzx/agents/blob/main/skills/summarize-meeting/SKILL.md). See the [MIT license](LICENSE).
 
 ## Identify the initiative and meetings

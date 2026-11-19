@@ -9,6 +9,8 @@ For a request to see the roadmap, run `roadmap --product PRODUCT`. For an area-s
 
 For a selection decision, read [the initiative workflow](../../../playbook/opportunities.md). Load the product strategy, current objectives, obligations, existing commitments, and each candidate's evidence.
 
+Before selection, use the [conversation guide](../../../playbook/conversation.md) to establish outcomes and what would lose capacity.
+
 ## Compare investments
 
 1. Find approved options with `backlog --product PRODUCT --phase candidate`. Read each initiative with `initiative show`.

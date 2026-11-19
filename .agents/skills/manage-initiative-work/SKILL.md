@@ -19,6 +19,8 @@ Use `pm.py task-context --product PRODUCT --initiative INITIATIVE "TASK"` to fin
 
 ## Run a launch review
 
+Use the [conversation guide](../../../playbook/conversation.md) at a consequential launch decision. Keep routine checklist maintenance direct.
+
 1. Read the launch scope and current checklist. Preview the starter when the initiative needs its first checklist.
 2. Tailor upstream, launch, and downstream checks to the release audience and risks.
 3. Link supporting tasks. Ask the responsible person for evidence when verification is missing.

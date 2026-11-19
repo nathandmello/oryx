@@ -17,6 +17,7 @@ import red_team_eval
 import workspace
 import git_ops
 import context_capture
+import conversation
 import task_context
 import metric_checks
 import metric_registry
@@ -46,6 +47,7 @@ REQUIRED = (
     "tools/context_capture.py", "tools/task_context.py", "tools/metric_checks.py", "tools/storage.py", "tools/upgrades.py",
     "playbook/numbers.md", "playbook/metrics.md", "playbook/saas-metrics.json", "tools/metric_registry.py",
     "tools/preferences.py", ".agents/skills/pm/SKILL.md", ".claude/skills/pm/SKILL.md",
+    "tools/conversation.py", conversation.GUIDE,
     "tools/hub_commands.py", "playbook/commands.md", hub_commands.CATALOG,
     ".agents/skills/extend-hub/SKILL.md", ".claude/skills/extend-hub/SKILL.md",
     ".agents/skills/ingest-context/SKILL.md", ".claude/skills/ingest-context/SKILL.md",
@@ -727,6 +729,7 @@ def build_parser():
     task.add_argument("--area", type=layout.slug)
     task.add_argument("--initiative", type=layout.slug)
     task.add_argument("--company", action="store_true")
+    task.add_argument("--work-record", help="Use an existing workspace work-state checkpoint")
     commands.add_parser("catalog", help="List private records by title, type, state, and scope")
     commands.add_parser("check-metric", help="Check a numerical claim from JSON on stdin")
     metrics = commands.add_parser("metric", help="Read and maintain the business metric registry")
@@ -747,6 +750,7 @@ def build_parser():
     git = commands.add_parser("git")
     git.add_argument("role", choices=("system", "workspace"))
     git.add_argument("operation", choices=("status", "fetch", "pull", "push"))
+    conversation.add_commands(commands)
     red_team_eval.register(commands)
     return parser
 
@@ -870,7 +874,13 @@ def main() -> int:
                 explicit = {"company": True} if args.company else (
                     {"product": args.product, "area": args.area, "initiative": args.initiative} if args.product else None
                 )
-                result = task_context.resolve(private, args.prompt, cwd=Path.cwd().resolve(), explicit=explicit)
+                result, _ = task_context.turn_context(private, args.prompt, cwd=Path.cwd().resolve(),
+                                                      explicit=explicit, work_record=args.work_record)
+                try:
+                    result["conversation"]["reply_preferences"] = preferences.effective(preferences.load(private))
+                except (OSError, ValueError):
+                    result["conversation"]["reply_preferences"] = preferences.effective({})
+                    result["warnings"].append("Using default reply preferences. Run pm.py preferences show to check settings.")
             print(json.dumps(result, indent=2, ensure_ascii=False))
             return 0
         if args.command == "check-metric":
