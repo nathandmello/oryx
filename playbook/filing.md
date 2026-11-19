@@ -36,6 +36,9 @@ For capture, use `topic` for a standard section or `heading` for a custom title.
 
 In Markdown, put the prose below the `<!-- pm: context-lead -->` marker. Start the section entries after a blank line. Add a lead when substantively revising a legacy section. Metadata sections use their existing tables.
 
+An unmarked legacy section can retain its original prose. Verify and label its claims when adopting a lead.
+Indent level-two headings inside examples so capture can identify section boundaries.
+
 Update older Hub clients before syncing briefs with section leads.
 
 ```markdown

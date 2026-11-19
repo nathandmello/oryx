@@ -405,8 +405,9 @@ class HubTests(unittest.TestCase):
         lead = "Consult when comparing UK adoption before and after rollout."
         for body, expected in (
             ("Historical context from an earlier brief.", None),
-            ("- Fact: The UK had 2,000 active merchants.", "Fact entries need"),
+            ("- Fact: The UK had 2,000 active merchants.", None),
             (f"{records.CONTEXT_LEAD}\n{lead}\n\n- Fact: The UK had 2,000 active merchants. [S1]", None),
+            (f"{records.CONTEXT_LEAD}\n{lead}\n\n- Fact: The UK had 2,000 active merchants.", "Fact entries need"),
             (f"{records.CONTEXT_LEAD}\n\n- Fact: The UK had 2,000 active merchants. [S1]", "short prose lead"),
             (f"{records.CONTEXT_LEAD}\n{lead}\n\nThe UK had 2,000 active merchants.", "labelled context bullets"),
         ):
@@ -417,6 +418,33 @@ class HubTests(unittest.TestCase):
                     self.assertTrue(any(heading in error and expected in error for error in errors), errors)
                 else:
                     self.assertEqual(errors, [])
+
+    def test_context_capture_flags_ambiguous_and_legacy_section_bodies_in_preview(self):
+        target = self.context_record()
+        original = target.read_text()
+        destination = target.relative_to(self.work).as_posix()
+        heading = "UK rollout history"
+        section = f"## {heading}\n\nThe UK pilot ended in May.\n\n## Background\n\nThis is an example."
+        payload = {"sources": [], "entries": [{
+            "scope": "company", "heading": heading, "lead": "Consult when preparing a UK rollout review.",
+            "question": "Which region participated in the pilot?",
+        }]}
+        for body, expected in (
+            (section, "verify and label legacy claims"),
+            (section.replace("The UK pilot", "- Fact: The UK pilot"), "verify and label legacy claims"),
+            (f"## Examples\n\n```markdown\n{section}\n```", "Ambiguous context section boundary"),
+            (f"## Examples\n\n<!--\n{section}\n-->", "Ambiguous context section boundary"),
+            (f"## Examples\n\n<pre>\n{section}\n</pre>", "Ambiguous context section boundary"),
+        ):
+            with self.subTest(body=body):
+                text = original.replace("## Context controls", f"{body}\n\n## Context controls")
+                target.write_text(text)
+                self.assertEqual(pm.check(self.root), [])
+                for args in ((), ("--write", destination)):
+                    result = self.context_capture(payload, *args)
+                    self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+                    self.assertIn(expected, result.stdout)
+                    self.assertEqual(target.read_text(), text)
 
     def test_context_sources_require_unique_ids_and_honest_dates(self):
         target = self.context_record()
@@ -826,7 +854,7 @@ class HubTests(unittest.TestCase):
         records.create(self.root, "company-context", "context/company/overview.md")
         paths = "context/company/vendor-reviews.md", "workspace/goals/renewal.md"
         payload = {"sources": [source], "entries": [
-            dict(entry, record={"path": path, "reason": "Track review obligations.", "parent": "context/company/overview.md",
+            dict(entry, record={"path": path, "reason": "(Pilot phase) Track review obligations.", "parent": "context/company/overview.md",
                                 "basis": "maintained-reference", "trigger": "The vendor renews a contract."}) for path in paths
         ]}
         before = set(pm.inventory(self.work))

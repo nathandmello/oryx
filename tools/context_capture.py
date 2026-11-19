@@ -7,6 +7,7 @@ from pathlib import Path
 import re
 from urllib.parse import unquote, urlsplit
 
+import brief_review
 import layout
 import records
 import filing
@@ -547,7 +548,14 @@ def validate_entry_shape(entry, section):
 
 
 def section_leads(text, entries):
-    headings = {heading.strip().casefold(): heading.rstrip() for heading in re.findall(r"^## (.+)$", text, re.M)}
+    pattern = r"(?m)^## (.+)$"
+    raw = re.findall(pattern, text)
+    visible = brief_review.visible(re.sub(r"<pre\b[^>]*>.*?(?:</pre\s*>|\Z)", "", text, flags=re.I | re.S))
+    if raw != re.findall(pattern, visible):
+        raise ValueError("Ambiguous context section boundary. Indent level-two headings inside examples or comments")
+    headings = {heading.strip().casefold(): heading.rstrip() for heading in raw}
+    marker = records.MARKER.match(text)
+    standard = records.context_sections(marker[1]) if marker and marker[1] in records.CONTEXT_KINDS else set()
     groups = {}
     for entry in entries:
         heading = entry["section"]
@@ -559,12 +567,15 @@ def section_leads(text, entries):
         proposed = {entry["lead"] for entry in group if "lead" in entry}
         if len(proposed) > 1:
             raise ValueError(f"Give {heading} one lead for this capture")
-        existing, _ = records.split_context_lead(records.section(text, heading) or "")
+        existing, body = records.split_context_lead(records.section(text, heading) or "")
+        if existing is None and body and heading not in standard:
+            previous, unlabelled = records.context_entries(body)
+            if unlabelled or any(label in {"Fact", "Rule", "Example"} and not records.SOURCE_REFERENCE.search(claim)
+                                 for label, claim in previous):
+                raise ValueError(f"{heading}: verify and label legacy claims with citations before adding a lead")
         lead = next(iter(proposed), existing)
         if lead is None:
             lead = records.CONTEXT_LEADS.get(heading)
-            if heading == "Context":
-                lead = group[0].get("record", {}).get("reason")
         if lead is None or not records.valid_context_lead(lead):
             raise ValueError(f"Give {heading} a short lead that explains when to consult the section")
         leads[heading] = lead

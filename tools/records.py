@@ -60,7 +60,9 @@ CONTEXT_TABLES = {
     "Decisions already closed": ("Question", "Scope", "Person and date", "Evidence", "Next step"),
 }
 CONTEXT_LEAD = "<!-- pm: context-lead -->"
+CONTEXT_LEAD_HEADING = re.compile(rf"(?m)^## ([^\n]+)\n(?:[ \t]*\n)*{re.escape(CONTEXT_LEAD)}[ \t]*$")
 CONTEXT_LEADS = {
+    "Context": "Consult when checking the evidence for the subject named in this note.",
     "Data boundaries": "Consult before selecting, sharing, or retaining data for PM work.",
     "Organisation and scope": "Consult when identifying the company, business unit, or product responsible for a decision.",
     "Customers and markets": "Consult when identifying buyers, users, partners, or markets for a product decision.",
@@ -263,6 +265,24 @@ def valid_context_lead(lead):
             and re.match(r"\w", lead) is not None and "<" not in lead and ">" not in lead)
 
 
+def context_entries(body):
+    entries, unlabelled = [], False
+    current = None
+    for line in body.splitlines():
+        if not line.strip() or PLACEHOLDER.fullmatch(line.strip()):
+            continue
+        entry = re.fullmatch(r"- (Fact|Rule|Example|Interpretation|Assumption|Unknown): (.+)", line)
+        if entry:
+            current = [entry[1], entry[2]]
+            entries.append(current)
+        elif line.startswith("  ") and current:
+            current[1] += " " + line.strip()
+        else:
+            current = None
+            unlabelled = True
+    return entries, unlabelled
+
+
 def context_table_errors(text, name, draft):
     columns = CONTEXT_TABLES[name]
     rows, errors = table(text, name, columns)
@@ -381,7 +401,6 @@ def context_errors(path, text, kind, texts, content_sections, template=False):
     for reference in set(re.findall(r"\[(S[1-9]\d*)\]", claims)) - sources:
         errors.append(f"unknown source reference: {reference}")
     substantive = False
-    standard_sections = context_sections(kind)
     for name in sorted(content_sections):
         body = section(text, name)
         if body is None:
@@ -394,25 +413,11 @@ def context_errors(path, text, kind, texts, content_sections, template=False):
             errors.extend(context_table_errors(text, name, draft))
             substantive = substantive or bool(table(text, name, CONTEXT_TABLES[name])[0])
             continue
-        # Older custom sections could contain prose. Check their labelled claims,
-        # and use the full section contract when a lead marks the revised format.
-        managed = name in standard_sections or lead is not None
-        if managed and not body and not draft:
+        if not body and not draft:
             errors.append(f"{name} needs an entry or an explicit Unknown")
-        entries, current = [], None
-        for line in body.splitlines():
-            if not line.strip() or PLACEHOLDER.fullmatch(line.strip()):
-                continue
-            entry = re.fullmatch(r"- (Fact|Rule|Example|Interpretation|Assumption|Unknown): (.+)", line)
-            if entry:
-                current = [entry[1], entry[2]]
-                entries.append(current)
-            elif line.startswith("  ") and current:
-                current[1] += " " + line.strip()
-            else:
-                current = None
-                if managed:
-                    errors.append(f"{name}: use labelled context bullets")
+        entries, unlabelled = context_entries(body)
+        if unlabelled:
+            errors.append(f"{name}: use labelled context bullets")
         for label, claim in entries:
             substantive = substantive or label in {"Fact", "Rule", "Example"}
             if label in {"Fact", "Rule", "Example"} and not PLACEHOLDER.fullmatch(claim) and not SOURCE_REFERENCE.search(claim):
@@ -467,7 +472,10 @@ def validate(texts):
             errors.append(f"{path}: missing section: {missing}")
         identifier, problems = state_errors(text)
         if kind in CONTEXT_KINDS:
-            content = {name.rstrip() for name in sections} - CONTEXT_RESERVED_SECTIONS
+            # Older versions allowed custom prose outside the standard sections.
+            # Apply the entry contract when a custom section adopts a lead.
+            marked = {name.rstrip() for name in CONTEXT_LEAD_HEADING.findall(text)}
+            content = (sections & context_sections(kind)) | (marked - CONTEXT_RESERVED_SECTIONS)
             extra, parent = context_errors(path, text, kind, texts, content)
             problems.extend(extra)
             if parent:
