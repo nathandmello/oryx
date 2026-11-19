@@ -182,24 +182,28 @@ def add_reading(item, event, metric):
             trigger(item, event, identifier)
 
 
-def correct(item, event):
+def correct(item, event, metrics):
     original = item["measurements"].get(event["measurement"])
     if not original or event["measurement"] in item["corrections"]:
         raise ValueError("Correct an active measurement in this initiative")
     if event["recorded_on"] < original["observed_on"]:
         raise ValueError("A correction cannot predate its reading")
     replacement = event.get("replacement")
+    if "comparison_source" in event and not replacement:
+        raise ValueError("Use comparison_source with a replacement for a legacy observation")
     if replacement:
         new = item["measurements"].get(replacement)
         if (not new or replacement == event["measurement"] or replacement in item["corrections"]
                 or any(c.get("replacement") == replacement for c in item["corrections"].values())
-                or role_key(new) != role_key(original) or new["observed_on"] > event["recorded_on"]):
+                or role_key(new) != role_key(original) or not usable(item, replacement, metrics)
+                or new["observed_on"] > event["recorded_on"]):
             raise ValueError("Choose a distinct active replacement for the same target or guardrail")
         if original.get("observation"):
             if basis_key(new) != basis_key(original):
                 raise ValueError("The replacement must cover the original observation's window and basis")
-        elif new["observed_on"] != original["observed_on"]:
-            raise ValueError("Confirm the same observation date when replacing a legacy reading")
+        elif (new["observed_on"] != original["observed_on"]
+              or not brief_review.has_answer(event.get("comparison_source", ""))):
+            raise ValueError("Confirm the matching legacy observation date, window and population with a comparison_source")
     item["corrections"][event["measurement"]] = event
     trigger(item, event, event["measurement"])
 
@@ -273,6 +277,12 @@ def review_snapshot(item, event, metrics):
             raise ValueError("Correct or account for conflicting observations: " + ", ".join(group))
     manual = [ref for ref, row in item["measurements"].items()
               if ref not in item["corrections"] and "observation" not in row and not metric_registry.reference_metric(metrics[row["metric"]])]
+    unconfirmed = []
+    for ref, row in item["measurements"].items():
+        if row.get("observation") and not row.get("guardrail") and ref not in item["corrections"]:
+            contract = row.get("contract") or metrics[row["metric"]].get("contract")
+            if not metric_registry.window_basis(contract):
+                unconfirmed.append(ref)
     if recent:
         required = set()
         for change in recent:
@@ -287,5 +297,5 @@ def review_snapshot(item, event, metrics):
         if required - cited:
             raise ValueError("Cite the material evidence before closing or scheduling follow-up: " + ", ".join(sorted(required - cited)))
     return {"guardrails": guards, "changes": list(recent), "conflicting_readings": conflicts,
-            "manually_assessed": manual, "unusable_measurements": [
+            "manually_assessed": manual, "unconfirmed_reporting_windows": unconfirmed, "unusable_measurements": [
         ref for ref in item["measurements"] if not usable(item, ref, metrics)]}

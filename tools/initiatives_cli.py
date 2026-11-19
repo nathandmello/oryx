@@ -63,7 +63,7 @@ def run(root, args):
                 "adopted_from": "For a historical threshold provide the original target metric ID, on date and source.",
                 "observation": "Supply definition reference, unit, population, basis, timezone, start, exclusive end, complete and source. Supply ratio inputs when applicable.",
                 "value": "Use a numeric value in the declared unit with an observation. Use decimal strings for exact figures.",
-                "correct-measurement": "Give the active measurement ID, reason, source and optional comparable replacement ID.",
+                "correct-measurement": "Give the active measurement ID, reason, source and optional comparable replacement ID. Cite comparison_source for a legacy reading.",
                 "guardrail_dispositions": "On review-outcomes, give each breached or unavailable guardrail ID and the PM's disposition.",
                 "recorded_on": "The Hub supplies the date of signing for new evidence transactions.",
             },

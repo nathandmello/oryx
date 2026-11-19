@@ -42,7 +42,7 @@ OPTIONAL_FIELDS = {
     "measurement": {"observation": "object", "restatement": "text"},
     "guardrail-reading": {"restatement": "text"},
     "guardrail": {"adopted_from": "object"},
-    "correct-measurement": {"replacement": "slug"},
+    "correct-measurement": {"replacement": "slug", "comparison_source": "text"},
 }
 
 FIELDS = {
@@ -423,7 +423,7 @@ class Register:
             metric = linked(self.metrics, event["metric"], "product metric")
             outcome_evidence.add_reading(item, event, metric)
         elif kind == "correct-measurement":
-            outcome_evidence.correct(item, event)
+            outcome_evidence.correct(item, event, self.metrics)
         else:
             self.decide(item, event, index)
 

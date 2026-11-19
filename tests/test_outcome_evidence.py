@@ -105,6 +105,16 @@ class OutcomeEvidenceTests(TestCase):
         self.assertTrue(current["missing_current_reading"])
         self.assertEqual(current["readings"][0]["assessed_as"], "within")
 
+    def test_legacy_supersession_needs_evidence_of_the_same_reporting_window(self):
+        h = self.h
+        h.submit(self.flow.measure(self.metric, "legacy", h.today), self.reading("replacement", "84"))
+        correction = self.correction("legacy", "replacement")
+        h.preview(correction, error="comparison_source")
+        h.submit(dict(correction, comparison_source="Both reports use the November 19 UTC pilot tenant cohort."))
+        h.submit(self.outcomes("met", "replacement"))
+        self.assertEqual(h.trace()["initiative"]["decisions"][-1]["evidence_review"]["unconfirmed_reporting_windows"],
+                         ["replacement"])
+
     def test_follow_up_cannot_hide_changed_data_or_supersession(self):
         h = self.h
         h.submit(self.reading("first", "99", observed=self.flow.yesterday))
@@ -191,13 +201,17 @@ class OutcomeEvidenceTests(TestCase):
                 event["value"] = "99 percent"
             if event.get("action") == "review-outcomes":
                 event.pop("evidence_review")
+        legacy = next(event for event in record["events"] if event["type"] == "measurement")
+        record["events"].insert(-1, {**legacy, "measurement": "second-unchecked-claim"})
         with patch.dict("os.environ", h.env):
             signature = initiative_store.sign(h.root, record, str(h.key))
         h.ledger.write_text(json.dumps({"record": record, "signature": signature}))
         before = h.ledger.read_bytes()
         view = h.trace()["initiative"]
         self.assertEqual(view["outcome_review"]["status"], "closed")
-        self.assertEqual(view["unusable_measurements"], ["old-claim"])
+        self.assertEqual(view["unusable_measurements"], ["old-claim", "second-unchecked-claim"])
+        h.preview(dict(self.correction("old-claim", "second-unchecked-claim"),
+                       comparison_source="Pilot export, matched cutoff and cohort"), error="distinct active replacement")
         self.assertEqual(h.ledger.read_bytes(), before)
         h.preview(self.outcomes("met", "old-claim"), error="unusable evidence")
         h.preview(self.flow.measure(self.metric, "second-claim", h.today), error="Supply an observation")

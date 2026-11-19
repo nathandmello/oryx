@@ -76,13 +76,15 @@ Check [the reporting window](metrics.md) for each observation. Use the exclusive
 }
 ```
 
-Propose the replacement reading first, or include both events in one proposal. Omit `replacement` to invalidate the original. The register retains both sources, the reason, signing date and original review. Correct a replacement by its active ID. Use the same metric, guardrail and observation window. For a legacy reading, confirm the observed date.
+Propose the replacement reading first, or include both events in one proposal. Omit `replacement` to invalidate the original. The register retains both sources, the reason, signing date and original review.
+
+Correct a replacement by its active ID. Use the same metric, guardrail and observation window. For a legacy replacement, match its observation date. Cite the original window and population evidence in `comparison_source`.
 
 ## Sign the outcome
 
 Review each target independently. Use `unmeasured` when it has no usable readings. Use `pending` and a dated follow-up when more evidence is expected. A registry reading from an older unstructured report needs checked evidence before a new conclusion can cite it.
 
-Inspect `evidence_review` in the proposal. A guardrail can breach while activation meets its target. Give the PM's reason or next action in `guardrail_dispositions`, keyed by each breached or unavailable guardrail. If the available guardrail reading predates the latest target observation, the review shows the coverage gap. Cite material changed readings even when scheduling another follow-up.
+Inspect `evidence_review` in the proposal. Verify unconfirmed reporting windows against the original sources. A guardrail can breach while activation meets its target. Give the PM's reason or next action in `guardrail_dispositions`, keyed by each breached or unavailable guardrail. If the available guardrail reading predates the latest target observation, the review shows the coverage gap. Cite material changed readings even when scheduling another follow-up.
 
 Inspect `backlog --due` after a correction or material reading. A signed disposition clears the reminder or schedules follow-up. The initiative trace retains historical breaches, missing evidence and the earlier decision.
 
