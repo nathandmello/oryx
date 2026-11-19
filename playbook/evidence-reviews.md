@@ -63,6 +63,9 @@ Use `dismiss` or `resolve` with the PM's reason and source. A changed claim or s
 
 A PM disposition cannot grant a policy exception. Record the decision owner's evidence through the existing context workflow.
 
+A signed ship decision preserves the active advisories and source claims the PM reviewed.
+Use [launch review](initiative-work.md#ship-decision) when those advisories change before signing.
+
 ## Existing workspaces
 
 Older context remains readable. Existing decision pairs can surface on lookup. A material legacy note can be reviewed through authorized evidence capture.

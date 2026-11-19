@@ -48,6 +48,7 @@ The task owner and named verifier retain their own roles. History records the da
 Use `/pm delivery launch review PRODUCT INITIATIVE` or ask “Are we ready to ship?”
 
 The ship proposal includes a scoped revision, upstream and launch checks, evidence history, waivers, and outstanding risks.
+Its `advisories` preserve active signal and context risks, their cited claims, authorities and current dispositions.
 Review missing phases, unresolved checks removed from scope, and attestations dated after the effective ship date.
 Use the PM’s stated reason and approving authority for each outstanding ID in `ship.exceptions`.
 
@@ -55,7 +56,9 @@ Use the PM’s stated reason and approving authority for each outstanding ID in 
 {"exceptions":{"missing:checklist":{"reason":"The incident commander verified rollback in drill R4.","authority":"Incident PM"}}}
 ```
 
-Prepare a fresh proposal when the reviewed evidence changes. The PM signs the [reviewed decision](initiative-approvals.md#propose-and-approve).
+Changes to a scoped advisory or its cited context evidence require a fresh proposal.
+Advisories inform the PM’s judgment. Only outstanding readiness IDs require a signed exception.
+The PM signs the [reviewed decision](initiative-approvals.md#propose-and-approve).
 Use `/pm initiative record show` to read the signed evidence after launch. Downstream changes continue separately.
 
 ### Existing records

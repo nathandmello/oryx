@@ -341,6 +341,59 @@ def applies_to_task(review, scope, areas, documents):
     return False
 
 
+def in_scope(doc, scope, areas, company):
+    return ((company and doc["company"]) or
+            (scope.get("product") and doc["product"] == scope["product"] and doc["area"] in {None, *areas}
+             and doc["initiative"] in (None, scope.get("initiative"))))
+
+
+def scoped_reviews(documents, selected, saved, scope, areas, through, *, recall_ids=(), recall_all=False):
+    candidates = pair_candidates(observations(selected, through))
+    reviews = {r["id"]: r for r in candidates if applicable(r, scope, areas)}
+    for key, review in saved.items():
+        recall_owner = (key in recall_ids or recall_all) and applicable(review, scope, areas)
+        if recall_owner or applies_to_task(review, scope, areas, documents):
+            reviews[key] = review
+    return reviews
+
+
+def launch_context(private, product_name, item):
+    """Read scoped context once, including current claims behind a recorded advisory."""
+    import task_context
+    through = date.today()
+    docs = task_context.context_documents(private, through=through)
+    areas = {subject.rsplit("/", 1)[-1] for subject in item["areas"]}
+    scope = {"product": product_name, "initiative": item["id"].split("/", 1)[1]}
+    selected = [doc for doc in docs.values() if in_scope(doc, scope, areas, True)]
+    reviews = scoped_reviews(docs, selected, stored(docs.values(), through.isoformat()), scope, areas, through)
+    active = {}
+    entries = {}
+    for key, review in reviews.items():
+        if review["state"] not in OPEN:
+            continue
+        evidence = []
+        for claim in review["claims"]:
+            name = claim.get("record") if isinstance(claim.get("record"), str) else None
+            if name in docs and name not in entries:
+                doc = docs[name]
+                relevant_areas = set(task_context.AREA.findall(doc["text"]))
+                entries[name] = list(task_context.linked_entries(doc, relevant_areas, through))
+            rows = [r for r in entries.get(name, []) if r["section"] == claim.get("section")]
+            matches = [r for r in rows if claim["text"] and claim["text"] in r["text"]]
+            if not matches:
+                sources = {source.get("Source") or source.get("reference") for source in claim.get("sources", [])
+                           if isinstance(source, dict)}
+                if isinstance(claim.get("source"), dict):
+                    sources.add(claim["source"].get("reference"))
+                matches = [r for r in rows if any(s["Source"] in sources for s in r["sources"])]
+            evidence.append({"record": name, "section": claim.get("section"), "current_entries": matches})
+        active[key] = {**review, "current_claim_evidence": evidence}
+        if review["classification"] == "unreadable history":
+            # This is a present diagnostic, with no known original opening date.
+            active[key].pop("on", None)
+    return active
+
+
 def workspace_reviews(private):
     import task_context
     if private is None:

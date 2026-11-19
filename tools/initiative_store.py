@@ -11,6 +11,7 @@ from tempfile import TemporaryDirectory
 
 from initiative_events import DISCOVERY_PLAN_SCOPE, Register, needs_reference, validate_event
 import brief_review
+import evidence_reviews
 import experiment_drafts
 import initiative_areas
 import initiative_intake
@@ -367,7 +368,16 @@ def prepare(root, product, changes, *, review_dates=None):
                 raise ValueError("Resolve the existing review gates:\n" + "\n".join(problems))
         if event.get("action") == "ship":
             reviewed_on = review_dates.get(len(accepted)) if review_dates else None
-            snapshot = initiative_work.ship_snapshot(root, product, event["initiative"], event["on"], reviewed_on)
+            item = register.items.get(event["initiative"])
+            if item is None:
+                raise ValueError(f"Unknown initiative in this product: {event['initiative']}")
+            private = storage.private_root(root)
+            advisories = {
+                "signals": {r["id"]: r for r in initiative_views.signal_reviews(private, item)
+                            if r["active"] and r["state"] != "routine"},
+                "context": evidence_reviews.launch_context(private, product, item),
+            }
+            snapshot = initiative_work.ship_snapshot(root, product, event["initiative"], event["on"], reviewed_on, advisories)
             if set(event.get("exceptions", {})) - snapshot["outstanding"].keys():
                 raise ValueError("Preview the current evidence. Ship exceptions must refer to current outstanding launch risks: "
                                  + ", ".join(sorted(snapshot["outstanding"])))

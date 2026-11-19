@@ -373,11 +373,11 @@ def load_work(root, product, initiative):
     return task_file, check_file
 
 
-def ship_snapshot(root, product, identifier, on, reviewed_on=None):
+def ship_snapshot(root, product, identifier, on, reviewed_on, advisories):
     slug = identifier.split("/")[1]
     (_, _, tasks, task_history), (_, raw, checks, history) = load_work(root, product, slug)
     return launch_readiness.snapshot(checks, history, tasks, task_history, present=raw is not None, effective_on=on,
-                                     reviewed_on=reviewed_on)
+                                     reviewed_on=reviewed_on, advisories=advisories)
 
 
 def run(root, args, *, write=False):

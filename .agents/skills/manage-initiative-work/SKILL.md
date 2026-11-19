@@ -26,7 +26,8 @@ Use this review for “Are we ready to ship?” and `/pm delivery launch review 
 3. Link supporting tasks. Ask the responsible person for evidence when verification is missing.
 4. Record evidence, verifier, and date for a confirmed check. Record any waiver with the approver and rationale.
 5. Name waivers, unresolved checks, and risks removed from launch scope. Identify downstream follow-through.
-6. Prepare a ship proposal when requested. Read its scoped revision and every outstanding risk with the PM.
+6. Prepare a ship proposal when requested. Review scoped signal and context advisories, their claims, and current dispositions.
+   Read every outstanding readiness check and its evidence with the PM.
 7. Record the PM’s reason and authority for each accepted exception. The PM signs through the [approval workflow](../../../playbook/initiative-approvals.md).
 8. Use `/pm initiative record show` to answer “Why did we ship?”
 

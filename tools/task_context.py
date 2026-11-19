@@ -323,9 +323,7 @@ def resolve(private, prompt="", *, cwd=None, previous=None, explicit=None, inclu
     entries = []
     review_documents = []
     for name, doc in docs.items():
-        if not ((company and doc["company"]) or
-                (product and doc["product"] == product and (doc["area"] is None or doc["area"] in areas)
-                 and doc["initiative"] in (None, initiative))):
+        if not evidence_reviews.in_scope(doc, scope, areas, company):
             continue
         review_documents.append(doc)
         if doc["kind"] == "context-note" and name not in prompt and not terms & words(doc["title"]):
@@ -335,12 +333,8 @@ def resolve(private, prompt="", *, cwd=None, previous=None, explicit=None, inclu
         if re.fullmatch(r"\d{4}-\d{2}-\d{2}", due) and due < date.today().isoformat():
             result["warnings"].append(f"Review overdue for {name}. Confirm current authority before relying on it.")
         entries.extend(linked_entries(doc, areas, through))
-    candidates = evidence_reviews.pair_candidates(evidence_reviews.observations(review_documents, through))
-    relevant = {r["id"]: r for r in candidates if evidence_reviews.applicable(r, scope, areas)}
-    for key, review in saved_reviews.items():
-        recall_owner = (key in risk_ids or include_history) and evidence_reviews.applicable(review, scope, areas)
-        if recall_owner or evidence_reviews.applies_to_task(review, scope, areas, docs):
-            relevant[key] = review
+    relevant = evidence_reviews.scoped_reviews(docs, review_documents, saved_reviews, scope, areas, through,
+                                              recall_ids=risk_ids, recall_all=include_history)
     for review in signed_reviews:
         relevant[("signal", review["initiative"], review["id"])] = review
     active = [r for r in relevant.values() if r.get("active", r["state"] in evidence_reviews.OPEN)

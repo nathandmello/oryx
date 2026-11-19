@@ -126,7 +126,7 @@ def concerns(row, history, tasks, task_history, effective_on):
     return issues
 
 
-def snapshot(checks, check_history, tasks, task_history, *, present, effective_on, reviewed_on=None):
+def snapshot(checks, check_history, tasks, task_history, *, present, effective_on, reviewed_on=None, advisories=None):
     checkpoints, linked_tasks, outstanding, removed = {}, {}, {}, {}
     phases = set()
     for key, row in sorted(checks.items()):
@@ -164,11 +164,20 @@ def snapshot(checks, check_history, tasks, task_history, *, present, effective_o
                 outstanding['missing:' + phase] = [f'No {phase} checkpoints were recorded.']
     facts = {'checklist_present': present, 'checkpoints': checkpoints, 'linked_tasks': linked_tasks,
              'removed_from_scope': removed, 'outstanding': outstanding}
+    if advisories is not None:
+        facts['advisories'] = advisories
     return {**facts, 'revision': digest(facts), 'reviewed_on': reviewed_on or date.today().isoformat()}
 
 
 def validate_snapshot(value):
     keys = {'checklist_present', 'checkpoints', 'linked_tasks', 'removed_from_scope', 'outstanding'}
+    # Preserve ship decisions signed before scoped advisories were available.
+    if isinstance(value, dict) and 'advisories' in value:
+        advisories = value['advisories']
+        if (not isinstance(advisories, dict) or advisories.keys() != {'signals', 'context'}
+                or not all(isinstance(records, dict) for records in advisories.values())):
+            raise ValueError('Invalid scoped launch advisories')
+        keys.add('advisories')
     if (not isinstance(value, dict) or value.keys() != keys | {'revision', 'reviewed_on'}
             or type(value['checklist_present']) is not bool
             or any(not isinstance(value[key], dict) for key in keys - {'checklist_present'})
