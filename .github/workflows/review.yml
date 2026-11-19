@@ -5,6 +5,8 @@ on:
     types: [opened, reopened, synchronize, edited, ready_for_review]
 permissions:
   contents: read
+  pull-requests: read
+  checks: read
 concurrency:
   group: hub-review-${{ github.event.pull_request.number }}
   cancel-in-progress: true
@@ -18,3 +20,5 @@ jobs:
         with:
           persist-credentials: false
       - run: python3 tools/release_review.py
+        env:
+          GH_TOKEN: ${{ github.token }}

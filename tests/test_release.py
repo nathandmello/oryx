@@ -133,26 +133,24 @@ class ReleaseReviewTests(unittest.TestCase):
     def setUp(self):
         self.head, self.merge = "a" * 40, "b" * 40
         self.pr = {"head": {"sha": self.head}, "base": {"ref": "main"}, "merged": True, "number": 9,
-                   "merge_commit_sha": self.merge, "body": f"""Reviewed commit: `{self.head}`
-
-## Engineering review
-Reviewer: Engineering reviewer
-Decision: pass
-Evidence: Verified backup integrity on interruption.
-## Quality review
-Reviewer: QA reviewer
-Decision: pass
-Evidence: Restored an installation with untracked work.
-## Consumer impact and recovery
+                   "merge_commit_sha": self.merge, "body": """## Consumer impact and recovery
 Verified fresh setup and rollback.
 ## Verification limits
 Desktop sessions were outside this fixture.
 """}
+        self.state = {key: {"commit_sha": self.head, "status": "completed", "has_unresolved_findings": False}
+                      for key in ("code_review", "security_review")}
+        self.bot = {"id": 199175422, "login": "chatgpt-codex-connector[bot]"}
         self.responses = {"git/commits/" + self.head: {"tree": {"sha": "tree"}},
                           "git/commits/" + self.merge: {"tree": {"sha": "tree"}}}
         self.runs = [{"id": 5, "run_number": 5, "run_attempt": 2, "pull_requests": [{"number": 9}], "conclusion": "success"}]
 
     def api(self, path):
+        if path.startswith("issues/9/comments?"):
+            body = "<!-- codex-pull-request-review-summary -->\n<!-- codex-review-state:v1 " + json.dumps(self.state) + " -->"
+            return [{"user": self.bot, "id": 1, "body": body}]
+        if "/check-runs?" in path:
+            return {"total_count": 0, "check_runs": []}
         if path.startswith("actions/workflows/review.yml/"):
             return {"workflow_runs": [dict(run, id=4) for run in self.runs]}
         if path.startswith("actions/runs/4/jobs?"):
@@ -168,14 +166,31 @@ Desktop sessions were outside this fixture.
         return release_review.publication(self.pr, "main", self.merge, self.api)
 
     def test_checks_current_reviews_and_rejects_stale_or_missing_evidence(self):
-        body = self.pr["body"]
-        for before, after in ((self.head, "c" * 40), ("QA reviewer", "Engineering reviewer"),
-                              ("Decision: pass", "Decision: outstanding"), ("Evidence: Verified", "<!-- Evidence: Verified")):
-            self.pr["body"] = body.replace(before, after, 1)
-            with self.assertRaises(ValueError):
-                self.gate()
-        self.pr["body"] = body
+        for key in self.state:
+            original = self.state[key].copy()
+            for change in ({"has_unresolved_findings": True}, {"has_unresolved_findings": None},
+                           {"commit_sha": "c" * 40}, {"status": "running"}):
+                self.state[key] = dict(original, **change)
+                with self.assertRaises(ValueError):
+                    self.gate()
+            self.state[key] = original
         self.gate()
+        self.bot["id"] = 1
+        with self.assertRaisesRegex(ValueError, "summary"):
+            self.gate()
+
+    def test_private_security_result_requires_a_successful_codex_check(self):
+        self.state["security_review"]["has_unresolved_findings"] = None
+        check = {"name": "Codex Security Review", "head_sha": self.head, "conclusion": "success",
+                 "app": {"slug": "chatgpt-codex-connector"}}
+        def api(path):
+            if "/check-runs?" in path:
+                return {"total_count": 1, "check_runs": [check]}
+            return self.api(path)
+        release_review.review(self.pr, api)
+        check["app"]["slug"] = "another-app"
+        with self.assertRaisesRegex(ValueError, "confirmed passing"):
+            release_review.review(self.pr, api)
 
     def test_publication_requires_reviewed_tree_latest_green_pr_and_merge(self):
         self.gate()

@@ -7,7 +7,7 @@ Each authorised merge into `main` publishes the version from that commit. Consum
 Inspect GitHub Releases, remote tags, Actions permissions and rulesets before the first merge. Start with the next available version.
 
 Require pull requests and the GitHub Actions checks `check` and `review`. Require current branches and dismiss stale approvals.
-Publication stops while GitHub reports an unprotected default branch. Restrict merges to authorised maintainers. Apply the rules to administrators. Disable direct pushes, force pushes and branch deletion.
+Publication stops while GitHub reports an unprotected default branch. Grant the merging agent access through the authorised maintainer account. Apply the rules to administrators. Disable direct pushes, force pushes and branch deletion.
 
 Run the checks on the setup PR before selecting their names in branch protection. Protect `v*` tags against updates and deletion.
 Permit the publisher to create new tags and Releases. Use a disposable GitHub repository to rehearse before enabling publication.
@@ -28,7 +28,13 @@ Update upgrade guidance when installation steps change. Describe the effect on e
 Linux tests the proposed merge tree. Native-sensitive changes also exercise macOS relocation, upgrade and restore.
 Update the path selector when introducing a new platform dependency. Drafts defer tests until ready. Description edits refresh review evidence.
 
-Complete the engineering and quality reviews against the final head. Update the branch and version if another PR merges first.
+Open the PR ready for review. Codex runs code and security reviews on the PR head.
+After a fix, request fresh reviews for that head if the integration has not started them automatically.
+The agent monitors the Codex summary and checks. It reruns the lightweight review job when both results arrive.
+
+Resolve code findings. Require an explicit clean security result or a successful Codex security check for the same commit.
+Enable the Codex security merge gate when the summary withholds findings. An unknown security outcome holds the merge.
+The agent merges with the verified head SHA after both reviews and required CI pass. Refresh stale branches before merging.
 
 ## Verify and recover
 

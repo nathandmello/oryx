@@ -10,20 +10,10 @@ import sys
 import time
 from urllib.error import HTTPError, URLError
 from urllib.parse import quote
-from urllib.request import Request, urlopen
 
 from release_candidate import VERSION, candidate_version
-from release_review import RetryPublication, publication
+from release_review import RetryPublication, github, publication
 from workspace import git
-
-
-def github(path, method="GET", data=None):
-    url = f"{os.environ['GITHUB_API_URL']}/repos/{os.environ['GITHUB_REPOSITORY']}/{path}"
-    request = Request(url, method=method, data=json.dumps(data).encode() if data is not None else None,
-                      headers={"Authorization": "Bearer " + os.environ["GH_TOKEN"],
-                               "Accept": "application/vnd.github+json", "Content-Type": "application/json"})
-    with urlopen(request, timeout=30) as response:
-        return json.load(response)
 
 
 def optional(api, path):
@@ -33,6 +23,33 @@ def optional(api, path):
         if exc.code != 404:
             raise
         return None
+
+
+def release_base(pr, merge, before, api):
+    root = Path.cwd()
+    parents = git(root, "show", "-s", "--format=%P", merge).split()
+    parent = parents[0]
+    if before == parent or len(parents) > 1 or pr["commits"] == 1:
+        return parent
+
+    # A multi-commit rebase recreates the PR's linear history on main. Prove the
+    # range using the reviewed trees, including the tree immediately before it.
+    originals = []
+    for page in range(1, min(3, (pr["commits"] + 99) // 100) + 1):
+        originals.extend(api(f"pulls/{pr['number']}/commits?per_page=100&page={page}"))
+    if len(originals) != pr["commits"]:
+        raise ValueError("Cannot verify the full rebased PR history")
+    history = git(root, "log", "--first-parent", "-n", str(len(originals) + 1),
+                  "--format=%H %T %P", merge).splitlines()
+    rows = [row.split() for row in reversed(history)]
+    if len(rows) == len(originals) + 1 and all(
+        len(row) == 3 and row[1] == source["commit"]["tree"]["sha"] and len(source["parents"]) == 1
+        for row, source in zip(rows[1:], originals)
+    ):
+        first_parent = originals[0]["parents"][0]["sha"]
+        if api(f"git/commits/{first_parent}")["tree"]["sha"] == rows[0][1]:
+            return rows[0][0]
+    return parent  # A squash has one new commit, even when its PR contained several.
 
 
 def select_candidate(event, ref, sha, api):
@@ -50,7 +67,7 @@ def select_candidate(event, ref, sha, api):
         matches = [pr for pr in pulls if pr["merge_commit_sha"] == sha and pr["base"]["ref"] == branch]
         if not matches:
             raise RetryPublication("Waiting for GitHub to associate the pushed commit with a merged PR")
-        if len(matches) != 1 or git(Path.cwd(), "rev-parse", sha + "^1") != event["before"]:
+        if len(matches) != 1:
             raise ValueError("Expected one release PR in this push")
         number = matches[0]["number"]
     if not re.fullmatch(r"[1-9][0-9]*", str(number)):
@@ -62,7 +79,11 @@ def select_candidate(event, ref, sha, api):
     if "inputs" not in event and merge != sha:
         raise ValueError("The merged PR changed after the push")
     publication(pr, branch, merge, api)
-    return pr, merge, candidate_version(merge + "^1", merge)
+    before = event.get("before")
+    base = release_base(pr, merge, before, api)
+    if "inputs" not in event and base != before:
+        raise ValueError("The pushed range does not match the merged PR")
+    return pr, merge, candidate_version(base, merge)
 
 
 def release_notes(pr):

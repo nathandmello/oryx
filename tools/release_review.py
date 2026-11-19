@@ -1,37 +1,70 @@
-"""Check the recorded engineering and quality reviews for a specific release candidate."""
+"""Check authenticated Codex code and security reviews for a specific release candidate."""
 
 import json
 import os
 import re
 import sys
 from urllib.parse import urlencode
+from urllib.request import Request, urlopen
 
 
 class RetryPublication(ValueError):
     """GitHub has not finished reporting the candidate or publication."""
 
 
-def review(pr):
+def github(path, method="GET", data=None):
+    url = f"{os.environ['GITHUB_API_URL']}/repos/{os.environ['GITHUB_REPOSITORY']}/{path}"
+    request = Request(url, method=method, data=json.dumps(data).encode() if data is not None else None,
+                      headers={"Authorization": "Bearer " + os.environ["GH_TOKEN"],
+                               "Accept": "application/vnd.github+json", "Content-Type": "application/json"})
+    with urlopen(request, timeout=30) as response:
+        return json.load(response)
+
+
+def review(pr, api):
     body = (pr.get("body") or "").replace("\r\n", "\n")
-    head = pr["head"]["sha"]
-    if not re.fullmatch(r"[0-9a-f]{40}", head) or re.findall(r"(?m)^Reviewed commit: `([0-9a-f]{40})` *$", body) != [head]:
-        raise ValueError("Record both reviews for the current pull request head")
-    reviewers = []
-    for title in ("Engineering review", "Quality review", "Consumer impact and recovery", "Verification limits"):
+    for title in ("Consumer impact and recovery", "Verification limits"):
         sections = re.findall(r"^## " + title + r"[ \t]*\n(.*?)(?=^## |\Z)", body, re.M | re.S)
         if len(sections) != 1 or not sections[0].strip() or "<!--" in sections[0]:
             raise ValueError(f"Complete the {title} section")
-        if title.endswith("review"):
-            for field in ("Reviewer", "Decision", "Evidence"):
-                values = re.findall(r"^" + field + r":[ \t]*(.+?)\s*$", sections[0], re.M)
-                if len(values) != 1 or not values[0].strip() or values[0].strip().lower() in {"tbd", "pending", "todo"}:
-                    raise ValueError(f"Record {field.lower()} under {title}")
-                if field == "Reviewer":
-                    reviewers.append(values[0].strip().casefold())
-                if field == "Decision" and values[0].strip().casefold() != "pass":
-                    raise ValueError(f"Resolve the outstanding {title.lower()}")
-    if reviewers[0] == reviewers[1]:
-        raise ValueError("Identify the independent engineering and quality reviewers")
+
+    head = pr["head"]["sha"]
+    summaries = []
+    page = 1
+    while True:
+        comments = api(f"issues/{pr['number']}/comments?per_page=100&page={page}")
+        for comment in comments:
+            if comment["user"]["login"] != "chatgpt-codex-connector[bot]" or comment["user"]["id"] != 199175422:
+                continue
+            lines = comment["body"].splitlines()
+            if lines[:1] == ["<!-- codex-pull-request-review-summary -->"]:
+                summaries.append(comment)
+        if len(comments) < 100:
+            break
+        page += 1
+    if not summaries:
+        raise ValueError("Waiting for the Codex review summary")
+    latest = max(summaries, key=lambda item: item["id"])
+    match = re.search(r"^<!-- codex-review-state:v1 (.+) -->$", latest["body"], re.M)
+    if not match:
+        raise ValueError("Codex review state is unavailable")
+    state = json.loads(match[1])
+    for key in ("code_review", "security_review"):
+        result = state[key]
+        if result["commit_sha"] != head or result["status"] != "completed":
+            raise ValueError(f"Waiting for {key} on the current PR commit")
+        if result.get("has_unresolved_findings") is False:
+            continue
+        if key == "security_review" and result.get("has_unresolved_findings") is None:
+            # The public summary can omit private security findings. Use the app's
+            # current-commit check when it supplies the security decision separately.
+            checks = api(f"commits/{head}/check-runs?filter=latest&per_page=100")
+            security = [check for check in checks["check_runs"]
+                        if check["head_sha"] == head and (check.get("app") or {}).get("slug") == "chatgpt-codex-connector"
+                        and check["name"].casefold() in {"codex security", "codex security review"}]
+            if checks["total_count"] <= 100 and security and all(check["conclusion"] == "success" for check in security):
+                continue
+        raise ValueError(f"{key} needs a confirmed passing result for the current PR commit")
 
 
 def detached_pr_runs(pr, runs, api):
@@ -76,7 +109,7 @@ def successful_run(pr, workflow, api):
 
 
 def publication(pr, branch, sha, api):
-    review(pr)
+    review(pr, api)
     if not (pr["merged"] and pr["base"]["ref"] == branch and pr["merge_commit_sha"] == sha):
         raise ValueError("Select the merged pull request for this commit and default branch")
     tree = api("git/commits/" + sha)["tree"]["sha"]
@@ -97,7 +130,7 @@ def publication(pr, branch, sha, api):
 def main():
     with open(os.environ["GITHUB_EVENT_PATH"], encoding="utf-8") as stream:
         event = json.load(stream)
-    review(event["pull_request"])
+    review(event["pull_request"], github)
     print("PM Hub release review passed.")
 
 

@@ -41,7 +41,7 @@ class CandidateTests(unittest.TestCase):
             before = commit("0.3.5")
             first = commit("0.3.6")
             second = commit("0.3.7")
-            pr = {"number": 11, "base": {"ref": "main"}, "merge_commit_sha": first}
+            pr = {"number": 11, "commits": 1, "base": {"ref": "main"}, "merge_commit_sha": first}
             responses = {"branches/main": {"protected": True}, "pulls/11": pr,
                          f"commits/{first}/pulls?per_page=100": [pr]}
             api = responses.__getitem__
@@ -59,6 +59,18 @@ class CandidateTests(unittest.TestCase):
                 responses["branches/main"] = {"protected": False}
                 with self.assertRaisesRegex(ValueError, "protections"):
                     publisher.select_candidate(retry, "refs/heads/main", second, api)
+            # A rebased PR can bump its version before its final commit.
+            git("commit", "--allow-empty", "-qm", "Finish reviewed docs")
+            tip = git("rev-parse", "HEAD")
+            source = [{"parents": [{"sha": git("rev-parse", sha + "^1")}],
+                       "commit": {"tree": {"sha": git("rev-parse", sha + "^{tree}")}}} for sha in (second, tip)]
+            responses["pulls/11/commits?per_page=100&page=1"] = source
+            responses["git/commits/" + first] = {"tree": {"sha": git("rev-parse", first + "^{tree}")}}
+            pr.update(commits=2, merge_commit_sha=tip)
+            self.assertEqual(publisher.release_base(pr, tip, first, api), first)
+            self.assertEqual(publisher.release_base(pr, tip, None, api), first)
+            source[0]["commit"]["tree"]["sha"] = "unrelated"
+            self.assertEqual(publisher.release_base(pr, tip, first, api), second)
             with self.assertRaisesRegex(ValueError, "Increase"):
                 candidate.candidate_version(first, first)
             os.chdir(previous)

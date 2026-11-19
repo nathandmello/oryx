@@ -114,7 +114,7 @@ The Git wrapper checks the target and requires a fast-forward update. Session st
 
 After pulling, open the Hub and work as usual. The agent handles [existing-workspace alignment](playbook/updates.md) and raises decisions that need you.
 
-Shared CI runs `check --system-only` and tests against fictional workspaces. Follow [the engineering and quality gates](playbook/git.md#engineering-and-quality-review-before-publication) before publication. Local checks also inspect ignored private records explicitly.
+Shared CI runs `check --system-only` and tests against fictional workspaces. Follow [the Codex review gates](playbook/git.md#codex-review-before-publication) before publication. Local checks also inspect ignored private records explicitly.
 
 ## Hooks and checks
 

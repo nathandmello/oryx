@@ -40,7 +40,7 @@ Use [review-hub-upgrade](../review-hub-upgrade/SKILL.md) for user handoff. Expla
 
 Verify direct shared Git pulls and released wrappers against the actual release version and private format.
 
-Follow [the prepublication gates](../../../playbook/git.md#engineering-and-quality-review-before-publication). Record independent engineering and quality reviews for the current pull request commit. Retest fixes and state verification limits.
+Follow [the prepublication gates](../../../playbook/git.md#codex-review-before-publication). Open ready for Codex code and security review. Merge the verified head after both reviews and required CI pass. Retest fixes and state verification limits.
 
 The PM's request authorises work within its scope. Ask only for a missing decision or an action outside that authority.
 
