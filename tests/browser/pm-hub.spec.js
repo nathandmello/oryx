@@ -139,6 +139,7 @@ test("compare and sign a cycle, filter the board, and approve a drag change", as
   expect(hub.cli(["roadmap", "--product", "example"]).find(row => row.id === renewalID).trade_off).toBe(tradeoff);
   await button(page, "Refresh").click();
   const placement = card(page, "Renewal delays");
+  await expect(placement.locator("details")).toContainText(tradeoff);
   await placement.getByText("Details", { exact: true }).click();
   await expect(placement.getByText(tradeoff, { exact: true })).toBeVisible();
 
