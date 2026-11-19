@@ -51,7 +51,7 @@
     },
     "gitlab-premium-renewal": {
       "compare": false,
-      "request": "Review two historical support cases under the terms in this packet. Both customers had an existing annual GitLab Premium subscription. Their first renewal under the new pricing falls on April 2 and April 3, 2024, respectively. Which customer can use the transition offer? Propose where the rule belongs and the lead a PM should see.",
+      "request": "Review two historical support cases under the terms in this packet. Both customers had an existing annual GitLab Premium subscription. Their first renewal under the new pricing falls on April 2 and April 3, 2024, respectively. Which customer can use the transition offer, and how does it relate to the list price in the draft? Propose where the rule belongs and the lead a PM should see.",
       "artifact": "Company context draft\n\n## Business model\n\nGitLab Premium list price rose to $29 per user per month in 2023.\n\n## Renewal pricing\n\nExisting Premium customers pay $24 per user per month.",
       "sources": [
         {
@@ -138,7 +138,7 @@
     },
     "stripe-billing-period-versions": {
       "compare": false,
-      "request": "A billing PM must write handoff guidance for an integration pinned to 2024-06-20 and one moving to 2025-03-31.basil. Where should each find the period end? The pinned integration will run for another quarter. Propose the context heading and lead, with citations.",
+      "request": "A billing PM must write handoff guidance for an integration pinned to 2024-06-20 and one moving to 2025-03-31.basil. Where should each find the period end? The pinned integration will run for another quarter. Propose the context heading and lead, with citations, and say where the PM should track migration work.",
       "artifact": "Billing product brief\n\n## Subscription dates\n\nAlways use the subscription's current_period_end.\n\nThe Basil track and the older track have separate delivery plans.",
       "sources": [
         {
