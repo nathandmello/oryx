@@ -157,11 +157,11 @@ def note_contract(private, name, parent, basis, reason, trigger, topic_question=
         raise ValueError("Choose an existing owning overview or work artifact")
     with parent_path.open(encoding="utf-8") as stream:
         marker = records.MARKER.match(stream.readline())
-    if not marker or (marker[1] not in layout.WORK_FOLDERS and
-                      (layout.brief_kind(parent) != marker[1] or home(parent) != owner)):
+    if marker and (marker[1] in layout.WORK_FOLDERS or marker[1] in records.OPPORTUNITY_KINDS):
+        if not layout.valid_work(parent, marker[1]):
+            raise ValueError("Choose a working artifact from workspace/")
+    elif not marker or layout.brief_kind(parent) != marker[1] or home(parent) != owner:
         raise ValueError("Choose the owning entity overview or a specific work artifact")
-    if marker[1] in layout.WORK_FOLDERS and not layout.valid_work(parent, marker[1]):
-        raise ValueError("Choose a working artifact from workspace/")
     if basis not in BASES:
         raise ValueError("Choose a separate record basis: " + ", ".join(BASES))
     check_purpose(reason, trigger)
@@ -228,7 +228,6 @@ def add_contract(text, private, target, contract):
 
 def check_new(private, kind, name, title, retiring=()):
     path = note_path(private, name)
-    owner = home(name)
     if re.search(r"-(?:copy|final|v\d+)$", path.stem):
         raise ValueError("Update the owning record or use a specific independent subject")
     import layout_upgrade
@@ -238,6 +237,7 @@ def check_new(private, kind, name, title, retiring=()):
     error = records.context_location(kind, name)
     if error:
         raise ValueError(error)
+    owner = home(name)
     if kind == "context-note" and path.parent != private / owner:
         valid_topic(path.parent.name)
     label = (title or path.stem.replace("-", " ")).strip().casefold()

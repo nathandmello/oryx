@@ -13,7 +13,8 @@ from urllib.parse import quote, unquote, urlsplit, urlunsplit
 from uuid import uuid4
 
 CONTEXT_KINDS = ("company-context", "product-context", "product-area-context", "initiative-context", "context-note")
-KINDS = (*CONTEXT_KINDS, "goal", "problem", "strategy", "experiment", "roadmap")
+OPPORTUNITY_KINDS = ("discovery-brief", "initiative-brief", "prioritization")
+KINDS = (*CONTEXT_KINDS, "goal", "problem", "strategy", "experiment", "roadmap", *OPPORTUNITY_KINDS)
 FIELDS = ("ID", "State", "Mode", "Last checkpoint", "Next action", "Waiting on", "Resume when")
 STATES = {"draft", "active", "waiting", "complete"}
 MODES = {"thought-partner", "quiet"}
@@ -156,6 +157,9 @@ def is_area_path(path):
 
 
 def context_location(kind, path):
+    if kind in OPPORTUNITY_KINDS:
+        import opportunities
+        return opportunities.location_error(kind, path)
     if kind == "context-note":
         try:
             owner = layout.entity(path)
@@ -425,7 +429,8 @@ def validate(texts):
                 break
             seen.add(current)
             current = parents[current]
-    return errors
+    import opportunities
+    return errors + opportunities.validate(texts)
 
 
 def retarget_links(text, source, target, root, copies=None):
@@ -444,7 +449,7 @@ def retarget_links(text, source, target, root, copies=None):
     return re.sub(r"\[([^\]\n]+)\]\((<[^>\n]+>|[^\s)]+)\)", retarget, text)
 
 
-def create(root, kind, destination, title=None, owner="", filing_contract=None, product_parent=None):
+def create(root, kind, destination, title=None, owner="", filing_contract=None, product_parent=None, initiative_id=None):
     root = root.resolve()
     relative = Path(destination)
     if relative.is_absolute() or relative.parts[:1] not in (("context",), ("workspace",)):
@@ -460,7 +465,7 @@ def create(root, kind, destination, title=None, owner="", filing_contract=None, 
         raise ValueError(f"Unknown template: {kind}")
     if context_location(kind, relative):
         raise ValueError(context_location(kind, relative))
-    text = draft_text(root, kind, target, title, owner, product_parent=product_parent)
+    text = draft_text(root, kind, target, title, owner, product_parent=product_parent, initiative_id=initiative_id)
     if filing_contract:
         if kind == "product-area-context":
             text = text.replace("{{Area release, closed decision, new evidence, or changed product rules.}}", filing_contract["trigger"])
@@ -472,7 +477,7 @@ def create(root, kind, destination, title=None, owner="", filing_contract=None, 
     return target
 
 
-def draft_text(root, kind, target, title=None, owner="", product_parent=None):
+def draft_text(root, kind, target, title=None, owner="", product_parent=None, initiative_id=None):
     source = root / "templates" / f"{kind}.md"
     if source.resolve() != source:
         raise ValueError("Templates must be regular files inside PM Hub")
@@ -480,6 +485,10 @@ def draft_text(root, kind, target, title=None, owner="", product_parent=None):
     marker = MARKER.match(text)
     if not marker or marker[1] != kind or work_state(text)[1]:
         raise ValueError("Repair the source template before creating a draft")
+    if kind in layout.INITIATIVE_BRIEFS:
+        if not initiative_id or (section(text, "Parent initiative") or "").strip() != "{{initiative_id}}":
+            raise ValueError("Use the registered initiative ID and the brief template's Parent initiative section")
+        text = text.replace("{{initiative_id}}", initiative_id)
     if kind == "product-area-context" and title is None:
         title = target.parent.name.replace("-", " ").capitalize() + " context"
     title = title or target.stem.replace("-", " ").capitalize()

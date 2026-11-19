@@ -1,6 +1,7 @@
 """Exercise accepted and rejected changes in disposable checkouts."""
 
 import json
+import os
 from datetime import date, timedelta
 from pathlib import Path
 import re
@@ -170,6 +171,7 @@ class HubTests(unittest.TestCase):
         guidance = json.loads(startup.stdout)["hookSpecificOutput"]["additionalContext"]
         self.assertIn("automatically read", guidance)
         self.assertIn("ingest-context/SKILL.md", guidance)
+        self.assertIn("playbook/opportunities.md", guidance)
         for tool, inputs, denied in (
             ("apply_patch", {"command": "*** Begin Patch\n*** Add File: company-audit.md\n+x\n*** End Patch"}, True),
             ("apply_patch", {"command": "*** Add File: ../context/products/example/overview.md\n+x"}, True),
@@ -191,6 +193,45 @@ class HubTests(unittest.TestCase):
                 else:
                     self.assertEqual(output, {})
 
+    def test_hooks_route_registered_files_and_preserve_plain_work(self):
+        register = self.work / "workspace/backlogs/alpha/initiatives.json"
+        register.parent.mkdir(parents=True)
+        register.write_text("{}")
+        for action in ("Delete File", "Move to", "Add File", "Update File"):
+            event = {"tool_name": "apply_patch", "tool_input": {"command": f"*** {action}: {register}"}}
+            self.assertIn("initiative propose", hook.edit_guard(self.root, self.work, event)["hookSpecificOutput"]["permissionDecisionReason"])
+        def reason(relative):
+            event = {"tool_name": "Write", "tool_input": {"file_path": str(self.work / relative), "content": "Draft"}}
+            return hook.edit_guard(self.root, self.work, event).get("hookSpecificOutput", {}).get("permissionDecisionReason", "")
+        self.assertIn("initiative draft-experiment", reason("workspace/experiments/alpha/reminders/experiment.rate.draft.json"))
+        self.assertIn("pm.py new", reason("workspace/initiatives/alpha/reminders/initiative-brief.md"))
+        self.assertIn("pm.py new", reason("workspace/roadmaps/alpha/quarter-one.md"))
+        self.assertIn("pm.py backlog", reason("workspace/backlogs/alpha.md"))
+        self.assertIn("pm.py roadmap", reason("workspace/roadmaps/alpha.md"))
+        self.assertEqual(reason("workspace/backlogs/support.md"), "")
+        self.assertEqual(reason("workspace/initiatives/support/plan.md"), "")
+        self.assertEqual(reason("context/company/sources/initiatives.json"), "")
+        (self.work / "workspace/backlogs/alpha.md").write_text("# Historical working notes")
+        self.assertEqual(reason("workspace/backlogs/alpha.md"), "")
+
+    @unittest.skipUnless(os.name == "posix", "shared read-only POSIX locks")
+    def test_shared_writer_holds_both_repository_locks_without_write_access(self):
+        import fcntl
+        import grp
+        import storage
+        paths = [repo / ".git" / "pm-hub-writer.lock" for repo in (self.root, self.work)]
+        for path in paths:
+            path.touch()
+            path.chmod(0o440)
+        group = grp.getgrgid(self.work.stat().st_gid).gr_name
+        with patch.dict(os.environ, {storage.SHARED_GROUP: group}), storage.writer_lock(self.work):
+            for path in paths:
+                with path.open("rb") as independent:
+                    with self.assertRaises(BlockingIOError):
+                        fcntl.flock(independent, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        for path in paths:
+            self.assertEqual(path.stat().st_mode & 0o777, 0o440)
+
     def test_each_template_creates_a_valid_unfinished_draft(self):
         import filing
         paths = {"company-context": "context/company/overview.md", "product-context": "context/products/example/overview.md",
@@ -199,7 +240,7 @@ class HubTests(unittest.TestCase):
                  "goal": "workspace/goals/example.md", "problem": "workspace/problems/example.md",
                  "strategy": "workspace/strategies/example.md", "experiment": "workspace/experiments/example.md",
                  "roadmap": "workspace/roadmaps/example.md"}
-        self.assertEqual(set(paths), set(records.KINDS))
+        self.assertEqual(set(paths), set(records.KINDS) - set(records.OPPORTUNITY_KINDS))
         for kind, path in paths.items():
             args = {}
             if kind == "product-area-context":

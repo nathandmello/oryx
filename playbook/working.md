@@ -55,7 +55,7 @@ Resume on The PM's request. Dates and events guide review; they do not create ba
 
 Use the [template index](../templates/README.md) to create a working artifact. Fill only what the current step establishes.
 
-Use [the framework](framework.md) as the method reference. Keep detailed engineering artifacts in the configured delivery system.
+Use [the framework](framework.md) as the method reference. Use [opportunity decisions](opportunities.md) to resume from the current phase. Keep detailed engineering artifacts in the configured delivery system.
 
 Use `red-team` when the PM asks to challenge a product decision, its assumptions, or the evidence supporting it. Supply the artifact, its maturity, the decision at stake, and relevant sources.
 

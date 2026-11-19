@@ -15,11 +15,15 @@ Create only the artifact needed for the current work. Templates guide thought; t
 | [Problem](problem.md) | Customer problem, evidence, knowledge audit, and research | `workspace/problems/` |
 | [Strategy](strategy.md) | Why, Who, What, and How | `workspace/strategies/` |
 | [Experiment](experiment.md) | Hypothesis, test, measure, criterion, and result | `workspace/experiments/` |
-| [Roadmap](roadmap.md) | Ordered outcomes and their rationale | `workspace/roadmaps/` |
+| [Discovery Brief](discovery-brief.md) | Timebox, learning goals, evidence, and conclusion | `workspace/initiatives/<product>/<initiative>/discovery-brief.md` |
+| [Initiative Brief](initiative-brief.md) | Investment case, scope, launch, and success measures | `workspace/initiatives/<product>/<initiative>/initiative-brief.md` |
+| [Prioritization](prioritization.md) | Comparison of approved candidates for a planning cycle | `workspace/roadmaps/<product>/<cycle>.md` |
+| [Roadmap](roadmap.md) | Narrative roadmap for work outside the signed initiative register | `workspace/roadmaps/` |
 
 Create a [PM profile](../playbook/context.md#pm-remit) with `new pm-context context/pm/context.md`. Add background and preferences directly in Markdown.
 
-Backlogs in `workspace/backlogs/<subject>.md` and plans in `workspace/initiatives/<initiative>/plan.md` use ordinary Markdown. Cite the applicable entity context.
+Registered initiatives share one signed product register. Generate their live backlog and roadmap with the [view templates](../playbook/initiative-views.md).
+Ordinary Markdown can hold other working plans. Cite the applicable company, product, or area context.
 
 ## Create a draft
 
@@ -45,7 +49,19 @@ python3 tools/pm.py new product-area-context context/products/example/areas/refu
   --trigger "Finance changes the refund policy."
 ```
 
-The command creates a draft with a stable ID and a work-state block. It refuses an existing destination.
+Create registered briefs after capture. The command fills the Parent initiative section from the signed register. For the fictional product `checkout` and initiative `refund-delays`, run:
+
+```sh
+python3 tools/pm.py new discovery-brief workspace/initiatives/checkout/refund-delays/discovery-brief.md
+python3 tools/pm.py new initiative-brief workspace/initiatives/checkout/refund-delays/initiative-brief.md
+python3 tools/pm.py new prioritization workspace/roadmaps/checkout/quarter-two.md
+```
+
+Follow [the initiative workflow](../playbook/opportunities.md) for the applicable decision gates.
+
+For registered initiative metrics, use the [named experiment draft](../playbook/opportunities.md#start-an-experiment-draft). The register supplies the metric definition.
+
+The Markdown command creates a draft with a stable ID and a work-state block. It refuses an existing destination.
 
 `{{placeholders}}` are intentional gaps. Drafts can keep them. Active work needs a checkpoint and next action; waiting work also needs a dependency and resume trigger.
 

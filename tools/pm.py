@@ -23,7 +23,12 @@ import filing
 import conversion
 import layout
 import layout_upgrade
+import opportunities
 import pm_profile
+import initiatives_cli
+import initiative_store
+import initiative_views
+import experiment_drafts
 
 ROOT = Path(__file__).resolve().parents[1]
 REQUIRED = (
@@ -39,7 +44,14 @@ REQUIRED = (
     ".agents/skills/red-team/SKILL.md", ".claude/skills/red-team/SKILL.md",
     "playbook/git.md", "playbook/updates.md", "playbook/release.json", "tools/workspace-seed/README.md",
     "tools/workspace-seed/context/README.md", "tools/workspace-seed/workspace/README.md",
-    "tools/workspace-seed/.gitignore",
+    "tools/workspace-seed/.gitignore", "tools/opportunities.py", "tools/brief_review.py", "playbook/opportunities.md",
+    "tools/initiative_events.py", "tools/initiative_store.py", "tools/initiatives_cli.py", "tools/initiative_views.py",
+    "tools/initiative_areas.py", "tools/initiative_intake.py", "tools/experiment_drafts.py",
+    "templates/views/backlog.json", "templates/views/roadmap.json",
+    "playbook/initiative-approvals.md", "playbook/initiative-views.md",
+    ".agents/skills/manage-backlog/SKILL.md", ".agents/skills/run-discovery/SKILL.md",
+    ".agents/skills/run-discovery/plan.md", ".agents/skills/run-discovery/investigate.md",
+    ".agents/skills/define-initiative/SKILL.md", ".agents/skills/prioritize-roadmap/SKILL.md",
 )
 ROOT_FILES = {"README.md", "AGENTS.md", "CLAUDE.md", ".gitignore"}
 ROOT_DIRS = {"playbook", "templates", "tools", "tests",
@@ -273,7 +285,8 @@ def check_workspace(root: Path, system_texts: dict[str, str]) -> list[str]:
         context_capture.read_remit(private)
     except (OSError, ValueError) as exc:
         errors.append(f"private/{context_capture.REMIT_PATH}: {exc}")
-    for path in inventory(private):
+    files = inventory(private)
+    for path in files:
         rel = path.relative_to(private).as_posix()
         label = f"private/{rel}"
         if path.is_symlink() or any(p.is_symlink() for p in path.parents if p != root):
@@ -297,7 +310,9 @@ def check_workspace(root: Path, system_texts: dict[str, str]) -> list[str]:
         if not old_record and not is_source and ((len(parts) == 1 and rel not in {"README.md", ".gitignore", "settings.json", upgrades.LEDGER, conversion.PENDING})
                 or (len(parts) > 1 and parts[0] not in {"context", "workspace"})):
             errors.append(f"{label}: use a home from the README placement map")
-        if not is_source and not old_record and len(parts) > 1 and parts[0] in {"context", "workspace"} and path.suffix.lower() != ".md":
+        managed = opportunities.path_kind(rel)
+        if (not is_source and not old_record and len(parts) > 1 and parts[0] in {"context", "workspace"}
+                and path.suffix.lower() != ".md" and managed not in {"register", "experiment-draft"}):
             errors.append(f"{label}: file original evidence under sources/ and use Markdown for active artifacts")
         if not is_source and not old_record and any(ARTIFACT.search(Path(part).stem) for part in parts):
             errors.append(f"{label}: engineering artifacts belong in the delivery system")
@@ -316,9 +331,12 @@ def check_workspace(root: Path, system_texts: dict[str, str]) -> list[str]:
                             if parts[0] == "context" and not marker:
                                 raise ValueError("Use a typed reference in its context entity or retain an original source")
                             if parts[0] == "workspace":
-                                if not layout.valid_work(rel):
+                                if managed in records.OPPORTUNITY_KINDS:
+                                    if not marker or marker[1] != managed:
+                                        raise ValueError(f"Use the matching {managed} template for this file")
+                                elif not layout.valid_work(rel):
                                     raise ValueError("Use a work type and subject from the workspace filing rules")
-                                if parts[1] in layout.WORK_FOLDERS.values() and (not marker or layout.WORK_FOLDERS.get(marker[1]) != parts[1]):
+                                elif parts[1] in layout.WORK_FOLDERS.values() and (not marker or layout.WORK_FOLDERS.get(marker[1]) != parts[1]):
                                     raise ValueError("Use the matching typed artifact for this working folder")
                         filing.verify_note(private, rel, texts[rel])
                 except ValueError as exc:
@@ -332,6 +350,15 @@ def check_workspace(root: Path, system_texts: dict[str, str]) -> list[str]:
     for required in ("README.md", ".gitignore", "settings.json", "context/README.md", "workspace/README.md"):
         if not (private / required).is_file():
             errors.append(f"private/{required}: required file is missing")
+    try:
+        registrations = dict(initiative_store.registrations(root))
+        errors.extend(f"private/{e}" for e in experiment_drafts.misplaced(private, files, registrations))
+        for product, register in registrations.items():
+            errors.extend(f"private/{e}" for e in experiment_drafts.check(private, product, register))
+            errors.extend(f"private/: {error}" for error in initiative_store.live_errors(root, register))
+        errors.extend(f"private/{error}" for error in initiative_store.draft_errors(texts, registrations))
+    except (OSError, ValueError, subprocess.SubprocessError) as exc:
+        errors.append(f"private/: {exc}")
     templates = {p: t for p, t in system_texts.items() if p.startswith("templates/")}
     errors.extend(f"private/{e}" for e in records.validate(dict(templates, **texts)))
     return errors
@@ -378,6 +405,11 @@ def check(root: Path = ROOT, include_workspace=True) -> list[str]:
     if texts.get("CLAUDE.md", "").strip() != "@AGENTS.md":
         errors.append("CLAUDE.md: import AGENTS.md without duplicate instructions")
     errors.extend(skill_errors(root, safe))
+    for view in ("backlog", "roadmap"):
+        try:
+            initiative_views.view_template(root, view)
+        except (OSError, ValueError) as exc:
+            errors.append(f"templates/views/{view}.json: {exc}")
     errors.extend(guidance_errors(root, texts))
     errors.extend(hook_errors(texts))
     errors.extend(records.validate(texts))
@@ -461,6 +493,7 @@ def filing_validator(root, *, legacy_replay=False):
 
 def alignment(root, prepare=False, record=None, outcome=None, digest=None, note=None, backup=None, for_conversion=False):
     def inspect(private):
+        layout_upgrade.require_supported_registers(private)
         settings_file = private / "settings.json"
         original = settings_file.read_text(encoding="utf-8")
         settings = workspace.settings(root, compatible=False)
@@ -597,6 +630,7 @@ def main() -> int:
     new.add_argument("--topic-peer")
     new.add_argument("--reason")
     new.add_argument("--trigger")
+    initiatives_cli.add_commands(commands)
     route = commands.add_parser("route-context", help="Route supplied context evidence from JSON on stdin")
     route.add_argument("--write", metavar="PATH", help="Apply entries to one authorised context record")
     area = commands.add_parser("area-context", help="Locate a product area's context and its source records")
@@ -656,6 +690,11 @@ def main() -> int:
                 result = subprocess.run([os.sys.executable, str(ROOT / "tools/pm.py"), "check"])
                 return result.returncode
             return 0
+        if args.command in {"backlog", "roadmap", "initiative"}:
+            if args.command == "initiative" and args.operation in {"apply", "sync-drafts", "draft-experiment"}:
+                prepare_private_write(ROOT)
+            initiatives_cli.run(ROOT, args)
+            return 0
         if args.command == "new":
             workspace.repo(ROOT, "workspace")
             settings = prepare_private_write(ROOT)
@@ -670,6 +709,7 @@ def main() -> int:
                 return 0
             with storage.writer_lock(private):
                 filing.check_new(private, args.kind, args.path, args.title)
+                initiative_id = initiative_store.verify_draft_home(ROOT, args.kind, args.path)
                 contract = None
                 parent = None
                 if args.kind != "context-note" and (args.topic_question or args.topic_peer):
@@ -683,7 +723,8 @@ def main() -> int:
                     parent = args.parent
                 elif any((args.parent, args.basis, args.reason, args.trigger)):
                     raise ValueError("Filing details apply to supporting context notes")
-                created = records.create(ROOT, args.kind, args.path, args.title, owner=settings["owner"], filing_contract=contract, product_parent=parent)
+                created = records.create(ROOT, args.kind, args.path, args.title, owner=settings["owner"], filing_contract=contract,
+                                         product_parent=parent, initiative_id=initiative_id)
             print(f"Created {created.relative_to(ROOT)} as a draft.")
             return 0
         if args.command == "area-context":

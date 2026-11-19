@@ -4,4 +4,16 @@ Keep work here by type. Examples include backlogs, roadmaps, initiatives, and ex
 
 Use the [artifact templates](../../../templates/README.md) for supported work types. Link to [context](../context/README.md) for the applicable rules or evidence.
 
+For registered initiatives, use these paths relative to the private repository:
+
+| Work | Location |
+| --- | --- |
+| Product's signed initiative register | `workspace/backlogs/<product>/initiatives.json` |
+| Discovery and Initiative Briefs | `workspace/initiatives/<product>/<initiative>/` |
+| Metric-linked experiment drafts | `workspace/experiments/<product>/<initiative>/experiment.<metric-id>.draft.json` |
+| Planning comparison for one cycle | `workspace/roadmaps/<product>/<cycle>.md` |
+
+Run `python3 tools/pm.py backlog --product PRODUCT` or `python3 tools/pm.py roadmap --product PRODUCT` from the Hub root.
+Add `--area AREA` for work explicitly linked to that product area. Follow the [opportunity workflow](../../../playbook/opportunities.md) for stage decisions.
+
 Keep a completed artifact with its work history. If a result changes standing guidance, record that finding in the relevant overview with its source.

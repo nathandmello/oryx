@@ -24,6 +24,8 @@ For first-time setup, start with company context, then product context and strat
 
 For area work, read the product brief and its area-specific evidence. Maintain a separate [area brief](playbook/filing.md#product-area-context) when the work warrants it.
 
+Use the [opportunity workflow](playbook/opportunities.md) for proposed investments. Standing initiative guidance stays in context. Briefs, experiments, and planning comparisons belong in the workspace.
+
 Agents automatically use [ingest-context](.agents/skills/ingest-context/SKILL.md) for context capture. The agent prompts for a missing or unfinished [PM remit](playbook/context.md#pm-remit). A remit can cover whole products or several areas within them.
 
 ## Placement
@@ -35,6 +37,10 @@ Keep only `README.md`, `AGENTS.md`, `CLAUDE.md`, and `.gitignore` as root files.
 | `private/context/` | Reference material organised by company, product, product area, initiative, or PM | Private |
 | `private/context/pm/context.md` | PM profile, including responsibilities, goals, dependencies, and interests | Private |
 | `private/workspace/` | Work in progress and completed PM artifacts, organised by type | Private |
+| `private/workspace/backlogs/<product>/initiatives.json` | Signed initiative register used by the backlog and roadmap commands | Private |
+| `private/workspace/initiatives/<product>/<initiative>/` | Discovery Brief and Initiative Brief for the same initiative ID | Private |
+| `private/workspace/experiments/<product>/<initiative>/` | Editable metric-linked experiment drafts | Private |
+| `private/workspace/roadmaps/<product>/<cycle>.md` | Comparison of candidates for the planning cycle | Private |
 | `private/settings.json` | Installation settings and expected remotes | Private |
 | `private/.hub-history/` | Recovery copies for reviewed filing conversions | Private |
 | `private/.hub-upgrades.json` | Private progress on release-specific reviews | Private |
@@ -53,6 +59,8 @@ Start reference material in the entity overview. Create a topic folder only for 
 ## Work
 
 - [Framework](playbook/framework.md): strategy, goals, evidence, and experiments.
+- [Opportunity workflow](playbook/opportunities.md) covers intake, discovery, Initiative Brief approval, and roadmap selection.
+- [Generated backlog and roadmap](playbook/initiative-views.md) use the signed register.
 - [Templates](templates/README.md): company context, product context, and PM artifacts.
 - [Context rules](playbook/context.md) cover routing, sources, parent links, dates, and gaps.
 - [Working practices](playbook/working.md): checkpoints, thought-partner mode, and quiet mode.
@@ -60,10 +68,12 @@ Start reference material in the entity overview. Create a topic folder only for 
 
 The Git command name `workspace` selects the entire private repository.
 
-Use Git and Python 3.9 or later. The tools use the Python standard library.
+Use Git and Python 3.9 or later. Initiative approval and its tests also require OpenSSH. Follow [the approval procedure](playbook/initiative-approvals.md).
 
 ```sh
 python3 tools/pm.py check
+python3 tools/pm.py backlog
+python3 tools/pm.py roadmap
 python3 -m unittest discover -s tests -v
 python3 tools/pm.py git workspace status
 python3 tools/pm.py git system status
@@ -98,7 +108,7 @@ Shared CI runs `check --system-only` and tests against fictional workspaces. Fol
 
 ## Hooks and checks
 
-Both clients load the context capture rule at session start and check the hub before a normal stop. Hooks work from nested workspace directories.
+Both clients load context and opportunity guidance at session start, then check the Hub before a normal stop. Hooks work from nested workspace directories.
 
 The edit hook enforces filing rules for supported native edits. Use the shared commands to start typed records. Keep original sources identifiable.
 

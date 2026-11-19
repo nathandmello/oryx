@@ -202,6 +202,45 @@ def transform_links(private, text, origin, destination, moves):
     return "".join(LINK.sub(replace, part) if kind == "active" else part for kind, part in markdown_chunks(text))
 
 
+def legacy_initiative_registers(private):
+    """Recognize registers from the local format-1 opportunity branch, without trusting or modifying them."""
+    home = private / "products"
+    found = []
+    if home.resolve() != home:
+        return found
+    for path in sorted(home.glob("*/initiatives.json")):
+        if not SLUG.fullmatch(path.parent.name) or path.resolve() != path or not path.is_file():
+            continue
+        try:
+            envelope = json.loads(path.read_bytes())
+        except (UnicodeError, ValueError):
+            continue
+        if not isinstance(envelope, dict):
+            continue
+        record, signature = envelope.get("record"), envelope.get("signature")
+        if (not isinstance(record, dict) or record.get("version") != 1 or record.get("product") != path.parent.name
+                or not isinstance(signature, str) or not signature.startswith("-----BEGIN SSH SIGNATURE-----\n")):
+            continue
+        events = record.get("events")
+        if not isinstance(events, list) or not events or not isinstance(events[0], dict):
+            continue
+        setup = events[0]
+        refs = setup.get("references")
+        if (setup.get("type") == "setup" and isinstance(refs, dict)
+                and {"company_id", "product_id"} <= refs.keys()):
+            found.append(path)
+    return found
+
+
+def require_supported_registers(private):
+    paths = legacy_initiative_registers(private)
+    if paths:
+        names = ", ".join(str(path.relative_to(private)) for path in paths)
+        raise ValueError(f"Format-1 opportunity register requires its original workflow checkout: {names}. "
+                         "Keep its signed history and reviewed records together. "
+                         "If this installation already moved them, restore the verified format-1 backup.")
+
+
 def legacy_material(name):
     parts = Path(name).parts
     return parts[0] == "products" or (
@@ -376,6 +415,7 @@ def known_seed(private, destination):
 
 
 def plan(private):
+    require_supported_registers(private)
     original, state = upgrades.read_state(private)
     if conversion.pointer(private).exists():
         raise ValueError("Resume the previous filing transaction before migrating the layout")
@@ -611,7 +651,11 @@ def run(private, *, apply=False):
     """Preview without writes, or apply under the caller's lock and full installation backup."""
     private = private.resolve()
     journal = journal_path(private)
-    document = read_journal(private) if journal.is_file() else plan(private)
+    if journal.is_file():
+        require_supported_registers(private)
+        document = read_journal(private)
+    else:
+        document = plan(private)
     changed = bool(document["writes"] or document["retired"])
     if apply and changed:
         if not journal.exists():

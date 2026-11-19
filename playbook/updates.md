@@ -2,7 +2,13 @@
 
 Pull and open the shared Hub. The agent handles private updates.
 
-Release 0.3.0 uses private format 2. Both updaters read the release version in `playbook/release.json`. Its format 1 value lets older clients fetch the migration code. The new Hub reads the installed private format from `playbook/workspace-format.json`.
+Release 0.3.1 keeps private format 2 and adds the signed initiative workflow. Existing Markdown stays in place.
+Both updaters read the release version in `playbook/release.json`. Its format 1 value lets older clients fetch the migration code. The Hub reads the installed private format from `playbook/workspace-format.json`.
+
+For signed prototype registers, read [workflow compatibility](initiative-approvals.md#existing-private-work) before upgrading.
+
+Update every client before sharing new intake, discovery, or outcome decisions. The updated Hub reads existing format-2 signatures.
+For an active discovery approved before source binding, review the plan and sources together. Sign a fresh `start-discovery` before concluding.
 
 ## What runs
 
@@ -73,7 +79,7 @@ The archive records POSIX modes and extended attributes exposed by Python. On ma
 | --- | --- |
 | Current wrapper or the released 0.2.0 wrapper | A version-changing system pull verifies a backup before merging the shared update. Startup verifies the layout backup before private conversion. |
 | Direct shared Git pull | Startup backs up the updated toolkit and the original private layout. |
-| Released 0.1.0 wrapper | The wrapper can set the private version to 0.3.0 first. The layout backup includes that setting. |
+| Released 0.1.0 wrapper | The wrapper can set the private version to the incoming release first. The layout backup includes that setting. |
 
 The receipt identifies `.git/pm-hub-backups/<id>/hub.tar.gz` and its SHA-256.
 
@@ -81,7 +87,7 @@ Retries reuse the verified snapshot.
 
 ## Recovery
 
-Use the reported `installation_backup` path. For this layout migration, the private receipt is `.git/pm-hub-backup-0.3.0-layout-2.json`. Other release backups use `.git/pm-hub-backup-<version>.json`.
+Use the reported `installation_backup` path. Layout migration receipts use `.git/pm-hub-backup-<version>-layout-2.json`. Other release backups use `.git/pm-hub-backup-<version>.json`.
 
 Verify `SHA256SUMS` in the archive directory. Extract into a new empty private directory with a tool that preserves permissions and extended attributes.
 

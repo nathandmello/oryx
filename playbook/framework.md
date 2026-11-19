@@ -87,4 +87,6 @@ Describe roadmap items through intended outcomes. Explain their order, expected 
 
 Choose the structure for the audience: `Now / Next / Later`, `Must / Should / Could`, `Crawl / Walk / Run`, or `Bones / Muscle / Brain`.
 
+Use [the opportunity workflow](opportunities.md) to move from an evaluated problem to an investment decision.
+
 Use results to revisit earlier choices. Preserve rejected alternatives and the reason for their rejection when that context remains useful.

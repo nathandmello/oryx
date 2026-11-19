@@ -1,0 +1,23 @@
+{
+  "title": "Initiative backlog",
+  "columns": {
+    "product": "Product",
+    "areas": "Product areas",
+    "id": "Initiative ID",
+    "title": "Initiative",
+    "problem": "Problem",
+    "audience": "Audience",
+    "phase": "Phase",
+    "rank": "Approved rank",
+    "effort": "Effort",
+    "unit": "Effort unit",
+    "captured_on": "First signal date",
+    "last_decision_on": "Last decision",
+    "revisit": "Next review or trigger",
+    "sources": "Signal references"
+  },
+  "sources": [
+    "https://www.atlassian.com/software/jira/templates/product-backlog-template",
+    "https://scrumguides.org/scrum-guide"
+  ]
+}
