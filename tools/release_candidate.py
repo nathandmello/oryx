@@ -33,6 +33,7 @@ def needs_native(paths):
     patterns = (
         ".github/workflows/*", ".codex/*", ".claude/hooks/*", ".claude/settings.json",
         "playbook/workspace-format.json", "tools/workspace-seed/*", "tools/conversion.py",
+        "tools/context_*.py", "tools/task_context.py", "tools/search_model/*", "tests/test_context_search.py",
         "tools/git_ops.py", "tools/hook.py", "tools/layout*.py", "tools/pm.py", "tools/snapshots.py",
         "tools/storage.py", "tools/upgrades.py", "tools/workspace.py", "tools/release_*.py",
         "tools/publish_release.py", "tests/test_alignment.py", "tests/test_filing.py", "tests/test_pm.py",

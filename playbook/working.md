@@ -47,7 +47,7 @@ An invalid saved block uses defaults and produces a check error. Use `preference
 Read the record in `private/workspace/`, its checkpoint, and linked context. Use headings and section leads to find context that applies to the work.
 Read the relevant entries and applicable parent rules before acting. Check the sources behind accepted decisions. Report only changes or gaps that matter now.
 
-Resolve context for each workspace task, including drafts and replies. Repeat the lookup when scope or evidence changes.
+Resolve context for each workspace task, including drafts and replies. Repeat the lookup when scope or evidence changes. Both agents use [local semantic search](context-search.md).
 Run `pm.py task-context "TASK"` if hooks are unavailable. Use `--product`, `--area`, or `--initiative` when scope is known.
 Use [the numerical evidence procedure](numbers.md) before relying on material figures from any source.
 

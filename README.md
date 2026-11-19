@@ -86,7 +86,7 @@ python3 tools/pm.py new company-context context/company/overview.md --title "Com
 ```
 
 Run the [context evaluations](tests/context-evals/README.md) to test artifact structure, context use, and fresh tasks after capture.
-Use `pm.py catalog` to find records. Use `pm.py task-context` to read task-specific guidance.
+Both agents retrieve cited passages through [local semantic search](playbook/context-search.md). Use `pm.py catalog` for records.
 Apply [the numerical evidence checks](playbook/numbers.md) to material numbers in any task.
 Find SaaS defaults and PM-approved definitions in the [metric registry](playbook/metrics.md).
 
