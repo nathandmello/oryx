@@ -6,7 +6,7 @@ Start with the question a reader will return to answer. Find the subject, accoun
 | --- | --- |
 | A standing company fact, commitment, or exclusion | A short section in `context/company.md` |
 | A product rule, buyer need, or approved product decision | The owning `products/<product>/context.md` |
-| A rule for one area of a product | Label the area in its product brief. Initiative-specific details stay in the initiative brief. |
+| Standing guidance for one product area | Its maintained area brief, or a labelled entry in the product brief until a separate brief is warranted. |
 | A recurring initiative's outcome, scope, or workflow | `products/<product>/initiatives/<initiative>/context.md` |
 | Evidence, an unknown, or a decision for existing PM work | Its section in the existing goal, problem, strategy, experiment, or roadmap |
 | An original report, announcement, or external deliverable | Its source of record. Cite the location and date beside the relevant claim. |
@@ -37,6 +37,24 @@ A simple price announcement fits in one dated paragraph. A financial statement s
 A quarter, a new source, a writing limit, or an available template alone cannot justify a file. Retain meaningful exclusions and their operational consequences together.
 
 For mixed sources, route each claim by subject and authority. A PM's remit controls relevance. It does not transfer ownership.
+
+## Product area context
+
+A product area is a lasting part of one product, such as Refunds in Checkout. An initiative is time-bound work with an outcome.
+
+Keep the product overview and shared rules in the product brief. Keep pilot decisions and release work in the initiative brief.
+
+Start area context inline. A remit assignment, a single fact, or an area name alone creates no file.
+
+Create one area brief when a reader repeatedly needs area-specific guidance independently and a known change triggers review. Record both reasons.
+
+Use `products/<product>/areas/<area>/context.md`. The area inherits its product brief. Link the area on the next authorised product overview update.
+
+For area work, run `python3 tools/pm.py area-context <product> <area>`. Read the product and its parent, the area brief, and the matching entries at their original paths. Source IDs belong to each record.
+
+The lookup finds area labels from capture. Inspect older unlabelled prose before assigning its scope.
+
+Existing inline evidence keeps its citations. Answer open questions at their original home. Use a reviewed filing plan for later consolidation.
 
 ## Over time
 

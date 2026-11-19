@@ -1,4 +1,4 @@
-# Company, product, and initiative context
+# Company, product, product area, and initiative context
 
 Context supports recurring work. Keep facts, rules, examples, and open questions that change the work. Use [the starters](../templates/README.md) and cut unused sections.
 
@@ -6,7 +6,7 @@ Context supports recurring work. Keep facts, rules, examples, and open questions
 
 Keep standing company facts and commitments in `workspace/context/company.md`. Link time-bound developments and detailed records.
 
-Link product context to its company. Link initiative context to its product. Each level records the decisions, exceptions, and practical details it owns.
+Link product context to its company. Area and initiative briefs inherit their product. Apply [the area filing rules](filing.md#product-area-context). Each level records the decisions, exceptions, and practical details it owns.
 
 Apply more specific guidance within its authority. Keep inherited commitments in force. A new exception needs evidence of approval from the decision owner.
 

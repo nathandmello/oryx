@@ -1,12 +1,14 @@
 # Updating an installed Hub
 
-Pull the shared Hub and open it as usual. The agent updates private records during the session.
+Pull and open the shared Hub. The agent handles private updates.
 
-Release 0.3.0 accepts private layout 1 from 0.1.0 and 0.2.0. Fresh installations start aligned.
+Release 0.3.0 accepts private layout 1 from 0.1.0 and 0.2.0.
 
-Legacy responsibilities count as confirmed. Empty or follow-only remits prompt for ownership. Original subjects stay intact.
+Legacy responsibilities count as confirmed. Empty or follow-only remits prompt for ownership.
 
-Use 0.3.0 on each machine before sharing product-area keys or an explicit remit status. See [PM remit](context.md#pm-remit).
+Update each machine to 0.3.0 before sharing area briefs, product-area keys, or an explicit remit status. See [PM remit](context.md#pm-remit).
+
+Existing briefs stay in place. [Area filing rules](filing.md#product-area-context).
 
 ## What runs
 

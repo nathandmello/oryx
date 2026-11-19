@@ -10,6 +10,7 @@ from urllib.parse import unquote, urlsplit
 import records
 import filing
 import storage
+import upgrades
 
 COMPANY_PATH = "context/company.md"
 REMIT_PATH = "context/pm-remit.json"
@@ -156,7 +157,7 @@ def brief_path(path):
     parts = Path(path).parts
     return path == COMPANY_PATH or (
         bool(parts) and parts[0] == "products" and parts[-1] == "context.md"
-        and (len(parts) == 3 or (len(parts) == 5 and parts[2] == "initiatives"))
+        and (len(parts) == 3 or (len(parts) == 5 and parts[2] in {"initiatives", "areas"}))
     )
 
 
@@ -308,6 +309,9 @@ def relevance(remit, subject, affects):
 
 
 def target_section(text, entry, section):
+    if text.startswith("<!-- pm: product-area-context -->\n"):
+        by_topic = {"ownership": "Area scope and ownership", "contribution": "Area outcomes"}
+        return by_topic.get(entry.get("topic"), records.AREA_HEADINGS.get(section, section))
     if entry["scope"] == "product" and records.section(text, section) is None:
         legacy = records.LEGACY_PRODUCT_TOPICS.get(entry.get("topic"))
         if legacy and records.section(text, legacy) is not None:
@@ -315,19 +319,131 @@ def target_section(text, entry, section):
     return section
 
 
+def contains_capture(text, path, entry, section, sources, private):
+    source_no = entry.get("source")
+    if "quote" not in entry or type(source_no) is not int or not 1 <= source_no <= len(sources):
+        return False
+    validate_entry_shape(entry, section)
+    line(entry["quote"], "Source excerpt")
+    line(entry.get("location"), "Source location")
+    if "interpretation" in entry:
+        line(entry["interpretation"], "Interpretation")
+    source = sources[source_no - 1]
+    ref = records.retarget_links(source["reference"], private / "README.md", path, private)
+    body = "\n" + (records.section(text, target_section(text, entry, section)) or "").strip() + "\n"
+    rows, _ = records.table(text, "Sources", records.SOURCE_COLUMNS)
+    return any("\n" + render_entry(entry, ident) + "\n" in body for ident, previous, published, _ in rows
+               if (previous, published) == (ref, source["date"]))
+
+
+def checked_area_text(private, area):
+    path = record_path(private, area)
+    if not path.is_file():
+        return None
+    if area in upgrades.source_paths(private):
+        raise ValueError(f"Preserve the original source at {area}")
+    text = path.read_text(encoding="utf-8")
+    if not text.startswith("<!-- pm: product-area-context -->\n"):
+        raise ValueError(f"Review the existing file at {area} before using it as area context")
+    filing.verify_note(private, area, text)
+    return text
+
+
+def standing_area_home(private, entry, product, section, sources):
+    """Resolve questions in their original home and leave existing evidence there on replay."""
+    area = records.area_brief_path(entry["product"], entry["product_area"])
+    area_text = checked_area_text(private, area)
+    if area_text is None:
+        return product
+    product = filing.area_parent(private, area)
+    parent = record_path(private, product)
+    parent_text = parent.read_text(encoding="utf-8")
+    local_entry = {k: v for k, v in entry.items() if k != "product_area"}
+    if "record" in entry:
+        record = entry["record"]
+        if not isinstance(record, dict):
+            raise ValueError("Choose a record with its path and reason")
+        if record.get("path") not in (product, area):
+            return area
+    question = entry.get("answers", entry.get("question"))
+    if isinstance(question, str):
+        homes = []
+        for name, text, scoped in ((product, parent_text, entry), (area, area_text, local_entry)):
+            body = records.section(text, target_section(text, entry, section)) or ""
+            if f"- Unknown: {scoped_text(scoped, literal(question))}" in body.splitlines():
+                homes.append(name)
+        if len(homes) == 2:
+            selected = entry.get("record", {}).get("path")
+            if selected not in homes:
+                raise ValueError(f"Question exists in both {product} and {area}. Select its owning record explicitly")
+            return selected
+        if homes:
+            return homes[0]
+    if contains_capture(parent_text, parent, entry, section, sources, private):
+        if not contains_capture(area_text, private / area, local_entry, section, sources, private):
+            return product
+    return area
+
+
+def area_context(private, product, area):
+    """Locate the dedicated brief and area entries without changing or copying any record."""
+    area_name = records.area_brief_path(product, area)
+    area_path = private / area_name
+    exists = checked_area_text(private, area_name) is not None
+    parents = records.product_briefs(private, product)
+    matches = []
+    originals = upgrades.source_paths(private)
+    marker = f"<!-- product-area:{area} -->"
+    for path in storage.inventory(private):
+        rel = path.relative_to(private)
+        if (rel.parts[:2] != ("products", product) or rel.as_posix() in originals or path == area_path or path.suffix != ".md"
+                or any(p.startswith(".") or p in {"sources", "secrets"} for p in rel.parts)
+                or path.resolve() != path or not path.is_file()):
+            continue
+        with path.open("rb") as stream:
+            kind = records.MARKER.match(stream.readline(128).decode("utf-8", errors="replace"))
+            if not kind or kind[1] not in {"product-context", "initiative-context", "context-note"}:
+                continue
+            lines = stream.read().decode("utf-8").splitlines()
+        entries = []
+        section = None
+        for i, line_text in enumerate(lines):
+            if line_text.startswith("## "):
+                section = line_text[3:]
+            if marker not in line_text or not line_text.startswith(("- ", "| ")):
+                continue
+            end = i + 1
+            while end < len(lines) and lines[end].startswith("  "):
+                end += 1
+            entries.append({"section": section, "line": i + 2, "text": "\n".join(lines[i:end])})
+        if entries:
+            claims = "\n".join(item["text"] for item in entries)
+            ids = set(re.findall(r"\[(S[1-9]\d*)\]", claims))
+            rows, errors = records.table("\n".join(lines), "Sources", records.SOURCE_COLUMNS)
+            matches.append({"record": rel.as_posix(), "entries": entries,
+                            "sources": [dict(zip(records.SOURCE_COLUMNS, row)) for row in rows if row[0] in ids],
+                            "source_errors": errors})
+    return {"subject": f"product/{product}/area/{area}", "area_brief": area_name if exists else None,
+            "product_briefs": parents, "inline_entries": matches}
+
+
 def route_home(private, entry, scope, canonical, section, alternatives):
     if "record" not in entry:
         if section:
             path = record_path(private, canonical)
-            if not path.exists() and private.is_dir():
+            product_brief = scope == "product" and canonical == product_path(entry["product"])
+            if private.is_dir() and (product_brief or not path.exists()):
                 if canonical not in alternatives:
-                    alternatives[canonical] = records.existing_briefs(private, canonical, scope)
+                    alternatives[canonical] = (records.product_briefs(private, entry["product"]) if product_brief
+                                               else records.existing_briefs(private, canonical, scope))
                 options = alternatives[canonical]
                 if len(options) > 1:
                     return None, None, "ambiguous"
                 if options:
                     canonical = options[0]
                     path = record_path(private, canonical)
+                elif product_brief and path.exists():
+                    raise ValueError(f"Identify the owning product brief before capturing into {canonical}")
             if path.is_file():
                 return canonical, target_section(path.read_text(encoding="utf-8"), entry, section), "existing"
             return canonical, section, "new-brief"
@@ -350,8 +466,10 @@ def route_home(private, entry, scope, canonical, section, alternatives):
     parts = target.relative_to(private).parts
     if scope == "initiative" and len(parts) >= 4 and parts[2] == "initiatives" and parts[3] != entry["initiative"]:
         raise ValueError("Choose a record belonging to the declared initiative")
-    if scope == "product" and len(filing.home(record["path"]).parts) != 2:
-        raise ValueError("A product note belongs to the product, outside its initiatives")
+    if scope == "product" and len(filing.home(record["path"]).parts) != 2 and not (
+        "product_area" in entry and filing.home(record["path"]) == Path(records.area_brief_path(entry["product"], entry["product_area"])).parent
+    ):
+        raise ValueError("A product note belongs to the product, outside other areas and initiatives")
     if scope == "initiative" and filing.home(record["path"]) != filing.home(canonical):
         raise ValueError("Choose the declared initiative home")
     if target.is_file():
@@ -360,7 +478,11 @@ def route_home(private, entry, scope, canonical, section, alternatives):
         kind = marker[1] if marker else None
         if kind == "context-note":
             return record["path"], "Context", "existing"
+        if kind == "product-area-context" and scope == "product" and record["path"] == canonical and section:
+            return canonical, target_section(text, entry, section), "existing"
         if scope in TOPICS and kind == f"{scope}-context" and section:
+            if records.is_area_path(canonical or ""):
+                raise ValueError("Use the maintained area brief for this standing area entry")
             return record["path"], target_section(text, entry, section), "existing"
         return record["path"], None, "existing"
     if brief_path(record["path"]):
@@ -443,6 +565,8 @@ def route(payload, private, remit=None):
             section = TOPICS.get(scope, {}).get(topic)
             if not section:
                 raise ValueError(f"Use a supported brief topic for {scope} scope")
+        if scope == "product" and "product_area" in entry and section:
+            canonical = standing_area_home(private, entry, canonical, section, sources)
         requested_section = section
         destination, section, disposition = route_home(private, entry, scope, canonical, section, alternatives)
         if disposition == "ambiguous":
@@ -478,6 +602,10 @@ def route(payload, private, remit=None):
             entry = dict(entry, candidates=alternatives[canonical])
         entries.append(dict(entry, destination=destination, section=section, disposition=disposition,
                             relevance=attention, responsibilities=responsibilities))
+    originals = upgrades.source_paths(private)
+    if any(row["destination"] and (row["destination"] in originals or "sources" in Path(row["destination"]).parts)
+           for row in entries):
+        raise ValueError("Original source files cannot be context capture destinations")
     verification = verify_excerpts(payload["sources"], entries, private)
     return {"sources": sources, "entries": entries, "source_checks": verification, "remit_configured": remit is not None,
             "remit_status": remit_status(remit)}
@@ -544,6 +672,9 @@ def render_entry(entry, identifier):
 
 
 def insert_entries(text, selected, sources, private, target):
+    if text.startswith("<!-- pm: product-area-context -->\n"):
+        # The whole brief already identifies the area, including manually authored questions.
+        selected = [{k: v for k, v in row.items() if k != "product_area"} for row in selected]
     rows, errors = records.table(text, "Sources", records.SOURCE_COLUMNS)
     if errors:
         raise ValueError("; ".join(errors))
@@ -649,6 +780,8 @@ def apply(root, destination, plan, owner, lint):
     if problems:
         raise ValueError("Context capture failed validation:\n" + "\n".join(problems))
     with storage.writer_lock(private):
+        if "sources" in Path(destination).parts or destination in upgrades.source_paths(private):
+            raise ValueError("Original source files cannot be context capture destinations")
         if original is None:
             filing.check_new(private, kind, destination, None)
         storage.replace_text(target, original, candidate)

@@ -15,6 +15,7 @@ When a release flags older records, follow [the context cleanup procedure](../..
 - Replace superseded roles when the PM confirms a change. Preserve unrelated entries and save the agreed scope with `pm.py set-remit`.
 - Find the existing record and accountable owner. Compare new evidence with accepted decisions.
 - Read applicable data boundaries before opening, transferring, or quoting sensitive source material.
+- For area work, run `pm.py area-context PRODUCT AREA`. Read the listed records and their local citations.
 - Read parent briefs for inherited rules. Resolve conflicting authority before applying an exception.
 - Inspect permitted material in each supplied source. Record coverage as read, partial, or unavailable.
 - Supply inspected plaintext in each source’s `text` field when permitted. Use a workspace-relative link for a local text source.
@@ -28,6 +29,7 @@ When a release flags older records, follow [the context cleanup procedure](../..
 - Use the subject and accountable owner to choose a home. Use the remit to explain why the item matters.
 - Keep `company.md` focused on standing company facts and commitments. Link to ongoing developments and detailed records.
 - Keep product information with its product. Set `product_area` for area-specific product or initiative claims, questions, and answers.
+- Route standing area guidance to its maintained area brief. Start inline until the [area filing test](../../../playbook/filing.md#product-area-context) passes.
 - Use `area` for cross-product responsibilities and `reference` for other topics the PM values.
 - Route initiative decisions and workflow details to its linked initiative brief when the work recurs.
 - Surface a sibling product update as an FYI when relevant. Flag its concrete effect on an owned product.

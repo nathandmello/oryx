@@ -7,10 +7,11 @@ from posixpath import normpath
 import re
 
 import storage
+import upgrades
 from urllib.parse import quote, unquote, urlsplit, urlunsplit
 from uuid import uuid4
 
-CONTEXT_KINDS = ("company-context", "product-context", "initiative-context", "context-note")
+CONTEXT_KINDS = ("company-context", "product-context", "product-area-context", "initiative-context", "context-note")
 KINDS = (*CONTEXT_KINDS, "goal", "problem", "strategy", "experiment", "roadmap")
 FIELDS = ("ID", "State", "Mode", "Last checkpoint", "Next action", "Waiting on", "Resume when")
 STATES = {"draft", "active", "waiting", "complete"}
@@ -45,6 +46,7 @@ CONTEXT_TOPICS = {
         "constraints": "Dependencies and constraints", **SHARED_TOPICS,
     },
 }
+AREA_HEADINGS = {"The product": "Area scope and ownership", "The vision": "Area outcomes", "The users": "Area users and workflow"}
 LEGACY_PRODUCT_TOPICS = {
     "purpose": "Purpose and boundaries", "vision": "Purpose and boundaries", "customers": "Customers and their work",
     "offer": "Current offer", "contribution": "Business contribution and market",
@@ -144,8 +146,24 @@ def table(text, name, columns):
     return rows[1:], []
 
 
+def area_brief_path(product, area):
+    for slug in (product, area):
+        if not isinstance(slug, str) or not re.fullmatch(r"[a-z0-9]+(?:-[a-z0-9]+)*", slug):
+            raise ValueError("Choose a named product and a product area using slugs")
+    return f"products/{product}/areas/{area}/context.md"
+
+
+def is_area_path(path):
+    parts = Path(path).parts
+    return (len(parts) == 5 and parts[0] == "products" and parts[2] == "areas"
+            and parts[-1] == "context.md")
+
+
 def context_location(kind, path):
     parts = Path(path).parts
+    if kind == "product-area-context":
+        if not is_area_path(path) or not all(re.fullmatch(r"[a-z0-9]+(?:-[a-z0-9]+)*", slug) for slug in (parts[1], parts[3])):
+            return "Product area context belongs at products/<product>/areas/<area>/context.md"
     if kind == "company-context" and parts[:1] != ("context",):
         return "company context belongs under context/"
     if kind == "product-context" and (parts[:1] != ("products",) or len(parts) < 3):
@@ -165,11 +183,12 @@ def existing_briefs(private, canonical, scope):
     """Find subject-matched, typed older briefs when the standard file is absent."""
     parent = Path(canonical).parent
     found = []
+    sources = upgrades.source_paths(private)
     for path in storage.inventory(private):
         rel = path.relative_to(private)
         if (path.suffix != ".md" or path.resolve() != path or not path.is_file()
-                or any(p.startswith(".") or p == "secrets" for p in rel.parts)
-                or parent not in rel.parents):
+                or any(p.startswith(".") or p in {"secrets", "sources"} for p in rel.parts)
+                or rel.as_posix() in sources or parent not in rel.parents):
             continue
         if scope == "product" and "initiatives" in rel.parts[2:]:
             continue
@@ -180,11 +199,25 @@ def existing_briefs(private, canonical, scope):
     return found
 
 
+def product_briefs(private, product):
+    canonical = f"products/{product}/context.md"
+    path = private / canonical
+    if path.resolve() != path:
+        raise ValueError("Choose a regular owning product brief")
+    if path.is_file() and canonical not in upgrades.source_paths(private):
+        with path.open("rb") as stream:
+            if stream.readline(128).rstrip(b"\r\n") == b"<!-- pm: product-context -->":
+                return [canonical]
+    return existing_briefs(private, canonical, "product")
+
+
 def context_sections(kind):
     if kind == "context-note":
         return {"Context"}
     scope = kind.removesuffix("-context")
-    sections = set(CONTEXT_TOPICS[scope].values())
+    sections = set(CONTEXT_TOPICS["product" if scope == "product-area" else scope].values())
+    if scope == "product-area":
+        sections = {AREA_HEADINGS.get(name, name) for name in sections}
     if scope == "product":
         sections.update(LEGACY_PRODUCT_TOPICS.values())
     return sections
@@ -273,7 +306,7 @@ def context_errors(path, text, kind, texts, content_sections, template=False):
         else:
             parent = normpath((Path(path).parent / unquote(parsed.path)).as_posix())
             marker = MARKER.match(texts.get(parent, ""))
-            if kind == "initiative-context":
+            if kind in {"initiative-context", "product-area-context"}:
                 product = Path(path).parts[:2]
                 if (len(product) != 2 or Path(parent).parts[:2] != product
                         or not marker or marker[1] != "product-context"):
@@ -436,6 +469,8 @@ def create(root, kind, destination, title=None, owner="", filing_contract=None):
         raise ValueError(context_location(kind, relative))
     text = draft_text(root, kind, target, title, owner)
     if filing_contract:
+        if kind == "product-area-context":
+            text = text.replace("{{Area release, closed decision, new evidence, or changed product rules.}}", filing_contract["trigger"])
         import filing
         text = filing.add_contract(text, workspace, target, filing_contract)
     target.parent.mkdir(parents=True, exist_ok=True)
@@ -452,6 +487,8 @@ def draft_text(root, kind, target, title=None, owner=""):
     marker = MARKER.match(text)
     if not marker or marker[1] != kind or work_state(text)[1]:
         raise ValueError("Repair the source template before creating a draft")
+    if kind == "product-area-context" and title is None:
+        title = target.parent.name.replace("-", " ").capitalize() + " context"
     title = title or target.stem.replace("-", " ").capitalize()
     if "\n" in title or "\r" in title:
         raise ValueError("Use a single line for the title")
@@ -461,7 +498,7 @@ def draft_text(root, kind, target, title=None, owner=""):
     text = text.replace("{{id}}", f"{kind}-{uuid4().hex[:12]}")
     text = text.replace("{{date and result}}", f"{date.today().isoformat()}: Draft created.")
     text = retarget_links(text, source, target, root)
-    if kind in {"product-context", "initiative-context"}:
+    if kind in {"product-context", "initiative-context", "product-area-context"}:
         private = root / "workspace"
         if kind == "product-context":
             parent = private / "context/company.md"
@@ -472,10 +509,13 @@ def draft_text(root, kind, target, title=None, owner=""):
             parent = private / "products" / product / "context.md"
             expected, label = "product-context", "Product context"
             placeholder = "{{Local Markdown link to the same product's product-context record.}}"
-        if not parent.exists():
+        alternatives = []
+        if expected == "product-context":
+            alternatives = product_briefs(private, product)
+        elif not parent.exists():
             alternatives = existing_briefs(private, parent.relative_to(private), expected.removesuffix("-context"))
-            if len(alternatives) == 1:
-                parent = private / alternatives[0]
+        if len(alternatives) == 1:
+            parent = private / alternatives[0]
         if parent.resolve() == parent and parent.is_file():
             with parent.open(encoding="utf-8") as stream:
                 marker = MARKER.match(stream.readline())

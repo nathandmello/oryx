@@ -172,7 +172,15 @@ class HubTests(unittest.TestCase):
     def test_each_template_creates_a_valid_unfinished_draft(self):
         for kind in records.KINDS:
             home = "context" if kind == "company-context" else "products/example"
-            target = records.create(self.root, kind, f"{home}/{kind}.md", "A draft")
+            if kind == "product-area-context":
+                # The area template has a specific home and requires its product's filing decision.
+                area_path = "products/example/areas/refunds/context.md"
+                self.assertEqual(subprocess.run([sys.executable, str(self.root / "tools/pm.py"), "new", kind,
+                                 area_path, "--reason", "Support checks the refund rules weekly.",
+                                 "--trigger", "Finance updates the policy."], capture_output=True).returncode, 0)
+                target = self.work / area_path
+            else:
+                target = records.create(self.root, kind, f"{home}/{kind}.md", "A draft")
             values, errors = records.work_state(target.read_text())
             self.assertEqual(errors, [])
             self.assertEqual(values["State"], "draft")

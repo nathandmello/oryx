@@ -84,7 +84,7 @@ def candidates(private, inventory):
             reason = "Identify this document's purpose, owner, sources, and incoming references"
         hint = "Unconfirmed"
         if parts[0] == "products" and len(parts) >= 3:
-            hint = "/".join(parts[:4] if len(parts) >= 5 and parts[2] == "initiatives" else parts[:2])
+            hint = "/".join(parts[:4] if len(parts) >= 5 and parts[2] in {"initiatives", "areas"} else parts[:2])
         elif parts[0] == "context":
             hint = "Possible company scope; confirm from contents"
         found[name] = {"status": "pending", "note": reason, "owner_hint": hint, "digest": fingerprint(path)}
@@ -116,6 +116,11 @@ def read_state(private):
                 or not isinstance(item.get("note"), str) or not item["note"].strip()):
             raise ValueError("Invalid context review entry")
     return original, state
+
+
+def source_paths(private):
+    state = read_state(private)[1]
+    return {name for name, item in state.get(RULE, {}).items() if item.get("role") == "source"}
 
 
 def run(private, inventory, *, prepare=False, record=None, outcome=None, digest=None, note=None):

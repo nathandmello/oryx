@@ -8,13 +8,14 @@ Create only the artifact needed for the current work. Templates guide thought; t
 | --- | --- | --- |
 | [Company context](company-context.md) | Organisation, business model, direction, operations, and constraints | `context/` |
 | [Product context](product-context.md) | Product purpose, users, vocabulary, constraints, and accepted decisions | `products/<product>/` |
+| [Product area context](product-area-context.md) | Standing area boundaries, users, rules, goals, and decisions | `products/<product>/areas/<area>/context.md` |
 | [Initiative context](initiative-context.md) | Outcome, affected workflow, dependencies, and decisions for recurring initiative work | `products/<product>/initiatives/<initiative>/` |
 | [Context note](context-note.md) | Supporting detail that passes [the filing test](../playbook/filing.md) | The owning entity’s `records/` folder or its artifact subfolder |
-| [Goal](goal.md) | The five outcome components and their alignment | Its owning company, product, or initiative home |
-| [Problem](problem.md) | Customer problem, evidence, knowledge audit, and research | Its owning company, product, or initiative home |
-| [Strategy](strategy.md) | Why, Who, What, and How | Its owning company, product, or initiative home |
-| [Experiment](experiment.md) | Hypothesis, test, measure, criterion, and result | Its owning company, product, or initiative home |
-| [Roadmap](roadmap.md) | Ordered outcomes and their rationale | Its owning company, product, or initiative home |
+| [Goal](goal.md) | The five outcome components and their alignment | Its owning company, product, area, or initiative home |
+| [Problem](problem.md) | Customer problem, evidence, knowledge audit, and research | Its owning company, product, area, or initiative home |
+| [Strategy](strategy.md) | Why, Who, What, and How | Its owning company, product, area, or initiative home |
+| [Experiment](experiment.md) | Hypothesis, test, measure, criterion, and result | Its owning company, product, area, or initiative home |
+| [Roadmap](roadmap.md) | Ordered outcomes and their rationale | Its owning company, product, area, or initiative home |
 
 ## Create a draft
 
@@ -30,6 +31,14 @@ Use the context templates when the PM starts that work:
 python3 tools/pm.py new company-context context/company.md --title "Company context"
 python3 tools/pm.py new product-context products/example/context.md --title "Product context"
 python3 tools/pm.py new initiative-context products/example/initiatives/renewals/context.md --title "Renewals context"
+```
+
+For a separately maintained [product area](../playbook/filing.md#product-area-context), record the reader need and review trigger:
+
+```sh
+python3 tools/pm.py new product-area-context products/example/areas/refunds/context.md \
+  --title "Refunds context" --reason "Support uses refund eligibility rules each week." \
+  --trigger "Finance changes the refund policy."
 ```
 
 The command creates a draft with a stable ID and a work-state block. It refuses an existing destination.

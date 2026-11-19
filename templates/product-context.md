@@ -9,7 +9,7 @@ Use [the context rules](../playbook/context.md). Keep sections that guide recurr
 
 ## The product
 
-{{What it does, who uses it, and how it makes money or saves work. Use the team's measures.}}
+{{What it does, who uses it, and how it makes money or saves work. Link separately maintained areas. Use the team's measures.}}
 
 ## The vision
 

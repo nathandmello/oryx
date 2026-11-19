@@ -185,3 +185,119 @@ class ProductAreaTests(unittest.TestCase):
         self.assertEqual(path.read_bytes(), before)
         self.assertEqual(json.loads(settings.read_text())["system_version"], "0.3.0")
         self.assertEqual(context_capture.relevance(remit, "product/checkout/area/checkout", {}), ("following", []))
+
+    def test_independent_area_brief_preserves_inline_evidence_and_answer_home(self):
+        product = "products/shop/context.md"
+        area = "products/shop/areas/refunds/context.md"
+        initiative = "products/shop/initiatives/pilot/context.md"
+        records.create(self.root, "company-context", "context/company.md")
+        source = {"reference": "Finance minutes", "date": "undated", "checked_on": "2025-01-01", "coverage": "read"}
+        question = {"scope": "product", "product": "shop", "product_area": "refunds", "topic": "constraints",
+                    "question": "Who approves a refund?"}
+        fact = {k: v for k, v in question.items() if k != "question"}
+        fact.update(source=1, location="Section 2", quote="Finance reviews refunds.")
+        def capture(entries, *args, reference=source):
+            result = self.capture({"sources": [reference], "entries": entries}, *args)
+            self.assertEqual(result.returncode, 0, result.stdout)
+            return json.loads(result.stdout)
+        def view():
+            return json.loads(self.cli("area-context", "shop", "refunds"))
+
+        capture([question, fact, dict(question, product_area="invoices")], "--write", product)
+        capture([dict(fact, scope="initiative", initiative="pilot")], "--write", initiative)
+        capture([dict(question, product="other")], "--write", "products/other/context.md")
+        original = (self.work / product).read_bytes()
+        self.assertIsNone(view()["area_brief"])
+        self.assertFalse((self.work / area).exists())
+        with self.assertRaises(subprocess.CalledProcessError):
+            self.cli("new", "product-area-context", area)
+        self.cli("new", "product-area-context", area, "--reason", "Support consults the recurring refund rules.",
+                 "--trigger", "Finance changes refund eligibility.")
+        self.assertEqual((self.work / product).read_bytes(), original)
+        result = view()
+        self.assertEqual(result["area_brief"], area)
+        self.assertEqual(result["product_briefs"], [product])
+        inline = {item["record"]: item for item in result["inline_entries"]}
+        self.assertEqual(set(inline), {product, initiative})
+        self.assertEqual(len(inline[product]["entries"]), 2)
+        self.assertIn("> Finance reviews refunds.", inline[product]["entries"][1]["text"])
+        self.assertEqual(inline[product]["sources"][0]["Source"], source["reference"])
+        for entry in inline[product]["entries"]:
+            self.assertEqual(entry["text"].splitlines()[0], original.decode().splitlines()[entry["line"] - 1])
+
+        fresh = dict(fact, topic="offer", quote="Refunds supports original payment methods.")
+        batch = capture([fresh, dict(fresh, product_area="invoices"), dict(fresh, scope="initiative", initiative="pilot", topic="workflow"),
+                         {k: v for k, v in fresh.items() if k != "product_area"}])
+        self.assertEqual([row["destination"] for row in batch["entries"]], [area, product, initiative, product])
+        capture([fresh], "--write", area)
+        self.assertIn("Area scope and ownership", (self.work / area).read_text())
+        self.assertIn("[Product context](../../context.md)", (self.work / area).read_text())
+        self.assertIsNone(capture([fact], "--write", product)["written"])
+        answer = dict(fact, quote="The Finance Director approves refunds.", answers=question["question"])
+        capture([answer], "--write", product)
+        self.assertIsNone(capture([answer], "--write", product)["written"])
+        self.assertNotIn("Unknown: Product area refunds", (self.work / product).read_text())
+        self.assertIn("Unknown: Product area invoices", (self.work / product).read_text())
+        capture([dict(question, question="Is approval dated?")], "--write", area)
+        self.assertIn("- Unknown: Is approval dated?", (self.work / area).read_text())
+        res = capture([dict(fact, answers="Is approval dated?")], "--write", area)
+        self.assertEqual(res["written"], area)
+        self.assertNotIn("- Unknown: Is approval dated?", (self.work / area).read_text())
+        self.assertIsNone(capture([dict(fact, answers="Is approval dated?")], "--write", area)["written"])
+        self.assertEqual(pm.check(self.root), [])
+
+    def test_area_brief_uses_legacy_parent_and_refuses_path_conflicts(self):
+        product = "products/shop/history/overview.md"
+        area = "products/shop/areas/refunds/context.md"
+        records.create(self.root, "product-context", product)
+        (self.work / "products/shop/context.md").write_text("# Product navigation\n")
+        self.cli("new", "product-area-context", area, "--reason", "Finance checks this policy monthly.",
+                 "--trigger", "Policy owner issues a revision.")
+        self.assertIn("[Product context](../../history/overview.md)", (self.work / area).read_text())
+        self.assertEqual(json.loads(self.cli("area-context", "shop", "refunds"))["product_briefs"], [product])
+        existing = "products/shop/areas/invoices/context.md"
+        path = self.work / existing
+        path.parent.mkdir(parents=True)
+        path.write_text("# A private customer record\n")
+        q = {"scope": "product", "product": "shop", "product_area": "invoices", "topic": "offer", "question": "Who uses it?"}
+        result = self.capture({"sources": [], "entries": [q]}, "--write", existing)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertEqual(path.read_text(), "# A private customer record\n")
+        foreign = dict(q, product_area="receipts", record={"path": area, "reason": "Different area."})
+        self.assertNotEqual(self.capture({"sources": [], "entries": [foreign]}, "--write", area).returncode, 0)
+
+    def test_area_filing_guard_protects_contract_sources_and_reserved_home(self):
+        product = "products/shop/context.md"
+        area = "products/shop/areas/refunds/context.md"
+        candidate = "products/shop/sources/approved.md"
+        other = "products/shop/original.md"
+        records.create(self.root, "product-context", candidate)
+        records.create(self.root, "product-context", other)
+        import upgrades
+        ledger = self.work / upgrades.LEDGER
+        state = json.loads(ledger.read_text())
+        state[upgrades.RULE][other] = {"role": "source", "status": "reviewed", "note": "Published guidance."}
+        ledger.write_text(json.dumps(state))
+        self.assertEqual(json.loads(self.cli("area-context", "shop", "refunds"))["product_briefs"], [])
+        q = {"scope": "product", "product": "shop", "product_area": "refunds", "topic": "goals",
+             "question": "Which measure applies?"}
+        for name in (candidate, other):
+            path = self.work / name
+            original = path.read_bytes()
+            row = dict(q, record={"path": name, "reason": "Save a question."})
+            self.assertNotEqual(self.capture({"sources": [], "entries": [row]}, "--write", name).returncode, 0)
+            self.assertEqual(path.read_bytes(), original)
+        with self.assertRaises(subprocess.CalledProcessError):
+            self.cli("new", "goal", area)
+        records.create(self.root, "product-context", product)
+        self.cli("new", "product-area-context", area, "--reason", "Support reads these rules weekly.",
+                 "--trigger", "Policy owner changes the rules.")
+        for topic, section in (("ownership", "Area scope and ownership"), ("contribution", "Area outcomes")):
+            result = self.capture({"sources": [], "entries": [dict(q, topic=topic)]})
+            self.assertEqual(json.loads(result.stdout)["entries"][0]["section"], section)
+        path = self.work / area
+        modified = path.read_text().replace("## Filing", "## Unverified filing")
+        path.write_text(modified)
+        result = self.capture({"sources": [], "entries": [q]}, "--write", area)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertEqual(path.read_text(), modified)

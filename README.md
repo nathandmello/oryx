@@ -22,7 +22,7 @@ Read `workspace/README.md` for the current session checkpoint and next action. K
 
 For first-time setup, start with company context, then product context and strategy. Mixed sources can inform several records in one session.
 
-Link a recurring initiative to its product context when the work warrants a separate brief.
+For area work, read the product brief and its area-specific evidence. Maintain a separate [area brief](playbook/filing.md#product-area-context) when the work warrants it.
 
 Agents automatically use [ingest-context](.agents/skills/ingest-context/SKILL.md) for context capture. The agent prompts for a missing or unfinished [PM remit](playbook/context.md#pm-remit). A remit can cover whole products or several areas within them.
 
@@ -34,7 +34,7 @@ Keep only `README.md`, `AGENTS.md`, `CLAUDE.md`, and `.gitignore` as root files.
 | --- | --- | --- |
 | `workspace/context/` | Organisation and business context | Private workspace |
 | `workspace/context/pm-remit.json` | Optional PM responsibilities, goals, dependencies, and topics to follow | Private workspace |
-| `workspace/products/<product>/` | Product context, initiative context, and active PM work | Private workspace |
+| `workspace/products/<product>/` | Product, area, and initiative context and active PM work | Private workspace |
 | `workspace/settings.json` | Personal settings and expected remotes | Private workspace |
 | `workspace/.hub-history/` | Verified original files and conversion plans for recovery | Private workspace |
 | `workspace/.hub-upgrades.json` | Private progress on release-specific reviews | Private workspace |

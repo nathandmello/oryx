@@ -501,6 +501,8 @@ def capture_errors(root, target, text):
                     texts[path.relative_to(private).as_posix()] = stream.read().decode("utf-8")
     texts[rel] = text
     errors = [error for error in records.validate(texts) if error.startswith(rel + ":")]
+    if text.startswith("<!-- pm: product-area-context -->\n"):
+        filing.verify_note(private, rel, text)
     return errors + writing_errors(text) + link_errors(root, target, text)
 
 
@@ -530,6 +532,9 @@ def main() -> int:
     new.add_argument("--trigger")
     route = commands.add_parser("route-context", help="Route supplied context evidence from JSON on stdin")
     route.add_argument("--write", metavar="PATH", help="Apply entries to one authorised context record")
+    area = commands.add_parser("area-context", help="Locate a product area's context and its source records")
+    area.add_argument("product")
+    area.add_argument("area")
     commands.add_parser("set-remit", help="Save a PM-confirmed remit from JSON on stdin")
     initialise = commands.add_parser("init-workspace")
     initialise.add_argument("--owner", default="")
@@ -591,12 +596,18 @@ def main() -> int:
             with storage.writer_lock(private):
                 filing.check_new(private, args.kind, args.path, args.title)
                 contract = None
-                if args.kind == "context-note":
+                if args.kind == "product-area-context":
+                    contract = filing.area_contract(private, args.path, args.parent, args.basis, args.reason, args.trigger)
+                elif args.kind == "context-note":
                     contract = filing.note_contract(private, args.path, args.parent, args.basis, args.reason, args.trigger)
                 elif any((args.parent, args.basis, args.reason, args.trigger)):
                     raise ValueError("Filing details apply to supporting context notes")
                 created = records.create(ROOT, args.kind, args.path, args.title, owner=settings["owner"], filing_contract=contract)
             print(f"Created {created.relative_to(ROOT)} as a draft.")
+            return 0
+        if args.command == "area-context":
+            private = workspace.repo(ROOT, "workspace")
+            print(json.dumps(context_capture.area_context(private, args.product, args.area), indent=2))
             return 0
         if args.command == "set-remit":
             private = workspace.repo(ROOT, "workspace")
