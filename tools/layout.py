@@ -26,8 +26,10 @@ def area(product_name, area_name):
     return f"context/products/{slug(product_name)}/areas/{slug(area_name)}/overview.md"
 
 
-def initiative(name):
-    return f"context/initiatives/{slug(name)}/overview.md"
+def initiative(name, product_name=None):
+    if product_name is None:
+        return f"context/initiatives/{slug(name)}/overview.md"
+    return f"context/products/{slug(product_name)}/initiatives/{slug(name)}/overview.md"
 
 
 def initiative_register(product_name):
@@ -75,11 +77,11 @@ def entity(name):
         return Path(*parts[:2])
     if len(parts) >= 4 and parts[:2] in (("context", "products"), ("context", "initiatives")):
         slug(parts[2])
-        if parts[1] == "products" and parts[3] == "areas":
-            if len(parts) < 6:
-                raise ValueError("Choose a named product area")
+        if parts[1] == "products" and parts[3] in {"areas", "initiatives"} and len(parts) >= 6:
             slug(parts[4])
             return Path(*parts[:5])
+        if parts[1] == "products" and parts[3] == "areas":
+            raise ValueError("Choose a named product area")
         return Path(*parts[:3])
     raise ValueError("Choose a company, product, product area, or initiative context entity")
 
@@ -99,7 +101,9 @@ def brief_kind(name):
     if owner.parts[:2] == ("context", "initiatives"):
         return "initiative-context"
     if owner.parts[:2] == ("context", "products"):
-        return "product-area-context" if len(owner.parts) == 5 else "product-context"
+        return {"areas": "product-area-context", "initiatives": "initiative-context"}.get(
+            owner.parts[3] if len(owner.parts) == 5 else "", "product-context"
+        )
     return None
 
 

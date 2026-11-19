@@ -89,7 +89,7 @@ def prepare(case, run, source_file, source_view):
     hub_command(hub, "new", "company-context", "context/company/overview.md", "--title", "Eval company")
     product = "context/products/eval-product/overview.md"
     hub_command(hub, "new", "product-context", product, "--title", "Eval product")
-    overview = f"context/initiatives/{case['initiative']}/overview.md"
+    overview = pm.layout.initiative(case["initiative"], "eval-product")
     hub_command(hub, "new", "initiative-context", overview, "--parent", product, "--title", case["title"])
     print(hub_command(hub, "check").strip())
     baseline = {"system": snapshot(hub), "private": snapshot(hub / "private")}
@@ -125,8 +125,8 @@ def check(case, run):
     if before.get("replay"):
         tests["existing evidence and note unchanged"] = not changed.difference({"README.md"})
     elif case["mode"] == "capture":
-        entity = Path("context/initiatives") / case["initiative"]
-        overview = (entity / "overview.md").as_posix()
+        overview = pm.records.initiative_home(hub / "private", "eval-product", case["initiative"])
+        entity = Path(overview).parent
         notes = [p for p in changed if Path(p).parent == entity and Path(p).name.startswith(case["date"] + "-")
                  and after.get(p) and (hub / "private" / p).read_text().startswith("<!-- pm: context-note -->")]
         tests["initiative overview updated"] = overview in changed and overview in after

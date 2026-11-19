@@ -60,7 +60,6 @@ CONTEXT_TABLES = {
     "Decisions already closed": ("Question", "Scope", "Person and date", "Evidence", "Next step"),
 }
 CONTEXT_LEAD = "<!-- pm: context-lead -->"
-CONTEXT_LEAD_HEADING = re.compile(rf"(?m)^## ([^\n]+)\n(?:[ \t]*\n)*{re.escape(CONTEXT_LEAD)}[ \t]*$")
 CONTEXT_LEADS = {
     "Context": "Consult when checking the evidence for the subject named in this note.",
     "Data boundaries": "Consult before selecting, sharing, or retaining data for PM work.",
@@ -92,7 +91,31 @@ CONTEXT_LEADS = {
     "Ownership and constraints": "Consult before making commitments that depend on product ownership or limits.",
 }
 SOURCE_REFERENCE = re.compile(r"\[S[1-9]\d*\]")
-
+CONTEXT_ENTRY = re.compile(r"- (Fact|Rule|Example|Interpretation|Reported metric|Assumption|Unknown): (.+)")
+WORKING_SECTIONS = ("Scope", "Evidence", "Next action")
+HTML_BLOCK_TAGS = (
+    "address|article|aside|base|basefont|blockquote|body|caption|center|col|colgroup|dd|details|dialog|dir|div|dl|dt|"
+    "fieldset|figcaption|figure|footer|form|frame|frameset|h[1-6]|head|header|hr|html|iframe|legend|li|link|main|menu|"
+    "menuitem|nav|noframes|noscript|ol|optgroup|option|p|param|search|section|summary|table|tbody|td|tfoot|th|thead|"
+    "title|tr|track|ul"
+)
+HTML_TAG_ATTRIBUTE = r'''[a-z_:][a-z0-9_.:-]*(?:[ \t]*=[ \t]*(?:[^\s"'=<>`]+|"[^"\n]*"|'[^'\n]*'))?'''
+HTML_STANDALONE_TAG = rf"(?:<[a-z][a-z0-9-]*(?:[ \t]+{HTML_TAG_ATTRIBUTE})*[ \t]*/?>|</[a-z][a-z0-9-]*[ \t]*>)"
+HTML_TO_BLANK_LINE = r"(?:\n(?![ \t]*(?:\n|\Z))[^\n]*)*"
+HIDDEN_SECTION_MARKUP = re.compile(
+    # Match a whole fence first so literal comments or tags inside it stay local to the example.
+    r"^ {0,3}(?P<fence>(?P<mark>[`~])(?P=mark){2,})(?!(?P=mark))[^\n]*(?:\n|\Z)"
+    r".*?(?:^ {0,3}(?P=fence)(?P=mark)*[ \t]*(?=\n|\Z)|\Z)"
+    r"|<!--.*?(?:-->|\Z)"
+    r"|^ {0,3}<(?P<tag>pre|script|style|textarea)(?=[\s>/]).*?(?:</(?P=tag)\s*>|\Z)"
+    # CommonMark declarations and processing instructions close with their own delimiters.
+    r"|^ {0,3}(?:<\?.*?(?:\?>|\Z)|<!\[CDATA\[.*?(?:\]\]>|\Z)|<![a-z].*?(?:>|\Z))"
+    # Ordinary block tags end at a blank line. Treat a standalone custom tag the same
+    # way if there is a heading immediately after it that could be parsed as HTML.
+    rf"|^ {{0,3}}</?(?:{HTML_BLOCK_TAGS})(?=[\s>/])[^\n]*{HTML_TO_BLANK_LINE}"
+    rf"|^ {{0,3}}{HTML_STANDALONE_TAG}[ \t]*(?=\n|\Z){HTML_TO_BLANK_LINE}",
+    re.I | re.M | re.S,
+)
 
 def work_state(text):
     count = len(re.findall(r"^## Work state\s*$", text, re.M))
@@ -158,9 +181,67 @@ def state_errors(text):
     return values.get("ID"), errors
 
 
+def visible_section_markup(text):
+    return HIDDEN_SECTION_MARKUP.sub(lambda match: re.sub(r"[^\r\n]", " ", match[0]), text)
+
+
+def section_blocks(text):
+    """Find visible Markdown headings while keeping original section offsets."""
+    positions = [(match[1].strip(), match.start(), match.end())
+                 for match in re.finditer(r"(?m)^## ([^\r\n]+)(?:\r?\n|$)", visible_section_markup(text))]
+    return [(name, start, body, end) for (name, start, body), end in
+            zip(positions, [item[1] for item in positions[1:]] + [len(text)])]
+
 def section(text, name):
-    matches = re.findall(r"^## " + re.escape(name) + r"\s*\n(.*?)(?=^## |\Z)", text, re.M | re.S)
-    return matches[0] if len(matches) == 1 else None
+    matches = [(body, end) for heading, _, body, end in section_blocks(text) if heading == name]
+    return re.sub(r"^(?:[ \t]*\r?\n)+", "", text[slice(*matches[0])]) if len(matches) == 1 else None
+
+
+def heading_order(kind, template):
+    order = [name for name, *_ in section_blocks(template)]
+    if kind in ("context-note", "product-area-context") and "Context controls" in order:
+        order.insert(order.index("Context controls"), "Filing")
+    if kind == "product-context":
+        for topic, old in LEGACY_PRODUCT_TOPICS.items():
+            current = CONTEXT_TOPICS["product"][topic]
+            if old not in order and current in order:
+                order.insert(order.index(current) + 1, old)
+    return order
+
+
+def ordered_sections(text, order):
+    blocks = section_blocks(text)
+    positions = {name: index for index, name in enumerate(order)}
+    standard = iter(sorted((block for block in blocks if block[0] in positions), key=lambda item: positions[item[0]]))
+    sorted_blocks = [next(standard) if block[0] in positions else block for block in blocks]
+    if sorted_blocks == blocks:
+        return text
+    return text[:blocks[0][1]] + "".join(
+        text[start:end].rstrip("\r\n") + "\n\n" for _, start, _, end in sorted_blocks
+    ).rstrip("\n") + "\n"
+
+
+def working_errors(text):
+    errors = []
+    sections = [name for name, *_ in section_blocks(text) if name in WORKING_SECTIONS]
+    if sections != list(WORKING_SECTIONS):
+        errors.append("Use Scope, Evidence, and Next action sections in that order for working Markdown")
+    for name in WORKING_SECTIONS:
+        if name in sections and not (section(text, name) or "").strip():
+            errors.append(f"Give {name} a concrete entry or state the current gap")
+    return errors
+
+
+def structure_errors(kind, text, order):
+    headings = [name for name, *_ in section_blocks(text)]
+    sections = set(headings)
+    errors = []
+    if [name for name in headings if name in order] != [name for name in order if name in sections]:
+        errors.append(f"use the section order from the {kind} template")
+    if kind in CONTEXT_KINDS:
+        errors.extend(f"unknown context section: {name}. Use a supported heading or a sourced section with a lead"
+                      for name in sorted(sections - set(order) - context_content(kind, text)))
+    return errors
 
 
 def table(text, name, columns):
@@ -226,6 +307,15 @@ def product_briefs(private, product):
     return existing_briefs(private, layout.product(product), "product")
 
 
+def initiative_home(private, product, initiative):
+    qualified = layout.initiative(initiative, product)
+    legacy = layout.initiative(initiative)
+    if (private / qualified).exists() or not existing_briefs(private, legacy, "initiative"):
+        return qualified
+    text = (private / legacy).read_text(encoding="utf-8")
+    return legacy if parent_reference(legacy, text) == layout.product(product) else qualified
+
+
 def parent_reference(path, text):
     controls, _ = table(text, "Context controls", ("Field", "Value"))
     value = dict(controls).get("Parent context", "")
@@ -250,6 +340,13 @@ def context_sections(kind):
     return sections
 
 
+def context_content(kind, text):
+    standard = context_sections(kind) | CONTEXT_TABLES.keys()
+    return {name for name, _, start, end in section_blocks(text)
+            if name in standard
+            or (name not in CONTEXT_RESERVED_SECTIONS and split_context_lead(text[start:end])[0] is not None)}
+
+
 def split_context_lead(body):
     """Return a marked navigation lead and the substantive content beneath it."""
     body = body.strip()
@@ -271,7 +368,7 @@ def context_entries(body):
     for line in body.splitlines():
         if not line.strip() or PLACEHOLDER.fullmatch(line.strip()):
             continue
-        entry = re.fullmatch(r"- (Fact|Rule|Example|Interpretation|Assumption|Unknown): (.+)", line)
+        entry = CONTEXT_ENTRY.fullmatch(line)
         if entry:
             current = [entry[1], entry[2]]
             entries.append(current)
@@ -369,7 +466,8 @@ def context_errors(path, text, kind, texts, content_sections, template=False):
             marker = MARKER.match(texts.get(parent, ""))
             if kind in {"initiative-context", "product-area-context"}:
                 product_path = layout.brief_kind(parent) == "product-context"
-                same_product = kind == "initiative-context" or Path(path).parts[:3] == Path(parent).parts[:3]
+                same_product = (Path(path).parts[:2] == ("context", "initiatives")
+                                or Path(path).parts[:3] == Path(parent).parts[:3])
                 if not product_path or not same_product or not marker or marker[1] != "product-context":
                     errors.append("Parent context must link to the same product's product-context record")
             elif not parent.startswith("context/") or not marker or marker[1] != "company-context":
@@ -419,16 +517,16 @@ def context_errors(path, text, kind, texts, content_sections, template=False):
         if unlabelled:
             errors.append(f"{name}: use labelled context bullets")
         for label, claim in entries:
-            substantive = substantive or label in {"Fact", "Rule", "Example"}
-            if label in {"Fact", "Rule", "Example"} and not PLACEHOLDER.fullmatch(claim) and not SOURCE_REFERENCE.search(claim):
+            substantive = substantive or label in {"Fact", "Rule", "Example", "Reported metric"}
+            if label in {"Fact", "Rule", "Example", "Reported metric"} and not PLACEHOLDER.fullmatch(claim) and not SOURCE_REFERENCE.search(claim):
                 errors.append(f"{name}: {label} entries need a source reference such as [S1]")
     if state == "complete" and not substantive:
         errors.append("complete context needs a sourced fact, rule, example, or structured entry")
     return errors, parent
 
 
-def validate(texts):
-    errors, contracts, ids, parents = [], {}, {}, {}
+def validate(texts, *, legacy_structure=()):
+    errors, contracts, orders, ids, parents = [], {}, {}, {}, {}
     for path in texts:
         if path.startswith("templates/") and path.endswith(".md") and path != "templates/README.md":
             if Path(path).relative_to("templates").as_posix() not in {f"{kind}.md" for kind in KINDS}:
@@ -444,7 +542,9 @@ def validate(texts):
             problems.append("templates must start as drafts")
         if values.get("Mode") != "thought-partner":
             problems.append("templates must start in thought-partner mode")
-        contracts[kind] = set(re.findall(r"^## (.+)$", text, re.M))
+        contracts[kind] = {name for name, *_ in section_blocks(text)}
+        if "Context controls" in contracts[kind] or kind not in CONTEXT_KINDS:
+            orders[kind] = heading_order(kind, text)
         if kind in CONTEXT_KINDS:
             content = contracts[kind] - CONTEXT_METADATA
             if content - context_sections(kind):
@@ -464,7 +564,10 @@ def validate(texts):
         if kind not in contracts:
             errors.append(f"{path}: unknown artifact type: {kind}")
             continue
-        sections = set(re.findall(r"^## (.+)$", text, re.M))
+        headings = [name for name, *_ in section_blocks(text)]
+        sections = set(headings)
+        if path not in legacy_structure:
+            errors.extend(f"{path}: {error}" for error in structure_errors(kind, text, orders.get(kind, [])))
         required = CONTEXT_METADATA if kind in CONTEXT_KINDS else contracts[kind]
         if kind == "strategy":
             required = required - {"When"}  # Earlier strategy records predate this prompt.
@@ -474,9 +577,7 @@ def validate(texts):
         if kind in CONTEXT_KINDS:
             # Older versions allowed custom prose outside the standard sections.
             # Apply the entry contract when a custom section adopts a lead.
-            marked = {name.rstrip() for name in CONTEXT_LEAD_HEADING.findall(text)}
-            content = (sections & context_sections(kind)) | (marked - CONTEXT_RESERVED_SECTIONS)
-            extra, parent = context_errors(path, text, kind, texts, content)
+            extra, parent = context_errors(path, text, kind, texts, context_content(kind, text))
             problems.extend(extra)
             if parent:
                 parents[path] = parent

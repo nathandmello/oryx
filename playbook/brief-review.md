@@ -5,6 +5,8 @@
 State the choice, decision owner, and commitment requested. If the brief leaves a material part implicit, report that gap.
 Match evidence to the stage. A discovery brief can justify a bounded test while the case for delivery remains open.
 
+Apply [the numerical evidence procedure](numbers.md) to material baselines, forecasts, rates, and results. Record the comparison basis and unresolved gaps.
+
 Describe the observed problem before naming the proposed solution. State the strongest competing explanation. Compare credible options against the same criteria, including the current approach when viable. Name the assumption that would change the decision if it failed. [Strategic choice and tests](https://hbr.org/2012/09/bringing-science-to-the-art-of-strategy)
 
 ## Check what each sentence commits to

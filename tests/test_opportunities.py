@@ -3,6 +3,7 @@
 import csv
 from datetime import date, timedelta
 import errno
+import hashlib
 from io import StringIO
 import json
 import os
@@ -179,6 +180,19 @@ class InitiativeTests(unittest.TestCase):
 
     def trace(self):
         return json.loads(self.cli("initiative", "show", "example", self.i))
+
+    def test_filing_preview_preserves_a_signed_brief(self):
+        self.submit(self.setup_event(), self.capture(), self.describe(), self.metric(), self.decision("evaluate"))
+        self.submit(self.decision("prepare-brief"))
+        self.brief_ready()
+        self.submit(self.target(), self.decision("approve-initiative"))
+        path = self.work / self.brief
+        original = path.read_bytes()
+        text = path.read_text().replace("Send account reminders.\n", "Send account reminders.\nReview the pilot result.\n")
+        plan = {"id": "brief-format-review", "reason": "Improve the proposed briefing language.",
+                "changes": [{"path": self.brief, "before": hashlib.sha256(original).hexdigest(), "text": text}]}
+        self.cli("align", "--preview-plan", value=plan, error="binds signed evidence")
+        self.assertEqual(path.read_bytes(), original)
 
     def test_one_id_through_discovery_delivery_and_measured_outcomes(self):
         self.submit(self.setup_event(), self.capture(), self.describe(), self.metric(),

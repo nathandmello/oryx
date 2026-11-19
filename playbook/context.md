@@ -10,7 +10,7 @@ Link product context to its company. Area and initiative briefs inherit their pr
 
 Keep inherited commitments in force. Cite the decision owner’s approval for any exception.
 
-Reuse authoritative records for goals, research, and delivery details. Apply [the filing rules](filing.md) before creating any supporting note.
+Link existing goals, research, and delivery details. Apply [the filing rules](filing.md) before creating a note.
 
 ## Make the brief usable
 
@@ -105,7 +105,7 @@ For product or initiative context, add `product_area` when the evidence identifi
 
 Deferred scopes are `delivery`, `detail`, and `unclear`.
 
-Use established slugs in `context/initiatives/<initiative>/overview.md`. Link the owning product.
+File new initiative guidance in `context/products/<product>/initiatives/<initiative>/overview.md`. Reuse an older brief linked to the same product.
 
 Base local Markdown source links on the private repository root. Each inspection date retains its source ID.
 
@@ -117,6 +117,10 @@ The router checks literal excerpts and common commitment sentences against avail
 
 Use exact single-line quotes and locators. Provide `rule` for an actionable instruction or `interpretation` for a sourced implication. Cite evidence for factual claims.
 
+Check material quantities using [the numerical evidence procedure](numbers.md). Keep unverified figures as reported claims.
+
+For an authorised replacement, add `supersedes` with the earlier local `source` ID and exact `entry` text or decision question. Cite dated replacement evidence in the same scope.
+
 Use `question` for an unknown. Cite new evidence with `answers` to resolve the exact question. Keep vocabulary and decision rows in their dedicated tables.
 
 Omit the topic to keep an update at its source. Use `affects` for confirmed effects. For existing records, supply the path and reason. A new supporting record also needs its parent, basis, and review trigger.
@@ -127,9 +131,7 @@ Name a maintainer and review triggers. Review closed decisions, releases, and ch
 
 Use an event-driven review or a dated deadline. Set Last reviewed after an actual review. Carry parent changes through to the affected briefs and goals.
 
-Try the brief in a fresh task. Add what the worker had to ask. Cut what they never needed. Use [checkpoints](working.md) for unresolved work.
-
-The checker validates structure, source references, parent links, decision rows, and review fields. Assess fidelity, source authority, approvals, and current evidence during review.
+Try the brief in a fresh task. Review fidelity, source authority, and approvals. Use [checkpoints](working.md) for unresolved work.
 
 ## Review existing context
 
@@ -153,6 +155,4 @@ Report remaining gaps and unavailable evidence.
 
 ## Basis
 
-Based on the supplied *Product Context File Templates* and PM Hub's existing context and ownership rules.
-
-The company and product outlines also draw on [Strategyzer](https://www.strategyzer.com/library/the-business-model-canvas), [Product Talk](https://www.producttalk.org/business-fundamentals-course/), and [Roman Pichler](https://www.romanpichler.com/tools/product-vision-board/).
+The outlines draw on the supplied *Product Context File Templates*, [Strategyzer](https://www.strategyzer.com/library/the-business-model-canvas), [Product Talk](https://www.producttalk.org/business-fundamentals-course/), and [Roman Pichler](https://www.romanpichler.com/tools/product-vision-board/).

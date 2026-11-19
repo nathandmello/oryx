@@ -37,6 +37,8 @@ Keep user stories, detailed flows, and engineering specifications in the configu
 
 An outcome has five parts: metric, baseline, target, time horizon, and guardrails.
 
+Use [the metric registry](metrics.md) for the effective calculation and population.
+
 Connect organisation goals, product goals, customer outcomes, initiative goals, and feature goals where those levels apply. Metrics measure these outcomes.
 
 In an alignment session, separate proposed solutions, customer outcomes, and organisational objectives. Trace proposed solutions back to their problem and intended outcome.
