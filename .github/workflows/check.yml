@@ -34,6 +34,12 @@ jobs:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
         run: python3 tools/pm.py check --system-only --command-base "$BASE_SHA"
       - run: python3 -m unittest discover -s tests -v
+      - name: Exercise the browser app in Chromium
+        working-directory: tests/browser
+        run: |
+          npm ci
+          npx playwright install --with-deps chromium
+          npm test
       - name: Check context retrieval, artifact structure and numeric behavior
         run: python3 tests/context-evals/run.py --strict
 

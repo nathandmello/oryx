@@ -60,6 +60,8 @@ REQUIRED = (
     "tools/initiative_events.py", "tools/initiative_store.py", "tools/initiatives_cli.py", "tools/initiative_views.py",
     "tools/initiative_areas.py", "tools/initiative_intake.py", "tools/experiment_drafts.py",
     "tools/initiative_work.py", "templates/launch-checklist.json", "playbook/initiative-work.md",
+    "tools/local_ui.py", "tools/roadmap_edit.py", "playbook/local-ui.md",
+    "tools/local_ui/index.html", "tools/local_ui/app.css", "tools/local_ui/app.js", "tools/local_ui/confirm.py",
     ".agents/skills/manage-initiative-work/SKILL.md",
     "templates/views/backlog.json", "templates/views/roadmap.json",
     "playbook/initiative-approvals.md", "playbook/initiative-views.md",
@@ -641,6 +643,16 @@ def prepare_private_write(root):
     return workspace.settings(root)
 
 
+def run_initiative_work(root, command, operation, product, initiative, *, write=False, **edits):
+    if write:
+        prepare_private_write(root)
+        with storage.writer_lock(workspace.repo(root, "workspace")):
+            return initiative_work.execute(root, command, operation, product, initiative, write=True, **edits)
+    workspace.repo(root, "workspace")
+    workspace.settings(root)
+    return initiative_work.execute(root, command, operation, product, initiative, **edits)
+
+
 def alignment_notice(root, result=None):
     try:
         if not workspace.private_root(root).exists():
@@ -716,6 +728,11 @@ def build_parser():
     new.add_argument("--trigger")
     initiatives_cli.add_commands(commands)
     initiative_work.add_commands(commands)
+    ui = commands.add_parser("ui", help="Open the local PM Hub browser app")
+    ui.add_argument("--screen", choices=("roadmap", "tasks", "launch-checklists"), default="roadmap",
+                    help="Choose the first screen (default: roadmap)")
+    ui.add_argument("--key", help="Absolute path to the PM signing key or its agent-backed public key")
+    ui.add_argument("--no-open", action="store_true", help="Print the local URL without launching a browser")
     route = commands.add_parser("route-context", help="Route supplied context evidence from JSON on stdin")
     route.add_argument("--write", metavar="PATH", help="Apply entries to one authorised context record")
     area = commands.add_parser("area-context", help="Locate a product area's context and its source records")
@@ -814,15 +831,14 @@ def main() -> int:
             return 0
         if args.command in {"task", "launch-checklist"}:
             writing = args.operation != "list" and not args.preview
-            if writing:
-                prepare_private_write(ROOT)
-                private = workspace.repo(ROOT, "workspace")
-                with storage.writer_lock(private):
-                    initiative_work.run(ROOT, args, write=True)
-            else:
-                workspace.repo(ROOT, "workspace")
-                workspace.settings(ROOT)
-                initiative_work.run(ROOT, args)
+            changes = storage.json_input(os.sys.stdin.read()) if args.operation == "apply" else None
+            result = run_initiative_work(ROOT, args.command, args.operation, args.product, args.initiative, write=writing,
+                                         expected=getattr(args, "revision", None), changes=changes)
+            initiative_work.render(result, getattr(args, "format", "json"))
+            return 0
+        if args.command == "ui":
+            import local_ui
+            local_ui.serve(ROOT, args.key, args.no_open, prepare_private_write, run_initiative_work, screen=args.screen)
             return 0
         if args.command == "new":
             workspace.repo(ROOT, "workspace")
