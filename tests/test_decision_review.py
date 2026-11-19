@@ -2,10 +2,14 @@
 
 from datetime import date, timedelta
 import json
+import os
 import re
 import unittest
+from unittest.mock import patch
 
 import test_opportunities
+
+import decision_review
 
 
 class WeeklyReviewTests(unittest.TestCase):
@@ -55,6 +59,20 @@ class WeeklyReviewTests(unittest.TestCase):
         self.assertEqual([r["kind"] for r in self.scan()["findings"]], ["unassessed-hypothesis"])
         h.submit(h.decision("decline"))
         self.assertEqual(self.scan(), {"findings": [], "next_check": None})
+
+    def test_quiet_hypothesis_uses_its_own_latest_dated_result(self):
+        h = self.hub
+        hypothesis, experiment, result, assessment = h.evidence()
+        h.submit(h.setup_event(), h.capture(), h.metric(), hypothesis, experiment)
+        h.submit(result, assessment)
+        self.assertEqual(self.scan()["findings"], [])
+        with patch.dict(os.environ, h.env), patch.object(decision_review, "date") as clock:
+            clock.today.return_value = date.today() + timedelta(days=29)
+            self.assertEqual(decision_review.review(h.root)["findings"], [])
+            clock.today.return_value = date.today() + timedelta(days=30)
+            row = decision_review.review(h.root)["findings"][0]
+        self.assertEqual(row["kind"], "quiet-hypothesis")
+        self.assertIn(result["source"], row["sources"])
 
     def test_six_week_decision_and_forecast_checks_preserve_the_original(self):
         h = self.hub
