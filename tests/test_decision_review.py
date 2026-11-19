@@ -58,6 +58,23 @@ class WeeklyReviewTests(unittest.TestCase):
         h.ledger.write_text(h.ledger.read_text().replace("Support log 0", "Changed locator"))
         h.cli("decision-review", error="signature")
 
+    def test_signed_rationale_schedules_the_same_review_in_both_public_views(self):
+        h = self.hub
+        rationale = {"choice": "Assess the renewal pilot", "alternatives": ["Drop the pilot"],
+                     "tradeoff": "Use research time this week", "owner": "Billing PM", "scope": "Renewals",
+                     "reopen_when": "Customers stop renewing", "review_on": h.today}
+        h.submit(h.setup_event(), h.capture(), h.describe(), h.decision("evaluate", rationale=rationale))
+        before = h.ledger.read_bytes()
+        for command in (["backlog"], ["action", "portfolio", "backlog", "show"]):
+            rows = json.loads(h.cli(*command, "--product", "example", "--due"))
+            self.assertEqual([(row["id"], row["revisit"]) for row in rows], [(h.i, h.today)])
+        self.assertEqual(self.scan("--product", "example")["findings"][0]["kind"], "decision-due")
+        self.assertEqual(h.ledger.read_bytes(), before)
+        later = (date.today() + timedelta(days=2)).isoformat()
+        h.submit(h.decision("defer", revisit=h.today, rationale={**rationale, "review_on": later}))
+        self.assertEqual(json.loads(h.cli("backlog", "--due"))[0]["revisit"], h.today)
+        self.assertIn(h.today, self.scan()["findings"][0]["finding"])
+
     def test_new_observation_against_observable_trigger_and_hypothesis(self):
         h = self.hub
         h.submit(h.setup_event(), h.capture(), h.evidence()[0])

@@ -42,14 +42,13 @@ def signed_findings(private, product, register, events, today):
                           "finding": message, "sources": [path, source]}, check
 
         due = initiative_views.next_review(item, decision)
-        dates = [day for value in (due, rationale.get("review_on"))
-                 if (day := initiative_events.iso_date(value)) and day <= today]
-        if dates:
-            yield finding(0, "decision-due", f"{decision['action']} is due for review on {min(dates)}.",
+        review_date = initiative_events.iso_date(due)
+        if review_date and review_date <= today:
+            yield finding(0, "decision-due", f"{decision['action']} is due for review on {review_date}.",
                           decision["source"], "Check the signed review condition against current evidence.")
         if item["phase"] == "declined" or (item["phase"] == "shipped" and due is None):
             continue
-        if decision and not initiative_events.iso_date(due) and not rationale.get("review_on"):
+        if decision and not review_date:
             if initiative_events.iso_date(decision["on"]) <= today - timedelta(weeks=6):
                 yield finding(3, "decision-age", f"The latest signed decision dates to {decision['on']}.",
                               decision["source"], "Check whether the original reason still applies.")
@@ -65,7 +64,8 @@ def signed_findings(private, product, register, events, today):
         if evidence and evidence["type"] == "result":
             yield finding(1, "experiment-evidence", f"{evidence['experiment']}: {evidence['conclusion']}.",
                           evidence["source"], "Compare the experiment result with the assumption it tested.")
-        condition = rationale.get("reopen_when") or (due if not initiative_events.iso_date(due) else None)
+        revisit = decision.get("revisit")
+        condition = rationale.get("reopen_when") or (revisit if not initiative_events.iso_date(revisit) else None)
         if evidence and condition:
             candidate = finding(1, "possible-trigger", f"Check whether new evidence meets this condition: {condition}",
                                 evidence["source"], "Compare the observation with the signed reopen condition.")

@@ -50,6 +50,9 @@ def view_template(root, view):
 def next_review(item, decision):
     scheduled = decision.get("review_on") or decision.get("revisit")
     dates = [change["on"] for change in item["evidence_changes"]]
+    rationale_date = decision_rationale(decision).get("review_on")
+    if rationale_date:
+        dates.append(rationale_date)
     if decision.get("action") == "review-outcomes":
         follow = decision["follow_up"]
         triggers = item["review_trigger_measurements"]
