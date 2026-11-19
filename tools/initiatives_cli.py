@@ -38,7 +38,7 @@ def add_commands(commands):
     scope = backlog.add_mutually_exclusive_group()
     scope.add_argument("--phase", choices=PHASES)
     scope.add_argument("--all-phases", action="store_true", help="Include selected, deferred, and closed initiatives")
-    backlog.add_argument("--due", action="store_true", help="Show dated reviews due today or earlier")
+    backlog.add_argument("--due", action="store_true", help="Show reviews due today or earlier and report review issues")
     roadmap = commands.add_parser("roadmap", help="Generate the current selected roadmap")
     roadmap.add_argument("--cycle", help="Show one planning cycle")
     for view in (backlog, roadmap):
@@ -87,9 +87,11 @@ def run(root, args):
     private = workspace.private_root(root)
     if args.command in {"backlog", "roadmap"}:
         product, area = initiative_areas.filter_subject(args.product, args.area)
-        registers = initiative_store.registrations(root, product, require_current=True)
-        if area is not None:
+        due_view = args.command == "backlog" and args.due
+        registers = initiative_store.registrations(root, product, require_current=not due_view)
+        if due_view or area is not None:
             registers = list(registers)
+        if area is not None:
             if not any(area in item["areas"] for _, register in registers for item in register.items.values()):
                 info = initiative_areas.resolve(private, product, area)
                 if "issue" in info:
@@ -122,4 +124,9 @@ def run(root, args):
                                           args.key, args.confirm_distinct)
         print(f"Recorded PM-signed revision {revision}.")
         return
-    print(initiative_views.render(initiative_views.view_template(root, args.command), rows, args.format))
+    output = initiative_views.render(initiative_views.view_template(root, args.command), rows, args.format)
+    if due_view:
+        for _, register in registers:
+            for issue in initiative_store.live_errors(root, register, area=area):
+                print(f"Review issue: {issue}", file=sys.stderr)
+    print(output)

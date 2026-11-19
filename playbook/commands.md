@@ -74,7 +74,7 @@ The backlog entry calls the existing terminal operation.
 
 ```json
 "portfolio backlog show": {
-  "summary": "Generate the backlog from the signed initiative register.",
+  "summary": "Show the signed backlog and report review issues in the due view.",
   "effect": "read",
   "cli": ["backlog"],
   "example": ["--product", "checkout", "--due"]

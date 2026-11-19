@@ -36,6 +36,9 @@ Leave uncertain ownership in the proposal, including in quiet mode.
 ## Reassess
 
 The default backlog contains uncommitted work. Use `--phase` to inspect a specific status. Use `--due` for dated reviews across phases.
+
+Report the due rows. Include any review notices from standard error.
+Keep this request read-only if a stop check reports a stale approval.
 Read deferred items separately for event triggers. A dated review cannot detect a customer renewal or a change in obligations.
 
 Review active discovery weekly against its learning goals. At the open-item limit, review existing work with the PM before adding another initiative.
