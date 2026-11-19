@@ -148,7 +148,7 @@ Desktop sessions were outside this fixture.
     def api(self, path):
         if path.startswith("issues/9/comments?"):
             body = "<!-- codex-pull-request-review-summary -->\n<!-- codex-review-state:v1 " + json.dumps(self.state) + " -->"
-            return [{"user": self.bot, "id": 1, "body": body}]
+            return [{"user": self.bot, "id": 1, "updated_at": "2026-11-19T12:00:00Z", "body": body}]
         if "/check-runs?" in path:
             return {"total_count": 0, "check_runs": []}
         if path.startswith("actions/workflows/review.yml/"):
@@ -190,6 +190,24 @@ Desktop sessions were outside this fixture.
         release_review.review(self.pr, api)
         check["app"]["slug"] = "another-app"
         with self.assertRaisesRegex(ValueError, "confirmed passing"):
+            release_review.review(self.pr, api)
+
+    def test_combined_pass_must_follow_current_summary_and_come_from_codex(self):
+        self.state["security_review"]["has_unresolved_findings"] = None
+        reaction = {"content": "+1", "user": self.bot, "created_at": "2026-11-19T12:00:01Z"}
+        def api(path):
+            if "/reactions?" in path:
+                return [reaction]
+            data = self.api(path)
+            if "/comments?" in path:
+                data[0]["body"] += "\nCodex reacts with 👍 once all reviews finish with no findings."
+            return data
+        release_review.review(self.pr, api)
+        for changes in ({"user": {"id": 42}}, {"created_at": "2026-11-19T11:59:59Z"}, {"content": "eyes"}):
+            with patch.dict(reaction, changes), self.assertRaises(ValueError):
+                release_review.review(self.pr, api)
+        self.state["security_review"]["commit_sha"] = "d" * 40
+        with self.assertRaises(ValueError):
             release_review.review(self.pr, api)
 
     def test_publication_requires_reviewed_tree_latest_green_pr_and_merge(self):

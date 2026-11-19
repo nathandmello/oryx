@@ -33,7 +33,9 @@ After a fix, request fresh reviews for that head if the integration has not star
 The agent monitors the Codex summary and checks. It reruns the lightweight review job when both results arrive.
 
 Resolve code findings. Require an explicit clean security result or a successful Codex security check for the same commit.
-Enable the Codex security merge gate when the summary withholds findings. An unknown security outcome holds the merge.
+
+When security findings are private, Codex can confirm both reviews with its documented thumbs-up after the current summary.
+Older reactions expire. An unknown outcome holds the merge.
 The agent merges with the verified head SHA after both reviews and required CI pass. Refresh stale branches before merging.
 
 ## Verify and recover

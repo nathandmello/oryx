@@ -21,6 +21,32 @@ def github(path, method="GET", data=None):
         return json.load(response)
 
 
+def codex_bot(item):
+    author = item.get("user") or {}
+    return author.get("login") == "chatgpt-codex-connector[bot]" and author.get("id") == 199175422
+
+
+def issue_items(number, resource, api):
+    page = 1
+    while True:
+        items = api(f"issues/{number}/{resource}?per_page=100&page={page}")
+        yield from items
+        if len(items) < 100:
+            return
+        page += 1
+
+
+def joint_clearance(pr, summary, api):
+    # Codex documents this reaction as its combined no-findings verdict. Reactions
+    # have no commit ID. Require one strictly newer than the current-head receipt.
+    if "reacts with 👍 once all reviews finish with no findings" not in summary["body"]:
+        return False
+    reactions = [r for r in issue_items(pr["number"], "reactions", api) if codex_bot(r)]
+    if any(r["content"] == "eyes" for r in reactions):
+        return False
+    return any(r["content"] == "+1" and r["created_at"] > summary["updated_at"] for r in reactions)
+
+
 def review(pr, api):
     body = (pr.get("body") or "").replace("\r\n", "\n")
     for title in ("Consumer impact and recovery", "Verification limits"):
@@ -29,19 +55,8 @@ def review(pr, api):
             raise ValueError(f"Complete the {title} section")
 
     head = pr["head"]["sha"]
-    summaries = []
-    page = 1
-    while True:
-        comments = api(f"issues/{pr['number']}/comments?per_page=100&page={page}")
-        for comment in comments:
-            if comment["user"]["login"] != "chatgpt-codex-connector[bot]" or comment["user"]["id"] != 199175422:
-                continue
-            lines = comment["body"].splitlines()
-            if lines[:1] == ["<!-- codex-pull-request-review-summary -->"]:
-                summaries.append(comment)
-        if len(comments) < 100:
-            break
-        page += 1
+    summaries = [item for item in issue_items(pr["number"], "comments", api)
+                 if codex_bot(item) and item["body"].startswith("<!-- codex-pull-request-review-summary -->\n")]
     if not summaries:
         raise ValueError("Waiting for the Codex review summary")
     latest = max(summaries, key=lambda item: item["id"])
@@ -56,6 +71,8 @@ def review(pr, api):
         if result.get("has_unresolved_findings") is False:
             continue
         if key == "security_review" and result.get("has_unresolved_findings") is None:
+            if joint_clearance(pr, latest, api):
+                continue
             # The public summary can omit private security findings. Use the app's
             # current-commit check when it supplies the security decision separately.
             checks = api(f"commits/{head}/check-runs?filter=latest&per_page=100")
