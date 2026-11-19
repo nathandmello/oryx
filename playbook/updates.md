@@ -2,10 +2,11 @@
 
 Open the updated Hub to verify compatibility.
 
-Releases 0.3.1 through 0.8.0 use private format 2.
+Releases 0.3.1 through 0.8.1 use private format 2.
 
 | Release | Change |
 | --- | --- |
+| 0.8.1 | Keeps [dated backlog reviews](initiative-views.md#read-the-views) visible when a signed approval needs review. |
 | 0.8.0 | Adds launch evidence history, decision conflict reviews, guardrail readings, and measurement corrections. |
 | 0.6.1 | Requires [browser impact evidence](local-ui.md#review-workflow-changes) for changes to roadmap, task, and launch checklist workflows. |
 | 0.6.0 | Opens [roadmaps, PM tasks, and launch checklists](local-ui.md) in a local browser. The app reads and updates existing private records. |
