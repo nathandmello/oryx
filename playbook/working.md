@@ -45,10 +45,9 @@ An invalid saved block uses defaults and produces a check error. Use `preference
 
 Read the owning record, its checkpoint, and applicable parent rules. Check sources behind accepted decisions. Report material changes and gaps.
 
-Resolve context for each task and when scope or evidence changes.
-
+Use [local semantic search](context-search.md) for each task and material scope or evidence change.
 Run `pm.py task-context "TASK"` if hooks are unavailable. Use `--product`, `--area`, or `--initiative` when scope is known.
-Add `--work-record workspace/problems/export.md` to read the owning checkpoint and effective quiet mode. Use the resolved reply preferences.
+Add `--work-record workspace/problems/export.md` to read the checkpoint and effective mode. Use the resolved reply preferences.
 Use [the numerical evidence procedure](numbers.md) before relying on material figures from any source.
 
 At startup, ask once about any `remit_prompt` from `pm.py align` when questions are welcome. Respect quiet mode and deferrals. Capture agreed responsibilities in the [PM profile](context.md#pm-remit).

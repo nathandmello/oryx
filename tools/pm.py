@@ -756,6 +756,7 @@ def build_parser():
     task.add_argument("--company", action="store_true")
     task.add_argument("--work-record", help="Use an existing workspace work-state checkpoint")
     task.add_argument("--history", action="store_true", help="Include recorded risk dispositions in this scope")
+    task.add_argument("--explain", action="store_true", help="Include local retrieval diagnostics")
     commands.add_parser("catalog", help="List private records by title, type, state, and scope")
     commands.add_parser("check-metric", help="Check a numerical claim from JSON on stdin")
     metrics = commands.add_parser("metric", help="Read and maintain the business metric registry")
@@ -904,12 +905,7 @@ def main() -> int:
                 )
                 result, _ = task_context.turn_context(private, args.prompt, cwd=Path.cwd().resolve(),
                                                       explicit=explicit, work_record=args.work_record,
-                                                      include_history=args.history)
-                try:
-                    result["conversation"]["reply_preferences"] = preferences.effective(preferences.load(private))
-                except (OSError, ValueError):
-                    result["conversation"]["reply_preferences"] = preferences.effective({})
-                    result["warnings"].append("Using default reply preferences. Run pm.py preferences show to check settings.")
+                                                      include_history=args.history, explain=args.explain)
             print(json.dumps(result, indent=2, ensure_ascii=False))
             return 0
         if args.command == "check-metric":
