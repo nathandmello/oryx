@@ -12,6 +12,7 @@ import subprocess
 from urllib.parse import unquote, urlsplit
 
 import records
+import red_team_eval
 import workspace
 import git_ops
 import context_capture
@@ -52,6 +53,7 @@ REQUIRED = (
     ".agents/skills/manage-backlog/SKILL.md", ".agents/skills/run-discovery/SKILL.md",
     ".agents/skills/run-discovery/plan.md", ".agents/skills/run-discovery/investigate.md",
     ".agents/skills/define-initiative/SKILL.md", ".agents/skills/prioritize-roadmap/SKILL.md",
+    "tools/red_team_eval.py", "tests/red-team-evals/cases.json", "tests/red-team-evals/context-guardrails.json",
 )
 ROOT_FILES = {"README.md", "AGENTS.md", "CLAUDE.md", ".gitignore"}
 ROOT_DIRS = {"playbook", "templates", "tools", "tests",
@@ -643,6 +645,7 @@ def main() -> int:
     git = commands.add_parser("git")
     git.add_argument("role", choices=("system", "workspace"))
     git.add_argument("operation", choices=("status", "fetch", "pull", "push"))
+    red_team_eval.register(commands)
     args = parser.parse_args()
     try:
         if args.command == "align":
@@ -758,6 +761,8 @@ def main() -> int:
         if args.command == "sync-skills":
             print(f"Updated {sync_skills()} Claude skill file(s).")
             return 0
+        if args.command == "eval-red-team":
+            return red_team_eval.run(args)
         if not args.system_only and workspace.private_root(ROOT).is_dir() and workspace.settings(ROOT, compatible=False)["workspace_format"] == 1:
             report = alignment(ROOT)
             system_errors = check(include_workspace=False)

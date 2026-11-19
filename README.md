@@ -84,6 +84,8 @@ Shared Hub changes automatically use [extend-hub](.agents/skills/extend-hub/SKIL
 
 Say "quiet" or "just capture" to stop unsolicited critique.
 
+Run the [red-team quality benchmark](tests/red-team-evals/README.md) to compare review quality with BMAD after skill or model changes.
+
 ## GitHub and updates
 
 Each repository has its own `origin`. Confirm each destination, configure its remote, and record its URL in private settings.

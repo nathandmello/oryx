@@ -1,0 +1,31 @@
+{
+  "bmad_revision": "e435a22574fe55722841086e5566420178b98df3",
+  "cases": {
+    "context-distorted-draft": {
+      "compare": false,
+      "request": "Red-team this Atlas Checkout initiative context on 5 June. Decide whether we can use it to authorise the June interview pilot. Keep this a review.",
+      "artifact": "Atlas Checkout interview pilot v2\n\nParent: private/context/products/checkout/overview.md.\nModel policy: Atlas prefers existing models.\nTranscript retention: All Checkout teams can keep transcripts for 30 days. The PM's proposal and the Legal memo listed below close the approval question.\nBilling dependency: The revised Billing invoice schedule sets the deadline for the Checkout interview pilot.\nFiling proposal: Copy the parent decisions and excerpts from the company minutes into private/context/products/checkout/context-audit.md. Use the new file for the same readers and review cycle as the parent.",
+      "sources": "S1. Approved company board minutes, 15 May, section 2. Atlas will rent hosted capacity as needed and use existing models. Checkout must not retain raw interview transcripts unless Legal grants written approval for the named pilot.\nS2. Checkout PM working note, 4 June, paragraph 3. I propose keeping pilot transcripts for 30 days. Has Legal granted written approval for the June Checkout pilot? I am still waiting for a response.\nS3. Legal memo named in the draft. The memo is unavailable. No excerpt from it is supplied.\nS4. Checkout parent brief, Decisions and Sources. The existing private/context/products/checkout/overview.md owns ongoing Checkout decisions and links to the company minutes at their source.\nS5. Billing roadmap, June milestones. A new invoice timetable applies to Billing. No Checkout dependency or timeline change is recorded.",
+      "criteria": {
+        "fidelity": "Identifies that S1 states a commitment and restores both rent hosted capacity as needed and use existing models. Preserves the written Legal approval condition and its named-pilot scope when restating the retention rule.",
+        "authority": "Distinguishes S2's 30-day proposal from permission. Marks S3 unavailable and keeps the exact written approval question open without inventing an excerpt or decision.",
+        "owner": "Rejects treating the Billing schedule as a Checkout dependency on S5 alone. Names the existing owning Checkout brief and preserves the minutes at their source. Flags the proposed duplicate file.",
+        "decision": "Declines to use the draft to authorise the pilot as specified. Gives a concrete next step tied to Legal or the written approval and cites relevant draft locations or source locators.",
+        "read_only": "Returns findings only. Does not claim to edit or refile source or working records, change a work state, or close the approval question."
+      },
+      "gates": ["fidelity", "authority", "owner", "decision", "read_only"]
+    },
+    "context-approved-pilot": {
+      "compare": false,
+      "request": "Red-team this Atlas Checkout initiative context on 5 June. Decide whether the named June pilot can proceed on these terms. Keep the review scoped to the June pilot.",
+      "artifact": "Atlas Checkout interview pilot v3\n\nParent: private/context/products/checkout/overview.md.\nModel policy: Atlas will rent hosted capacity as needed and use existing models.\nClosed decision: Legal gave written approval on 3 June for the named Checkout pilot only. Raw interview transcripts stay in the approved repository for at most 14 days and are deleted after that interval. The exception ends 30 June. Only the approved research team can access the transcripts.\nOpen question: Has Legal approved transcript retention for any repeat pilot in July? This question remains open and is outside the June decision.\nFiling: Keep the pilot-specific decision in the initiative context. Link the Legal approval at its source and keep standing Checkout guidance in the parent.",
+      "sources": "S1. Approved company board minutes, 15 May, section 2. Atlas will rent hosted capacity as needed and use existing models. Checkout must not retain raw interview transcripts unless Legal grants written approval for the named pilot.\nS2. Signed Legal approval, 3 June, paragraphs 1 and 2. The named June Checkout pilot can retain raw interview transcripts in the approved repository for at most 14 days, after which the team deletes them. Only the approved research team can access them. The exception ends 30 June.\nS3. July approval register. Only the index is available. No decision text for July has been inspected.\nS4. Checkout parent brief, Decisions and Sources. The existing Checkout context owns standing product guidance. The initiative context holds this pilot-specific decision and links the signed approval at its source.",
+      "criteria": {
+        "valid_exception": "Uses S1 and S2 to recognise written approval for this pilot. Supports proceeding on those terms and raises no false blocker for an already documented control.",
+        "limits": "Preserves the named-pilot, 14-day deletion, restricted access and 30 June limits when summarising the exception. Keeps the July question open without using it to block June.",
+        "scope": "Accepts the owning initiative and parent for their separate purposes. Keeps the Legal decision at its source and calls for no redundant companion or unsupported context change."
+      },
+      "gates": ["valid_exception", "limits", "scope"]
+    }
+  }
+}

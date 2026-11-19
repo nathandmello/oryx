@@ -57,6 +57,10 @@ Use the [template index](../templates/README.md) to create a working artifact. F
 
 Use [the framework](framework.md) as the method reference. Use [opportunity decisions](opportunities.md) to resume from the current phase. Keep detailed engineering artifacts in the configured delivery system.
 
-Use `red-team` when the PM asks to challenge a product decision, its assumptions, or the evidence supporting it. Supply the artifact, its maturity, the decision at stake, and relevant sources.
+Use `red-team` when the PM asks for an independent review of a PM artifact, a product decision, or its evidence.
+
+> Red-team this experiment before launch. Challenge whether it can answer the rollout decision.
+
+Supply the artifact, its maturity, the decision at stake, and relevant sources. Choose a method, ask for a fresh reviewer, or ask for options before the review.
 
 Keep critique separate from edits. Apply an accepted finding to the authoritative record, then update its checkpoint and affected links.
