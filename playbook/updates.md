@@ -2,8 +2,7 @@
 
 Pull and open the shared Hub. The agent handles private updates.
 
-Release 0.3.1 adds the signed initiative workflow. Release 0.3.2 adds [brief and hypothesis review](brief-review.md).
-Both keep private format 2. Apply the new checks at the next review.
+Releases 0.3.1 through 0.3.3 use private format 2. Apply [brief review](brief-review.md) and the [red-team methods](../.agents/skills/red-team/SKILL.md) at the next review.
 
 `playbook/release.json` reports format 1 for older updaters. The private format is in `playbook/workspace-format.json`.
 
