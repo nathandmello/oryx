@@ -118,6 +118,11 @@ def matching(definitions, query):
     return hits
 
 
+def named_definitions(definitions, name):
+    return [row for row in definitions.values() if name.casefold() in
+            {label.casefold() for label in (row["name"], *row["aliases"])}]
+
+
 def set_definition(root, private, metric, product, request, write):
     if (not isinstance(request, dict) or request.keys() != {"changes", "approved_by", "effective_on", "source"}
             or not isinstance(request["changes"], dict) or not request["changes"]
@@ -164,9 +169,7 @@ def snapshot(root, private, product, event):
     selection = event.get("registry_metric", event.get("metric"))
     row = available.get(selection) if isinstance(selection, str) else None
     if row is None and "registry_metric" not in event and isinstance(event.get("name"), str):
-        name = event["name"].casefold()
-        matches = [definition for definition in available.values()
-                   if name in {value.casefold() for value in (definition["name"], *definition["aliases"])}]
+        matches = named_definitions(available, event["name"])
         if len(matches) == 1:
             row = matches[0]
             selection = row["metric"]
@@ -188,7 +191,13 @@ def snapshot(root, private, product, event):
 
 
 def current_for_snapshot(definitions, event):
-    return definitions.get(reference_metric(event) or event["metric"])
+    reference = reference_metric(event)
+    if reference:
+        return definitions.get(reference)
+    if event["metric"] in definitions:
+        return definitions[event["metric"]]
+    matches = named_definitions(definitions, event["name"])
+    return matches[0] if len(matches) == 1 else None
 
 
 def reference_metric(event):

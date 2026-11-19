@@ -277,12 +277,15 @@ def prepare(root, product, changes):
             event = metric_registry.snapshot(root, storage.private_root(root), product, event)
         validate_event(event)
         if event["type"] == "target" and (existing := register.metrics.get(event["metric"])):
-            if metric_registry.reference_metric(existing):
-                if definitions is None:
-                    definitions = metric_registry.effective(root, storage.private_root(root), product)
-                current = metric_registry.current_for_snapshot(definitions, existing)
-                if not current or existing["source"] != metric_registry.REFERENCE + current["reference"]:
-                    raise ValueError("This metric revision changed. Propose the current registry definition under a new metric ID.")
+            if definitions is None:
+                definitions = metric_registry.effective(root, storage.private_root(root), product)
+            current = metric_registry.current_for_snapshot(definitions, existing)
+            if current and existing["source"] != metric_registry.REFERENCE + current["reference"]:
+                raise ValueError("Use the effective registry definition under a new metric ID for this target.")
+            if not current and metric_registry.reference_metric(existing):
+                raise ValueError("The signed definition is no longer in the registry. Review a current definition under a new metric ID.")
+            if not current and metric_registry.named_definitions(definitions, existing["name"]):
+                raise ValueError("Several registry definitions match the signed metric. Choose one and propose it under a new metric ID.")
         if event["type"] == "capture" and register.items:
             shortlist = initiative_intake.candidates(register.items, event)
             intake_reviews[event["initiative"]] = shortlist

@@ -292,8 +292,8 @@ class Register:
                 if identity(old["name"]) != identity(event["name"]):
                     continue
                 prior = old["source"]
-                prior_definition = metric_registry.reference_metric(old) or old["metric"]
-                if not (definition and source != prior and prior_definition == definition):
+                prior_definition = metric_registry.reference_metric(old)
+                if not (definition and source != prior and prior_definition in (None, definition)):
                     raise ValueError("Reuse the existing metric definition")
             unique(self.metrics, event["metric"], event, "metric ID")
         elif kind == "capture":

@@ -4,8 +4,10 @@ import json
 import subprocess
 import sys
 import unittest
+from unittest.mock import patch
 
 import test_opportunities
+import initiative_store
 
 
 class MetricRegistryTests(unittest.TestCase):
@@ -138,3 +140,23 @@ class MetricRegistryTests(unittest.TestCase):
         self.apply(proposal)
         current = json.loads(self.cli("initiative", "show", "example", self.i))
         self.assertIn(self.definition()["reference"], current["metric_definitions"]["logo-churn-v2"]["source"])
+
+    def test_legacy_signed_metric_can_adopt_a_registry_definition(self):
+        self.submit(self.setup_event(), self.capture())
+        payload = json.loads(self.ledger.read_text())["record"]
+        old = {"type": "metric", "metric": "customer-loss", "name": "Paid customer churn", "unit": "percent",
+               "definition": "Customers lost divided by all customers", "source": "Prior signed finance definition"}
+        payload["events"].append(old)
+        with patch.dict("os.environ", self.env):
+            signature = initiative_store.sign(self.root, payload, str(self.key))
+        self.ledger.write_text(json.dumps({"record": payload, "signature": signature}) + "\n")
+        before = self.ledger.read_bytes()
+        self.preview(dict(self.target(), metric="customer-loss"), error="under a new metric ID")
+        self.assertEqual(self.ledger.read_bytes(), before)
+        proposal = self.preview({"type": "metric", "metric": "customer-loss-v2", "registry_metric": "logo-churn"},
+                                dict(self.target(), metric="customer-loss-v2"))
+        self.apply(proposal)
+        trace = json.loads(self.cli("initiative", "show", "example"))
+        self.assertEqual(trace["metrics"]["customer-loss"], old)
+        self.assertIn(self.definition()["reference"], trace["metrics"]["customer-loss-v2"]["source"])
+        self.assertEqual(json.loads(self.ledger.read_text())["record"]["events"][:len(payload["events"])], payload["events"])
