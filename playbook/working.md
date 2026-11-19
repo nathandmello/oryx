@@ -14,7 +14,7 @@ Keep the mode for the current work until the PM changes it. Save it in the work 
 
 A direct request overrides a saved mode. A requested red-team review permits that review; it does not change the mode for later work.
 
-Both modes retain source checks, ownership boundaries, and existing permissions.
+Both modes retain source checks, ownership boundaries, and existing permissions. Report known [evidence risks](evidence-reviews.md) that affect the requested work, including in quiet mode.
 
 ## Reply preferences
 
@@ -43,8 +43,7 @@ An invalid saved block uses defaults and produces a check error. Use `preference
 
 ## Resume
 
-Read the record in `private/workspace/`, its checkpoint, and linked context. Use headings and section leads to find context that applies to the work.
-Read the relevant entries and applicable parent rules before acting. Check the sources behind accepted decisions. Report only changes or gaps that matter now.
+Read the owning record, its checkpoint, and applicable parent rules. Check sources behind accepted decisions. Report material changes and gaps.
 
 Resolve context for each task and when scope or evidence changes.
 
@@ -58,7 +57,9 @@ For area work, use `pm.py area-context PRODUCT AREA` to locate the product overv
 
 Take the recorded next action or follow the PM's current request. Recheck a source when it changed or its age affects the decision.
 
-Keep observations, assumptions, and unknowns distinct. Preserve earlier evidence and its date when a conclusion changes.
+Keep observations, assumptions, and unknowns distinct.
+Record material changes and risks beside the affected work. Keep the original evidence, source, date, and scope.
+Record who decided, their reason, and any outstanding risk or follow-up. Link later corrections to the original decision.
 
 ## Checkpoint
 

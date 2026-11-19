@@ -4,6 +4,7 @@ from datetime import date, timedelta
 import json
 
 import decision_forecasts
+import evidence_reviews
 import initiative_events
 import initiative_store
 import initiative_views
@@ -13,7 +14,7 @@ import task_context
 import workspace
 
 
-def signed_findings(product, register, events, today):
+def signed_findings(private, product, register, events, today):
     """Use register order so later sign-off closes a previous evidence reminder."""
     path = layout.initiative_register(product)
     decided = set()
@@ -26,6 +27,8 @@ def signed_findings(product, register, events, today):
         elif event["type"] == "result" and event["conclusion"] in {"contradicted", "inconclusive"}:
             newest_evidence[identifier] = event
         elif event["type"] == "signal" and identifier in decided:
+            if event["source"] in register.items[identifier].get("_signal_reviews", {}):
+                continue  # The active signed evidence review owns this signal's disposition.
             previous = newest_evidence.get(identifier)
             if previous is None or previous["type"] == "signal":
                 newest_evidence[identifier] = event
@@ -50,6 +53,14 @@ def signed_findings(product, register, events, today):
             if initiative_events.iso_date(decision["on"]) <= today - timedelta(weeks=6):
                 yield finding(3, "decision-age", f"The latest signed decision dates to {decision['on']}.",
                               decision["source"], "Check whether the original reason still applies.")
+        for review in initiative_views.signal_reviews(private, item):
+            if evidence_reviews.review_due(review, today):
+                message = f"{review['state']}: {review['evidence']['summary']} {review['reason']}"
+                check = "Compare the cited evidence with the signed claim and choose a signal disposition."
+                row = {"kind": "signal-review", "product": product, "subject": subject, "finding": message,
+                       "risk_id": review["id"], "state": review["state"],
+                       "sources": [path, *evidence_reviews.review_sources(review)]}
+                yield 1, row, check
         evidence = newest_evidence.get(subject)
         if evidence and evidence["type"] == "result":
             yield finding(1, "experiment-evidence", f"{evidence['experiment']}: {evidence['conclusion']}.",
@@ -78,7 +89,6 @@ def signed_findings(product, register, events, today):
 
 
 def context_findings(docs, product, today):
-    decisions = []
     for path, doc in docs.items():
         if product and not doc["company"] and doc["product"] != product:
             continue
@@ -103,7 +113,6 @@ def context_findings(docs, product, today):
                     yield 3, {**data, "kind": "stale-assumption", "finding": row["text"]}, (
                         f"{why} Confirm the assumption with its owner.")
             if row["section"] == "Decisions already closed" and row["binding"]:
-                decisions.append(row)
                 cells = row["text"].strip("|").split("|")
                 when = initiative_events.iso_date(cells[2].strip().rpartition(", ")[2]) if len(cells) == 5 else None
                 if when:
@@ -112,25 +121,35 @@ def context_findings(docs, product, today):
                         yield 3, {**data, "kind": "context-decision-review", "finding": cells[0].strip()}, (
                             "Review the sourced decision with its owner.")
 
-    for conflict in task_context.decision_conflicts(decisions, docs):
-        left, right = conflict["entries"]
-        sources = []
-        for row in (left, right):
-            sources.extend([row["record"], *(s["Source"] for s in row["sources"])])
-        title = conflict["question"]
-        product_scope = docs[left["record"]]["product"] or docs[right["record"]]["product"]
-        yield 1, {"kind": "possible-conflict", "product": product_scope, "subject": title,
-                  "finding": f"Two active decisions give different next steps for {conflict['scope']}.",
-                  "sources": list(dict.fromkeys(sources))}, (
-                      "Read both active decisions and confirm which applies before reopening either.")
+
+def context_risk_findings(docs, product, today):
+    selected = [doc for doc in docs.values() if not product or doc["company"] or doc["product"] == product]
+    candidates = {risk["id"]: risk for risk in evidence_reviews.pair_candidates(
+        evidence_reviews.observations(selected, today))}
+    # The owning journal supersedes the same computed finding, including dismissals.
+    candidates.update(evidence_reviews.stored(docs.values(), today.isoformat()))
+    for risk in candidates.values():
+        owned = risk["scope"]
+        if product and not evidence_reviews.applies_to_task(
+                risk, {"product": product, "initiative": owned["initiative"]}, {owned["area"]}, docs):
+            continue
+        if not evidence_reviews.review_due(risk, today):
+            continue
+        conflict = risk["classification"] == "potential conflict"
+        question = next((claim["question"] for claim in risk["claims"] if claim.get("question")), risk["id"])
+        row = {"kind": "possible-conflict" if conflict else "context-risk", "product": product or owned["product"],
+               "subject": question, "finding": risk["reason"], "risk_id": risk["id"], "state": risk["state"],
+               "sources": evidence_reviews.review_sources(risk)}
+        yield 1, row, "Read the cited guidance and confirm which authority and evidence apply."
 
 
 def review(root, product=None):
     private = workspace.repo(root, "workspace")
     workspace.settings(root)
     today = date.today()
-    docs = task_context.context_documents(private)
+    docs = task_context.context_documents(private, through=today)
     candidates = list(context_findings(docs, product, today))
+    candidates.extend(context_risk_findings(docs, product, today))
     products = initiative_store.products(root)
     known = set(products) | {doc["product"] for doc in docs.values() if doc["product"]}
     if product and product not in known:
@@ -144,7 +163,7 @@ def review(root, product=None):
         if ctx in seen:
             raise ValueError(f"Duplicate registered product context ID: {ctx}")
         seen.add(ctx)
-        candidates.extend(signed_findings(slug, register, payload["events"], today))
+        candidates.extend(signed_findings(private, slug, register, payload["events"], today))
     for forecast in decision_forecasts.list_records(private):
         slug = forecast["authority"]["product"]
         if (product and product != slug) or forecast["resolution"]:
@@ -168,7 +187,7 @@ def review(root, product=None):
     selected = []
     covered = set()
     for _, row, check in candidates:
-        identity = (row["product"], row["subject"], row["kind"])
+        identity = (row["product"], row["subject"], row["kind"], row.get("risk_id"))
         if identity not in covered:
             selected.append((row, check))
             covered.add(identity)

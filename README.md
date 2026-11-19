@@ -66,7 +66,7 @@ Start reference material in the entity overview. Create a topic folder only for 
 - [Framework](playbook/framework.md): strategy, goals, evidence, and experiments.
 - [Opportunity workflow](playbook/opportunities.md) covers intake, discovery, Initiative Brief approval, and roadmap selection.
 - [Generated backlog and roadmap](playbook/initiative-views.md) use the signed register.
-- Manage [initiative work](playbook/initiative-work.md) or open the [browser app](playbook/local-ui.md).
+- [Initiative work](playbook/initiative-work.md) includes `/pm delivery launch review` and the [browser app](playbook/local-ui.md).
 - [Templates](templates/README.md): company context, product context, and PM artifacts.
 - [Context rules](playbook/context.md) cover routing, sources, parent links, dates, and gaps.
 - [Hub commands](playbook/commands.md) and [working practices](playbook/working.md) cover actions, preferences, and checkpoints.

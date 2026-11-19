@@ -11,13 +11,18 @@ from tempfile import TemporaryDirectory
 
 from initiative_events import DISCOVERY_PLAN_SCOPE, Register, needs_reference, reviewed_rationale, validate_event
 import brief_review
+import evidence_reviews
 import experiment_drafts
 import initiative_areas
 import initiative_intake
+import initiative_work
+import launch_readiness
+import initiative_views
 import layout
 import layout_upgrade
 import metric_registry
 import opportunities
+import outcome_evidence
 import records
 import storage
 import upgrades
@@ -177,6 +182,18 @@ def capture_references(root, product, event, register):
             if item is None or item["phase"] != "candidate":
                 raise ValueError(f"Cycle option {identifier} must be an approved candidate in this product")
         return doc_reference(root, layout.prioritization(product, event["cycle"]), "prioritization", options=event["options"])
+    if kind == "review-signal":
+        item = register.items.get(event["initiative"])
+        review = item["_signal_reviews"].get(event["signal"]) if item else None
+        if not review:
+            raise ValueError("Choose a signal recorded on this initiative after approval")
+        claim = None
+        if event["claim"] is not None:
+            claims = initiative_views.signal_claims(storage.private_root(root), review["basis"])
+            claim = next((claim for claim in claims if claim["text"] == event["claim"]), None)
+            if claim is None:
+                raise ValueError("Quote a specific claim from the signed brief, approval, or plan")
+        return {"basis": review["basis"], "claim": claim}
     action = event["action"]
     initiative = event["initiative"]
     if initiative not in register.items:
@@ -253,18 +270,44 @@ def read(root, product):
         raise ValueError(f"{product}: unexpected initiative register schema or product")
     for index, event in enumerate(payload["events"]):
         register.accept(event, index)
+        if event.get("action") == "ship" and "readiness" in event:
+            launch_readiness.require_exceptions(event)
     if context_references(root, product, register.setup) != register.setup["references"]:
         raise ValueError(f"{product}: registered company or product context identity changed")
     return original, payload, register
 
 
-def prepare(root, product, changes):
+def pinned_definition(root, product, metric):
+    """Find an older signed registry snapshot without substituting a newer definition."""
+    if "contract" in metric:
+        return metric["contract"]
+    name = metric_registry.reference_metric(metric)
+    if not name:
+        return None
+    reference = metric["source"].removeprefix(metric_registry.REFERENCE)
+    private = storage.private_root(root)
+    bundled = metric_registry.defaults(root).get(name)
+    if bundled:
+        row = metric_registry.describe(name, bundled)
+        if row["reference"] == reference:
+            return row
+    for entry in metric_registry.history(private)[1]["revisions"]:
+        if entry["metric"] == name and entry["product"] in (None, product):
+            row = metric_registry.describe(name, entry["definition"], product=entry["product"],
+                                           approved_by=entry["approved_by"], effective_on=entry["effective_on"])
+            if row["reference"] == reference:
+                return row
+    raise ValueError(f"Recover the approved metric revision {reference} before recording new evidence")
+
+
+def prepare(root, product, changes, *, review_dates=None):
     if not isinstance(changes, list) or not changes:
         raise ValueError("Provide a nonempty JSON array of transactions")
     original, payload, register = read(root, product)
     previous_events = payload["events"]
     accepted = []
     intake_reviews = {}
+    signal_sources = {}
     proposed_experiments = set()
     definitions = None
     for change in changes:
@@ -277,6 +320,27 @@ def prepare(root, product, changes):
         if isinstance(event, dict) and event.get("type") == "metric":
             event = metric_registry.snapshot(root, storage.private_root(root), product, event)
         validate_event(event)
+        kind = event["type"]
+        if kind == "metric" and metric_registry.reference_metric(event):
+            event = {**event, "contract": pinned_definition(root, product, event)}
+        if kind in outcome_evidence.READINGS | {"guardrail", "correct-measurement"}:
+            event = {**event, "recorded_on": date.today().isoformat()}
+            if kind != "correct-measurement":
+                definition = register.metrics.get(event["metric"])
+                if definition and metric_registry.reference_metric(definition) and (
+                        kind == "guardrail" or "observation" in event and "contract" not in definition):
+                    event["contract"] = pinned_definition(root, product, definition)
+                if definition and metric_registry.reference_metric(definition) and "observation" in event:
+                    cutoff = outcome_evidence.measurement_cutoff(event)
+                    current = metric_registry.effective(root, storage.private_root(root), product, cutoff)
+                    effective = current.get(metric_registry.reference_metric(definition))
+                    if effective and definition["source"] != metric_registry.REFERENCE + effective["reference"]:
+                        if not brief_review.has_answer(event.get("restatement", "")):
+                            raise ValueError("The registry changed at this cutoff. Cite the source of a restatement on the signed basis.")
+        if kind == "decision" and event["action"] == "review-outcomes":
+            item = register.items.get(event["initiative"])
+            if item:
+                event = {**event, "evidence_review": outcome_evidence.review_snapshot(item, event, register.metrics)}
         if event["type"] == "target" and (existing := register.metrics.get(event["metric"])):
             if definitions is None:
                 definitions = metric_registry.effective(root, storage.private_root(root), product)
@@ -303,9 +367,28 @@ def prepare(root, product, changes):
             problems = live_errors(root, register, event["initiative"], investment=event["action"] in {"plan", "start-delivery"})
             if problems:
                 raise ValueError("Resolve the existing review gates:\n" + "\n".join(problems))
+        if event.get("action") == "ship":
+            reviewed_on = review_dates.get(len(accepted)) if review_dates else None
+            item = register.items.get(event["initiative"])
+            if item is None:
+                raise ValueError(f"Unknown initiative in this product: {event['initiative']}")
+            private = storage.private_root(root)
+            advisories = {
+                "signals": {r["id"]: r for r in initiative_views.signal_reviews(private, item)
+                            if r["active"] and r["state"] != "routine"},
+                "context": evidence_reviews.launch_context(private, product, item),
+            }
+            snapshot = initiative_work.ship_snapshot(root, product, event["initiative"], event["on"], reviewed_on, advisories)
+            if set(event.get("exceptions", {})) - snapshot["outstanding"].keys():
+                raise ValueError("Preview the current evidence. Ship exceptions must refer to current outstanding launch risks: "
+                                 + ", ".join(sorted(snapshot["outstanding"])))
+            event = {**event, "readiness": snapshot}
         if needs_reference(event):
             event = {**event, "references": capture_references(root, product, event, register)}
         register.accept(event, len(previous_events) + len(accepted))
+        if event["type"] in {"signal", "review-signal"}:
+            source = event["signal"] if event["type"] == "review-signal" else event["source"]
+            signal_sources.setdefault(event["initiative"], set()).add(source)
         if event["type"] == "decision" and event["action"] == "plan":
             cycle = register.cycles[event["cycle"]]
             if register.approved_at[event["initiative"]] > cycle["compared_at"]:
@@ -321,24 +404,47 @@ def prepare(root, product, changes):
     }
     if intake_reviews:
         proposal["intake_reviews"] = intake_reviews
+    signal_reviews = {}
+    for initiative, sources in signal_sources.items():
+        reviews = [review for review in initiative_views.signal_reviews(storage.private_root(root), register.items[initiative])
+                   if review["id"] in sources]
+        if reviews:
+            signal_reviews[initiative] = reviews
+    if signal_reviews:
+        proposal["signal_reviews"] = signal_reviews
     return proposal, original, candidate, register
 
 
 def apply(root, product, proposal, key, confirmations=()):
     private = storage.private_root(root)
     if (not isinstance(proposal, dict)
-            or set(proposal) - {"intake_reviews"} != {"product", "base", "changes", "reviewed_transactions", "revision"}):
+            or set(proposal) - {"intake_reviews", "signal_reviews"}
+            != {"product", "base", "changes", "reviewed_transactions", "revision"}):
         raise ValueError("Apply requires the complete JSON from initiative propose")
+    reviewed = proposal["reviewed_transactions"]
+    if not isinstance(reviewed, list):
+        raise ValueError("Apply requires the reviewed transactions from initiative propose")
+    review_dates = {}
+    for index, event in enumerate(reviewed):
+        if isinstance(event, dict) and event.get("action") == "ship" and "readiness" in event:
+            launch_readiness.validate_snapshot(event["readiness"])
+            review_dates[index] = event["readiness"]["reviewed_on"]
     with storage.writer_lock(private):
-        expected, original, candidate, _ = prepare(root, product, proposal["changes"])
+        expected, original, candidate, _ = prepare(root, product, proposal["changes"], review_dates=review_dates)
         if proposal != expected:
             raise ValueError("The proposal is stale or was modified. Preview it and review the new revision.")
+        for event in expected["reviewed_transactions"]:
+            if event.get("action") == "ship":
+                launch_readiness.require_exceptions(event)
         initiative_intake.confirm_distinct(expected["reviewed_transactions"], confirmations)
         target = register_path(root, product)
         storage.require_visible(private, target.relative_to(private))
         signature = sign(root, candidate, key)
         # A hardware-backed signer can wait for human confirmation. Recheck before publication.
-        current, _, _, register = prepare(root, product, proposal["changes"])
+        try:
+            current, _, _, register = prepare(root, product, proposal["changes"], review_dates=review_dates)
+        except (ValueError, OSError) as exc:
+            raise ValueError(f"Records changed while approval was pending. Review a new proposal. {exc}") from exc
         if current != expected:
             raise ValueError("Records changed while approval was pending. Review a new proposal.")
         envelope = json.dumps({"record": candidate, "signature": signature}, ensure_ascii=False, indent=2) + "\n"

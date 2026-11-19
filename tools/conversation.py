@@ -7,6 +7,7 @@ from pathlib import Path
 import re
 import sys
 
+import evidence_reviews
 import layout
 import records
 import storage
@@ -143,17 +144,23 @@ def context_offer(prompt, result, deferrals, quiet):
     if quiet or ROUTINE.match(prompt.strip()) or not CONSEQUENTIAL.search(prompt):
         return None
     candidates = []
-    for conflict in result.get("conflicts", []):
-        entries = conflict["entries"]
-        sources = sorted({row["record"] for row in entries})
-        locator = " and ".join(sources)
-        if locator and len(locator) <= 400:
-            candidates.append({
-                "workflow": "context-health", "scope": result["scope"], "source": locator,
-                "revision": evidence_revision(entries),
-                "reason": "Scoped decisions give different next steps.",
-                "next_action": "Compare the decision sources and verify which authority applies.",
-            })
+    for risk in result.get("risks", []):
+        if not evidence_reviews.review_due(risk, date.today()):
+            continue
+        sources = evidence_reviews.review_sources(risk)
+        if not sources or len(risk["id"]) > 400 or not MODE.fullmatch(risk["id"]) or "-->" in risk["id"]:
+            continue
+        signed_signal = "initiative" in risk
+        evidence = {k: v for k, v in risk.items() if k not in {"claims", "history", "on"}}
+        evidence["claims"] = evidence_revision(risk["claims"])
+        candidates.append({
+            "workflow": "decision-coaching" if signed_signal else "context-health",
+            "scope": result["scope"], "source": risk["id"], "sources": sources,
+            "revision": evidence_revision([evidence]),
+            "reason": risk["reason"],
+            "next_action": ("Compare the observation with the signed plan in initiative show."
+                            if signed_signal else "Read the cited claims and confirm the applicable authority."),
+        })
     for warning in result["warnings"]:
         match = re.fullmatch(r"Review overdue for (.+)\. Confirm current authority before relying on it\.", warning)
         if not match:

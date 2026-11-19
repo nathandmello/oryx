@@ -11,8 +11,9 @@ Use the [conversation guide](../../../playbook/conversation.md) when a metric ch
 
 1. Find the current definition and its scope with `pm.py metric list` or `pm.py metric show`.
 2. Compare the proposed formula, population, unit, period, and exclusions with the current definition.
-3. Resolve differences that can change a decision. Confirm the owner, effective date, and approval source.
-4. Preview the definition with `pm.py metric set`. Apply the confirmed change with `--write`.
-5. Use `metric show` to verify the resulting reference. Identify any comparisons or signed targets that need review.
+3. Confirm the cutoff and set `reporting_window` when the definition specifies a fixed basis.
+4. Resolve differences that can change a decision. Confirm the owner, effective date, and approval source.
+5. Preview the definition with `pm.py metric set`. Apply the confirmed change with `--write`.
+6. Use `metric show` to verify the resulting reference. Identify any comparisons or signed targets that need review.
 
 Link to the registry from working records. Preserve source definitions when reporting third-party figures.

@@ -17,7 +17,7 @@ Reflect their answer and carry the accepted facts forward.
 | Commit | How could this fail? Who bears the cost? What evidence would change the call? |
 
 Name the lens briefly. Use outcome, assumption, contradictory evidence, downstream risk, disconfirmation, timing, organization constraints, or bias.
-Treat firsthand evidence, secondhand reports, and inference as distinct. Check conflicting evidence against its source and scope.
+Distinguish firsthand evidence, reports, and inference. Read scoped [evidence reviews](evidence-reviews.md) and their sources.
 If the PM notices a reasoning pattern, ask one useful follow-up and keep working on their request.
 
 When stuck, name the block. Find one fact, run a reversible test, isolate a trade-off, resolve alignment, or name the avoided call.
@@ -71,7 +71,7 @@ Prefer the workflow that addresses the decision's most material blocker. Offer w
 | Resolved decision with a useful surprise | Reflect on what would change a future call. |
 
 Offer workflows the Hub can run. Keep routine lookups, summaries, capture, acknowledgments, and requested independent reviews direct.
-Quiet mode suppresses unsolicited coaching. Accepting an offer authorizes only its requested step. Retain all source and approval checks.
+Quiet mode suppresses coaching offers. Report applicable risks. Accepting an offer authorizes only its requested step.
 
 ## Continue after a pause
 

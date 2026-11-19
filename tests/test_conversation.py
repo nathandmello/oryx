@@ -225,19 +225,20 @@ class ConversationTests(unittest.TestCase):
             {"record": "context/products/billing/overview.md", "text": "Launch on Friday.",
              "section": "Decisions already closed", "sources": [{"Source": "Product meeting"}]},
         ]
-        result = {"scope": scope, "warnings": [], "entries": [],
-                  "conflicts": [{"question": question, "scope": "UK rollout", "entries": sources}]}
+        risk = {"id": "risk-123", "state": "open", "classification": "potential conflict",
+                "reason": "The guidance gives different next steps.", "question": question, "claims": sources}
+        result = {"scope": scope, "warnings": [], "entries": [], "risks": [risk]}
         prompt = "Draft the Billing customer update"
         offer = conversation.context_offer(prompt, result, [], False)
         self.assertEqual(offer["workflow"], "context-health")
-        self.assertIn("context/company/overview.md", offer["source"])
-        self.assertIn("context/products/billing/overview.md", offer["source"])
+        self.assertIn("context/company/overview.md", offer["sources"])
+        self.assertIn("context/products/billing/overview.md", offer["sources"])
         self.assertIsNone(conversation.context_offer("Show the Billing roadmap", result, [], False))
         self.assertIsNone(conversation.context_offer(prompt, result, [], True))
         deferral = {**{key: offer[key] for key in ("workflow", "scope", "source", "revision")},
                     "review_on": None}
         self.assertIsNone(conversation.context_offer(prompt, result, [deferral], False))
-        result["conflicts"][0]["entries"].reverse()
+        risk["claims"].reverse()
         self.assertIsNone(conversation.context_offer(prompt, result, [deferral], False))
 
     def test_native_forecast_edits_use_reviewed_commands(self):

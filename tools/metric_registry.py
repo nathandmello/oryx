@@ -12,7 +12,15 @@ import storage
 DEFAULTS = "playbook/saas-metrics.json"
 PRIVATE = "context/metrics.json"
 FIELDS = {"name", "aliases", "unit", "definition", "formula", "population", "period", "denominator", "notes", "source"}
+OPTIONAL_FIELDS = {"calculation", "reporting_window"}
 CALCULATIONS = {"proportion", "cohort_ratio"}
+WINDOW_DAYS = {"day": 1, "week": 7, "rolling 30 days": 30, "snapshot": 1}
+WINDOW_MONTHS = {"calendar month": 1, "calendar quarter": 3, "calendar year": 12}
+REPORTING_WINDOWS = (*WINDOW_DAYS, *WINDOW_MONTHS)
+LEGACY_WINDOWS = {
+    "one closed calendar month": "calendar month",
+    "closed 30-day reporting window": "rolling 30 days",
+}
 APPROVAL = {"approved_by", "effective_on", "definition"}
 REFERENCE = "Metric registry "
 REFERENCE_PATTERN = re.compile(re.escape(REFERENCE) + r"([a-z0-9]+(?:-[a-z0-9]+)*)@[a-f0-9]{16}")
@@ -34,9 +42,22 @@ def day(value):
     raise ValueError("Use a YYYY-MM-DD effective or observation date")
 
 
+def legacy_window_basis(period):
+    if not isinstance(period, str):
+        return None
+    basis = period.casefold().removesuffix(".")
+    return basis if basis in REPORTING_WINDOWS else LEGACY_WINDOWS.get(basis)
+
+
+def window_basis(definition):
+    if not definition:
+        return None
+    return definition.get("reporting_window") or legacy_window_basis(definition.get("period"))
+
+
 def valid_definition(metric, definition):
     layout.slug(metric)
-    if not isinstance(definition, dict) or not FIELDS <= definition.keys() <= FIELDS | {"calculation"}:
+    if not isinstance(definition, dict) or not FIELDS <= definition.keys() <= FIELDS | OPTIONAL_FIELDS:
         raise ValueError(f"{metric}: supply each metric definition field")
     aliases = definition["aliases"]
     if (not isinstance(aliases, list) or not aliases or not all(specific(alias) for alias in aliases)
@@ -47,6 +68,13 @@ def valid_definition(metric, definition):
     if "calculation" in definition and (definition["unit"] != "percent" or
             not isinstance(definition["calculation"], str) or definition["calculation"] not in CALCULATIONS):
         raise ValueError(f"{metric}: use a supported calculation for a percent metric")
+    if "reporting_window" in definition:
+        window = definition["reporting_window"]
+        if window not in REPORTING_WINDOWS:
+            raise ValueError(f"{metric}: choose reporting_window from {', '.join(REPORTING_WINDOWS)}")
+        described = legacy_window_basis(definition["period"])
+        if described and window != described:
+            raise ValueError(f"{metric}: reporting_window differs from its stated period")
 
 
 def defaults(root):
@@ -126,7 +154,7 @@ def named_definitions(definitions, name):
 def set_definition(root, private, metric, product, request, write):
     if (not isinstance(request, dict) or request.keys() != {"changes", "approved_by", "effective_on", "source"}
             or not isinstance(request["changes"], dict) or not request["changes"]
-            or not request["changes"].keys() <= (FIELDS - {"source"}) | {"calculation"}
+            or not request["changes"].keys() <= (FIELDS - {"source"}) | OPTIONAL_FIELDS
             or not specific(request["approved_by"]) or not specific(request["source"])):
         raise ValueError("Supply changes, the approving owner, an effective date, and the decision source")
     effective_on = day(request["effective_on"]).isoformat()
@@ -138,10 +166,15 @@ def set_definition(root, private, metric, product, request, write):
     def apply():
         original, data = history(private)
         old = effective(root, private, product, effective_on).get(metric, {})
-        definition = {field: old[field] for field in FIELDS | {"calculation"} if field in old}
-        if {"formula", "unit"} & request["changes"].keys():
+        changes = request["changes"]
+        definition = {field: old[field] for field in FIELDS | OPTIONAL_FIELDS if field in old}
+        if {"formula", "unit"} & changes.keys():
             definition.pop("calculation", None)
-        definition.update(request["changes"], source=request["source"])
+        if "reporting_window" in old and "period" in changes and "reporting_window" not in changes:
+            raise ValueError(f"{metric}: confirm reporting_window when changing the period")
+        definition.update(changes, source=request["source"])
+        if "reporting_window" in changes and changes["reporting_window"] is None:
+            definition.pop("reporting_window")
         valid_definition(metric, definition)
         entry = {"metric": metric, "product": product, "definition": definition,
                  "approved_by": request["approved_by"], "effective_on": effective_on}

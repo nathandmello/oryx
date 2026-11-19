@@ -23,7 +23,8 @@ When a release flags older records, follow [the context cleanup procedure](../..
 - Supply inspected plaintext in each source’s `text` field when permitted. Use a private-root-relative link for a local source.
 - Inspect every source for relevant claims. Split mixed passages at claim boundaries.
 - Use [check-numbers](../check-numbers/SKILL.md) for material figures. Keep an unverified metric identifiable as a reported claim.
-- Keep the exact actor, negation, qualifications, conditions, exceptions, and numbers. Keep a source location for every excerpt.
+- Keep actors, negation, conditions, exceptions, numbers, and locators. Record material implications with [evidence reviews](../../../playbook/evidence-reviews.md).
+- Inspect `risk_preview`. State material warnings in quiet mode. File risk history with the authorized source record.
 - Use one short excerpt per claim. Include every material commitment or exclusion, even when a source already supplies enough general facts.
 - Treat draft proposals and personal views as such. Flag unresolved authority or conflicts in the reply.
 

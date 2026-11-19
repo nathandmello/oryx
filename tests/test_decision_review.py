@@ -101,7 +101,7 @@ class WeeklyReviewTests(unittest.TestCase):
                                   (other, "Sibling notes", "Send a private beta invitation.")]:
             target = h.work / path
             content = re.sub(r"(?m)^\| \{\{Question resolved.*$",
-                             f"| Release gate? | EU export | PM, {yesterday} | [S1] | {step} |", target.read_text())
+                             f"| Release gate? | EU export | PM, {yesterday} | {step} [S1] | {step} |", target.read_text())
             content = re.sub(r"(?m)^\| \{\{S1\}\}.*$", f"| S1 | {label} | {yesterday} | {yesterday} |", content)
             if path == h.product_context:
                 content = content.replace("| Review by | event-driven |", f"| Review by | {yesterday} |")
@@ -114,4 +114,11 @@ class WeeklyReviewTests(unittest.TestCase):
         self.assertEqual(set(kinds["possible-conflict"]["sources"]),
                          {h.company, h.product_context, "Policy", "Launch notes"})
         context = json.loads(h.cli("task-context", "--product", "example"))
-        self.assertEqual({r["record"] for r in context["conflicts"][0]["entries"]}, {h.company, h.product_context})
+        risk, = context["risks"]
+        self.assertEqual({r["record"] for r in risk["claims"]}, {h.company, h.product_context})
+        self.assertEqual(kinds["possible-conflict"]["risk_id"], risk["id"])
+        scoped = json.loads(h.cli("task-context", "--product", "example", "Draft the EU export customer update"))
+        offer = scoped["conversation"]["suggestion"]
+        self.assertEqual(offer["source"], risk["id"])
+        self.assertEqual(set(offer["sources"]), {h.company, h.product_context, "Policy", "Launch notes"})
+        self.assertNotIn("Sibling notes", json.dumps(offer))

@@ -10,7 +10,7 @@ Use `--due` for dated reviews across phases. Release measurements leave the remi
 A dated follow-up sets the next reminder. Closure clears it. Review event-triggered deferrals when their named event occurs.
 
 After closure, the first newly recorded measurement makes the review due on its observation date.
-Late-entered evidence also reopens review. Measurements preserve a scheduled follow-up date.
+Corrections, guardrail breaches and material changes to measured outcomes bring review forward, including during a scheduled follow-up.
 The next closure cites the measurements that reopened the review.
 
 For an area view, use `--product PRODUCT --area AREA`. Both views read the area's qualified subject from the initiative.
@@ -39,9 +39,21 @@ Inspect plausible initiatives with `initiative show PRODUCT ID`.
 If the underlying problem matches, propose a `signal` on that ID. If ownership is unclear, keep the proposal open.
 For a distinct problem, the PM confirms the new ID when signing.
 
+## Review new evidence
+
+A signal recorded after approval puts the initiative in `backlog --due` for triage. The roadmap shows the review.
+Read `signal_reviews` in the preview or initiative trace for the source and signed approval.
+
+Submit `review-signal` with the exact `signal` source locator and the affected `claim`. Inspect `initiative schema` for the fields.
+Mark a routine signal with `assess`. Link material or uncertain evidence to an approved claim and state `residual_risk`.
+
+Use `retain`, `follow-up`, `revise`, or `reopen` to record the PM's decision.
+A dated follow-up schedules the next check.
+Revising leaves the review open. Reopening returns work to consideration for a new approval.
+
 ## Close a release review
 
-Read the target and measurements with `initiative show PRODUCT ID`. Record the PM's assessment for each target.
+Read `initiative show PRODUCT ID` for the evidence trail. Follow [the guardrail and correction procedure](outcome-evidence.md) when preparing the PM's assessment.
 In this example, the signed measurement `release-cohort` records the share of new administrators who finished their first import.
 
 ```json

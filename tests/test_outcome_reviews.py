@@ -24,7 +24,7 @@ class OutcomeReviewTests(unittest.TestCase):
         h.submit(h.decision("expedite", on=released, delivery="https://example.com/delivery/42",
                             owner="Support lead", obligation="Restore renewal notices", deadline=h.today,
                             scope="Correct the renewal schedule", review_on=h.today),
-                 h.decision("ship", on=released, review_on=h.today))
+                 h.ship_without_checklist(on=released))
         return released
 
     def measure(self, metric, identifier, when):

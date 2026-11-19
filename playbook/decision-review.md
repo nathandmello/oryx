@@ -12,7 +12,9 @@ Omit the product filter for a portfolio review. The command reads the private wo
 | --- | --- |
 | Decision due | Read the latest signed decision, its review date, and any follow-up measurement. |
 | Forecast due | Compare the outcome evidence with the original resolution criterion. |
-| Possible conflict | Compare the cited decisions or experiment result with the current decision. |
+| Possible conflict | Compare the cited authority and scope in the open context review. |
+| Context risk | Verify the cited evidence with the owner. |
+| Signal review | Compare the observation with the affected claim in the active signed plan. |
 | Possible trigger | Compare newly registered evidence with the PM's stated reopen condition. |
 | Stale assumption | Check the assumption with its owner after the record's review date. |
 | Unassessed hypothesis | Read the registered hypothesis and look for evidence of a test. |
@@ -23,7 +25,7 @@ Check unresolved forecasts after six weeks without a probability update. Review 
 
 Each finding names its subject and includes a private record path and evidence pointers.
 Start with the single recommended check. An empty list means the scan found no recorded trigger.
-Review narrative sources when a date, outcome, or conflict requires judgment. The scan compares sourced decisions with matching questions and scopes.
+Review narrative sources when a date, outcome, or conflict requires judgment. Open reviews retain their [evidence review ID](evidence-reviews.md).
 
 The PM decides whether to reopen work. Use [initiative approvals](initiative-approvals.md) for a registered change.
 

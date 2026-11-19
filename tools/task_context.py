@@ -3,7 +3,6 @@
 from datetime import date, datetime
 from collections import Counter
 from hashlib import sha256
-from itertools import islice
 import json
 from pathlib import Path
 import re
@@ -12,6 +11,7 @@ from urllib.parse import urlsplit
 
 import conversation
 import layout
+import evidence_reviews
 import metric_registry
 import records
 import storage
@@ -62,10 +62,14 @@ def private_files(private, domain):
             yield relative, path
 
 
-def context_documents(private):
+def context_documents(private, *, override=None, through=None):
     documents = {}
-    for relative, path in private_files(private, {"context"}):
-        text = path.read_text(encoding="utf-8")
+    paths = dict(private_files(private, {"context"}))
+    if override:
+        relative = Path(override[0])
+        paths[relative] = private / relative
+    for relative, path in paths.items():
+        text = override[1] if override and relative.as_posix() == override[0] else path.read_text(encoding="utf-8")
         kind = records.MARKER.match(text)
         if not kind or kind[1] not in records.CONTEXT_KINDS or records.context_location(kind[1], relative):
             continue
@@ -82,11 +86,14 @@ def context_documents(private):
             if parent and layout.brief_kind(parent) == "product-context":
                 product = Path(parent).parts[2]
         sources, _ = records.table(records.visible_section_markup(text), "Sources", records.SOURCE_COLUMNS)
+        coverage = {ref: state for ref, state, checked in records.SOURCE_COVERAGE.findall(records.section(text, "Sources") or "")
+                    if through is None or checked <= through.isoformat()}
         documents[name] = {
             "record": name, "kind": kind[1], "title": title(relative, text), "product": product,
             "area": entity.name if entity.parts[3:4] == ("areas",) else None,
             "initiative": initiative, "parent": parent, "text": text, "company": entity == Path(layout.COMPANY).parent,
-            "sources": {row[0]: dict(zip(records.SOURCE_COLUMNS, row)) for row in sources
+            "sources": {row[0]: {**dict(zip(records.SOURCE_COLUMNS, row)), "coverage": coverage.get(row[0], "unrecorded")}
+                        for row in sources
                         if re.fullmatch(r"S[1-9]\d*", row[0])},
         }
     for doc in documents.values():
@@ -264,38 +271,27 @@ def linked_entries(doc, areas, through):
                 if decision_date and decision_date[1] > through.isoformat():
                     continue
             yield {"record": doc["record"], "section": section, "text": content, "sources": sources,
-                   "binding": binding, **({"area": row[1]} if row else {})}
+                   "binding": binding}
 
 
-def decision_conflicts(entries, docs):
-    """Pair different next steps for the same sourced, active question and stated scope."""
-    by_question = {}
-    for row in entries:
-        if row["section"] != "Decisions already closed" or not row["binding"]:
-            continue
-        cells = [cell.strip() for cell in row["text"].strip("|").split("|")]
-        if len(cells) != 5:
-            continue
-        question, scope, _, _, step = cells
-        doc = docs[row["record"]]
-        domain = (doc["product"], row.get("area") or doc["area"], doc["initiative"])
-        key = question.casefold(), " ".join(scope.casefold().split())
-        for previous_domain, previous, previous_step in reversed(by_question.get(key, [])):
-            if previous_step.casefold() == step.casefold():
-                continue
-            if any(a and b and a != b for a, b in zip(domain, previous_domain)):
-                continue
-            yield {"question": question, "scope": scope, "entries": [previous, row]}
-            break
-        by_question.setdefault(key, []).append((domain, row, step))
-
-
-def resolve(private, prompt="", *, cwd=None, previous=None, explicit=None, documents=None):
-    docs = context_documents(private) if documents is None else documents
+def resolve(private, prompt="", *, cwd=None, previous=None, explicit=None, include_history=False, documents=None):
+    through = as_of(prompt)
+    docs = context_documents(private, through=through) if documents is None else documents
     scope, choices = choose_scope(private, docs, prompt, cwd, previous, explicit)
+    risk_ids = set(re.findall(r"\brisk-[0-9a-f]{20}\b", prompt))
+    saved_reviews = evidence_reviews.stored(docs.values(), through.isoformat())
+    if not explicit and len(risk_ids) == 1:
+        requested = next(iter(risk_ids))
+        review = saved_reviews.get(requested)
+        if review is None and not scope:
+            # Legacy records have no journal yet. Reconstruct this one ID without changing either record.
+            candidates = evidence_reviews.pair_candidates(evidence_reviews.observations(docs.values(), through))
+            review = next((candidate for candidate in candidates if candidate["id"] == requested), None)
+        if review and not scope:
+            scope = review["scope"] if review["scope"].get("product") else {"company": True}
+            choices = []
     status = "ambiguous" if choices else "resolved" if scope else "unscoped"
     result = {"status": status, "scope": scope, "choices": choices, "entries": [], "warnings": []}
-    through = as_of(prompt)
     metrics = metric_registry.effective(private.parent, private, scope.get("product"), through.isoformat())
     if not scope:
         selected_metrics = metric_registry.matching(metrics, prompt)
@@ -304,13 +300,25 @@ def resolve(private, prompt="", *, cwd=None, previous=None, explicit=None, docum
         return result
     product, area, initiative = (scope.get(key) for key in ("product", "area", "initiative"))
     areas = {area} if area else set()
-    if product and initiative and (private / layout.initiative_register(product)).is_file():
+    signed_reviews = []
+    if product and (private / layout.initiative_register(product)).is_file():
         import initiative_store
         try:
             _, _, register = initiative_store.read(private.parent, product)
-            item = register.items.get(f"{register.setup['references']['product_id']}/{initiative}")
-            if item:
-                areas.update(subject.rsplit("/", 1)[-1] for subject in item["areas"])
+            import initiative_views
+            for item in register.items.values():
+                item_slug = item["id"].split("/", 1)[1]
+                if initiative and item_slug != initiative:
+                    continue
+                item_areas = {s.rsplit("/", 1)[-1] for s in item["areas"]}
+                if area and area not in item_areas:
+                    continue
+                if initiative:
+                    areas.update(item_areas)
+                if through >= date.today():
+                    signed_reviews.extend({**r, "initiative": item["id"]} for r in initiative_views.signal_reviews(private, item))
+                elif item.get("_signal_reviews"):
+                    result["warnings"].append(f"{item['id']}: verify the signed evidence history for the requested date.")
         except (OSError, ValueError) as exc:
             result["warnings"].append(f"Could not verify the registered initiative scope: {exc}")
     overview = docs.get(layout.product(product)) if product else None
@@ -321,11 +329,11 @@ def resolve(private, prompt="", *, cwd=None, previous=None, explicit=None, docum
         result["warnings"].append(f"Missing inherited context at {company}.")
     terms = words(prompt)
     entries = []
+    review_documents = []
     for name, doc in docs.items():
-        if not ((company and doc["company"]) or
-                (product and doc["product"] == product and (doc["area"] is None or doc["area"] in areas)
-                 and doc["initiative"] in (None, initiative))):
+        if not evidence_reviews.in_scope(doc, scope, areas, company):
             continue
+        review_documents.append(doc)
         if doc["kind"] == "context-note" and name not in prompt and not terms & words(doc["title"]):
             continue
         controls, _ = records.table(doc["text"], "Context controls", ("Field", "Value"))
@@ -333,9 +341,27 @@ def resolve(private, prompt="", *, cwd=None, previous=None, explicit=None, docum
         if re.fullmatch(r"\d{4}-\d{2}-\d{2}", due) and due < date.today().isoformat():
             result["warnings"].append(f"Review overdue for {name}. Confirm current authority before relying on it.")
         entries.extend(linked_entries(doc, areas, through))
-    conflicts = list(islice(decision_conflicts(entries, docs), 5))
-    if conflicts:
-        result["conflicts"] = conflicts
+    relevant = evidence_reviews.scoped_reviews(docs, review_documents, saved_reviews, scope, areas, through,
+                                              recall_ids=risk_ids, recall_all=include_history)
+    for review in signed_reviews:
+        relevant[("signal", review["initiative"], review["id"])] = review
+    active = [r for r in relevant.values() if r.get("active", r["state"] in evidence_reviews.OPEN)
+              and r["state"] != "routine"]
+    if active:
+        result["risks"] = [{k: v for k, v in risk.items() if k != "history"} for risk in active]
+        result["warnings"].extend(f"{r['id']} ({r['state']}): {r['reason']}" for r in active)
+        contested = {}
+        for risk in active:
+            for claim in risk["claims"]:
+                contested.setdefault((claim.get("record"), claim.get("text")), []).append(risk["id"])
+        for row in entries:
+            if (key := (row["record"], row["text"])) in contested:
+                row["risk_reviews"] = contested[key]
+    resolved = [r for r in relevant.values() if r.get("disposition") and r["state"] in {"dismiss", "resolve"}]
+    if resolved:
+        result["risk_dispositions"] = [r["disposition"] for r in resolved]
+    if include_history or risk_ids:
+        result["risk_history"] = [r for k, r in relevant.items() if include_history or k in risk_ids]
     decisions = Counter((row["record"], *row["text"].split("|")[1:3]) for row in entries
                         if row["section"] == "Decisions already closed" and row["binding"])
     for (record, *_), count in decisions.items():
@@ -410,7 +436,7 @@ def scope_contains(record_scope, scope):
     return all(value is None or scope.get(key) == value for key, value in record_scope.items())
 
 
-def turn_context(private, prompt, *, cwd=None, saved=None, explicit=None, work_record=None):
+def turn_context(private, prompt, *, cwd=None, saved=None, explicit=None, work_record=None, include_history=False):
     """Resolve the current task separately from the turn's resumable work pointer."""
     previous = saved or {}
     prior_scope = previous.get("scope", {})
@@ -420,7 +446,7 @@ def turn_context(private, prompt, *, cwd=None, saved=None, explicit=None, work_r
         except (TypeError, ValueError):
             prior_scope = {}
     can_continue = previous.get("can_continue", True)
-    docs = context_documents(private)
+    docs = context_documents(private, through=as_of(prompt))
     named = WORK_RECORD.search(prompt) if work_record is None else None
     selected_owner = work_record or (named[1] if named else None)
     record_scope = resolved_artifact(selected_owner, docs) if selected_owner else {}
@@ -436,7 +462,7 @@ def turn_context(private, prompt, *, cwd=None, saved=None, explicit=None, work_r
     else:
         checkpoint = None
     result = resolve(private, prompt, cwd=cwd, explicit=explicit, documents=docs,
-                     previous=prior_scope if can_continue else None)
+                     previous=prior_scope if can_continue else None, include_history=include_history)
     scope = result["scope"]
     switched = bool(SWITCH.match(prompt))
     neutral = conversation.acknowledgement(prompt)
