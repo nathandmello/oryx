@@ -10,6 +10,8 @@ from unittest.mock import patch
 import test_opportunities
 
 import decision_review
+import initiative_events
+import initiative_views
 
 
 class WeeklyReviewTests(unittest.TestCase):
@@ -20,6 +22,20 @@ class WeeklyReviewTests(unittest.TestCase):
 
     def scan(self, *arguments):
         return json.loads(self.hub.cli("action", "portfolio", "decisions", "review", *arguments))
+
+    def test_claim_projection_preserves_signed_reason_and_legacy_words(self):
+        event = self.hub.decision("evaluate")
+        rationale = {"choice": "Review the renewal pilot", "alternatives": ["Pause the pilot"], "tradeoff": "Delay billing research",
+                     "owner": "Renewals PM", "scope": "Renewal pilot", "reopen_when": "Two customers opt out"}
+        signed = initiative_events.reviewed_rationale({**event, "rationale": rationale})
+        approval = {"action": "evaluate", "scope": None, "obligation": None, "brief": None, "on": self.hub.today,
+                    "source": event["source"], "reason": signed["reason"]}
+        selection = {**approval, "comparison": {"path": "planning.md", "sha256": "prior revision"}}
+        basis = {"approval": approval, "selection": selection}
+        self.assertEqual([c["text"] for c in initiative_views.signal_claims(None, basis)], [event["reason"]] * 2)
+        self.assertIn(initiative_events.RATIONALE_MARK, approval["reason"])
+        approval["reason"] = "Signed wording | Reviewed rationale: a later explanation"
+        self.assertEqual(initiative_views.signal_claims(None, basis)[0]["text"], approval["reason"])
 
     def test_signed_dates_cap_and_no_write(self):
         h = self.hub
