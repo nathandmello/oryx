@@ -234,6 +234,8 @@ class ConversationTests(unittest.TestCase):
         self.assertIn("context/company/overview.md", offer["sources"])
         self.assertIn("context/products/billing/overview.md", offer["sources"])
         self.assertIsNone(conversation.context_offer("Show the Billing roadmap", result, [], False))
+        self.assertIsNone(conversation.context_offer("Red-team the Billing launch decision", result, [], False))
+        self.assertIsNone(conversation.context_offer("Shorten the Billing roadmap", result, [], False))
         self.assertIsNone(conversation.context_offer(prompt, result, [], True))
         deferral = {**{key: offer[key] for key in ("workflow", "scope", "source", "revision")},
                     "review_on": None}

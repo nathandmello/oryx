@@ -35,7 +35,7 @@ DIRECT = re.compile(
 )
 ROUTINE = re.compile(
     r"^(?:please\s+)?(?:(?:can|could|would) you\s+(?:please\s+)?)?"
-    r"(?:summari[sz]e|show|list|look up|copy|capture|format|fix|translate|spell|read|"
+    r"(?:summari[sz]e|show|list|look up|copy|capture|format|fix|translate|spell|read|shorten|red[- ]team|"
     r"what (?:is|are|was|were|did)|who|where|when)\b", re.I
 )
 DISCUSSION_FOLLOW_UP = re.compile(
