@@ -54,6 +54,9 @@ class DiscoverySourceTests(unittest.TestCase):
         h = self.hub
         path = h.work / h.discovery
         original = path.read_text()
+        # Findings may be absent before the timebox starts.
+        findings = original.index("## Findings and recommendation")
+        original = original[:findings] + original[original.index("## Sources", findings):]
         for opening, closing in (("```markdown", "```"), ("<!--", "-->"), ("<pre>", "</pre>")):
             with self.subTest(opening=opening):
                 source = f"{self.source}\n\n{opening}\n## Example\n{closing}\n\n### Interview notes\nInterview 21, page 4."

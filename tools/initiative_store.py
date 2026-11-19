@@ -132,9 +132,9 @@ def doc_reference(root, name, kind, *, plan_scope=None, options=None, initiative
         headings_pattern = r"(?m)^## ([^\n]*)"
         raw = [heading.rstrip() for heading in re.findall(headings_pattern, text)]
         visible = [heading.rstrip() for heading in re.findall(headings_pattern, brief_review.visible(text))]
-        required = {"Parent initiative", "Work state", "Sources", *opportunities.DISCOVERY_PLAN}
+        allowed = {"Parent initiative", "Work state", *opportunities.REQUIRED_SECTIONS[kind]}
         names = set(raw)
-        if raw != visible or len(raw) != len(names) or names not in (required, required | {"Findings and recommendation"}):
+        if raw != visible or len(raw) != len(names) or not names <= allowed:
             raise ValueError(f"{name}: ambiguous discovery section boundary. Use ### for subsections "
                              "and indent example headings inside code or comments.")
     headings = (*opportunities.DISCOVERY_PLAN, "Sources") if plan_scope else opportunities.REQUIRED_SECTIONS[kind]
