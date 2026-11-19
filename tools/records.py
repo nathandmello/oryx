@@ -407,6 +407,34 @@ def context_table_errors(text, name, draft):
     return errors
 
 
+def source_errors(text, day):
+    rows, errors = table(text, "Sources", SOURCE_COLUMNS)
+    sources = set()
+    for identifier, reference, source_date, checked in rows:
+        if all(PLACEHOLDER.fullmatch(cell) for cell in (identifier, reference, source_date, checked)):
+            continue
+        if not re.fullmatch(r"S[1-9]\d*", identifier):
+            errors.append("source IDs must use S1, S2, and so on")
+        if identifier in sources:
+            errors.append(f"duplicate source ID: {identifier}")
+        sources.add(identifier)
+        if not specific(reference):
+            errors.append(f"{identifier}: Source needs a link or a named person and discussion reference")
+        published = None
+        if source_date not in {"unknown", "undated"}:
+            published = day(source_date, f"{identifier} Source date", past=True)
+        checked_on = day(checked, f"{identifier} Checked on", past=True)
+        if not specific(checked):
+            errors.append(f"{identifier}: Checked on must record an actual source check")
+        if published and checked_on and published > checked_on:
+            errors.append(f"{identifier}: Source date cannot follow Checked on")
+
+    claims = re.sub(r"(?ms)^## Sources[ \t]*$.*?(?=^## |\Z)", "", text)
+    for reference in sorted(set(re.findall(r"\[(S[1-9]\d*)\]", claims)) - sources):
+        errors.append(f"unknown source reference: {reference}")
+    return errors
+
+
 def context_errors(path, text, kind, texts, content_sections, template=False):
     errors, parent = [], None
     state = work_state(text)[0].get("State")
@@ -473,31 +501,7 @@ def context_errors(path, text, kind, texts, content_sections, template=False):
             elif not parent.startswith("context/") or not marker or marker[1] != "company-context":
                 errors.append("Parent context must link to a company-context record inside PM Hub")
 
-    rows, problems = table(text, "Sources", SOURCE_COLUMNS)
-    errors.extend(problems)
-    sources = set()
-    for identifier, reference, source_date, checked in rows:
-        if all(PLACEHOLDER.fullmatch(cell) for cell in (identifier, reference, source_date, checked)):
-            continue
-        if not re.fullmatch(r"S[1-9]\d*", identifier):
-            errors.append("source IDs must use S1, S2, and so on")
-        if identifier in sources:
-            errors.append(f"duplicate source ID: {identifier}")
-        sources.add(identifier)
-        if not specific(reference):
-            errors.append(f"{identifier}: Source needs a link or a named person and discussion reference")
-        published = None
-        if source_date not in {"unknown", "undated"}:
-            published = day(source_date, f"{identifier} Source date", past=True)
-        checked_on = day(checked, f"{identifier} Checked on", past=True)
-        if not specific(checked):
-            errors.append(f"{identifier}: Checked on must record an actual source check")
-        if published and checked_on and published > checked_on:
-            errors.append(f"{identifier}: Source date cannot follow Checked on")
-
-    claims = re.sub(r"(?ms)^## Sources[ \t]*$.*?(?=^## |\Z)", "", text)
-    for reference in set(re.findall(r"\[(S[1-9]\d*)\]", claims)) - sources:
-        errors.append(f"unknown source reference: {reference}")
+    errors.extend(source_errors(text, day))
     substantive = False
     for name in sorted(content_sections):
         body = section(text, name)
@@ -583,6 +587,9 @@ def validate(texts, *, legacy_structure=()):
                 parents[path] = parent
         elif context_location(kind, path):
             problems.append(context_location(kind, path))
+        if kind == "strategy":
+            from strategy import check
+            problems.extend(check(text))
         if identifier and identifier in ids:
             errors.append(f"{path}: duplicate ID also used by {ids[identifier]}")
         if identifier:

@@ -3,23 +3,23 @@
 
 ## Hypothesis
 
-{{State one claim about the population, context, and expected result. Link the problem or initiative.}}
+{{We believe that: state an if–then claim about the population, situation, and expected result. Link the riskiest assumption.}}
 
 ## Test
 
-{{Describe the method, participants, owner, cost, period, and relevant permissions. Define any comparison that the claim requires.}}
+{{To verify that, we will: name the smallest credible method, its cost, timebox, comparison, participants, owner, and permissions.}}
 
 ## Measure
 
-{{Define the primary measure, source, observation window, and guardrails. Check that the measure addresses the claim.}}
+{{We will measure: name the primary measure, source, observation window, and guardrails. Check the connection to the claim.}}
 
 ## Decision criterion
 
-{{Set the minimum result worth acting on before testing. State the decision for supportive, adverse, and inconclusive results.}}
+{{We are right if: set the minimum result worth acting on before testing. Define supportive, adverse, and inconclusive decisions.}}
 
 ## Evidence and confidence
 
-{{Criticality, evidence category, source quality, relevance, limits, and confidence rationale.}}
+{{Low, medium, or high criticality. Evidence category and band from Product Strategy Mindset. Record source quality, relevance, and limits.}}
 
 ## Results and decision
 

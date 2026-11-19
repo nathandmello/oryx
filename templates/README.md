@@ -78,7 +78,7 @@ Context records follow [the context rules](../playbook/context.md). Remove unuse
 
 Keep sources and related artifacts as links. The command resolves internal links from the new file's location.
 
-Use [the working practices](../playbook/working.md) for checkpoints and modes. Follow [the framework](../playbook/framework.md) for the method.
+Use [the working practices](../playbook/working.md) for checkpoints and modes. Use [Product Strategy Mindset](../playbook/sources/product-strategy-mindset.md) for the method.
 Use [the brief-review checks](../playbook/brief-review.md) to review a strategy, initiative, or test.
 
 Add another artifact type only when the PM requests it.

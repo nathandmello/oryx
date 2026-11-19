@@ -549,6 +549,28 @@ class HubTests(unittest.TestCase):
             input=json.dumps(payload), text=True, capture_output=True, cwd=self.work,
         )
 
+    def test_full_context_read_uses_linked_original_over_supplied_extract(self):
+        source = self.work / "context/company/sources/policy.md"
+        source.parent.mkdir(parents=True, exist_ok=True)
+        permitted = "We will rent capacity as required."
+        exclusion = "We will not own data centres."
+        source.write_text(f"{permitted} {exclusion}\n")
+        entry = {"scope": "company", "topic": "constraints", "source": 1, "location": "Minutes"}
+        payload = {
+            "sources": [{"reference": "[Policy](context/company/sources/policy.md)", "date": "undated",
+                         "coverage": "read", "checked_on": date.today().isoformat(), "text": permitted}],
+            "entries": [{**entry, "quote": permitted}],
+        }
+        result = self.context_capture(payload)
+        self.assertEqual(result.returncode, 1, result.stdout)
+        self.assertIn(exclusion, result.stdout)
+
+        payload["entries"].append({**entry, "quote": exclusion})
+        result = self.context_capture(payload)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        checks = json.loads(result.stdout)["source_checks"]
+        self.assertEqual(checks, [{"source": 1, "verification": "workspace file", "commitment_sentences": 2}])
+
     def test_capture_routes_mixed_sources_and_writes_only_the_requested_brief(self):
         stamp = date.today().isoformat()
         exclusion = "We will not enter the data centre business or create or own LLMs."

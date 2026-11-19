@@ -16,6 +16,20 @@ A direct request overrides a saved mode. A requested red-team review permits tha
 
 Both modes retain source checks, ownership boundaries, and existing permissions.
 
+## Run a workflow
+
+1. Open the outer Hub. Read the [constitution](../AGENTS.md), `private/settings.json`, and the private handoff.
+2. Use the PM's current request, the handoff, and the record to identify the next action and active mode.
+3. Reuse the authoritative record. Apply [the filing rules](filing.md) and the matching [template](../templates/README.md) before creating a record.
+4. Create new records with `python3 tools/pm.py new <kind> <path>` from the system root. Pass a path relative to `private/`.
+5. Fill what the session establishes. Keep gaps and unapproved choices visible. Follow the requested scope for any edits.
+
+When work relies on context, check parent commitments, data boundaries, and closed decisions. Follow [the context review rules](context.md#review-existing-context) for flagged briefs.
+
+Use [context ingestion](../.agents/skills/ingest-context/SKILL.md) for requested context changes. Keep evidence with its owner and link it from the work record.
+
+When a record action depends on an unavailable private workspace, report the missing workspace. Honour requests for discussion or a draft preview.
+
 ## Resume
 
 Read the record in `private/workspace/`, its checkpoint, and linked context. Use headings and section leads to find context that applies to the work.
@@ -53,6 +67,8 @@ Record the current state:
 | complete | This artifact is complete for its stated purpose. This state does not establish product success. |
 
 Keep a wait visible. Do not invent evidence, advance to the next activity, or complete a discovery process to finish a session.
+
+Update `private/README.md` when handing off active work. Point to the current record and name its next action.
 
 Resume on The PM's request. Dates and events guide review; they do not create background jobs or permission for external actions.
 

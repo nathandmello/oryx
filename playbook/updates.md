@@ -1,16 +1,15 @@
 # Updating an installed Hub
 
-Open the updated Hub to verify compatibility.
-
-Releases 0.3.1 through 0.4.2 use private format 2.
+Releases 0.3.1 through 0.5.0 use private format 2.
+0.5.0 adds source-linked strategy skills and a readiness check for new strategy drafts. Existing drafts remain readable.
 
 0.4.2 automates [publication](publication.md).
 
-Release 0.4.1 adds [initiative tasks and launch checklists](initiative-work.md) on demand.
+0.4.1 adds [initiative tasks and launch checklists](initiative-work.md).
 
-Release 0.4.0 adds task context, a [metric registry](metrics.md), and optional artifact conversion.
+0.4.0 adds task context, [metrics](metrics.md), and artifact conversion.
 
-Release 0.3.5 adds [context section leads](filing.md#when-a-section-earns-its-place). Release 0.3.4 adds [initiative meeting transcripts](../.agents/skills/summarize-meeting/SKILL.md).
+0.3.5 adds [section leads](filing.md#when-a-section-earns-its-place). 0.3.4 adds [meeting transcripts](../.agents/skills/summarize-meeting/SKILL.md).
 
 `playbook/release.json` reports format 1 for older updaters. The private format is in `playbook/workspace-format.json`.
 
@@ -32,7 +31,7 @@ For an active discovery approved before source binding, review the plan and sour
 
 ## Review artifact changes with the user
 
-Use [the upgrade review skill](../.agents/skills/review-hub-upgrade/SKILL.md). Explain benefits and run `align --status`. Ask before conversion. Alignment backs up older formats and preserves artifact contents.
+Use [the upgrade review skill](../.agents/skills/review-hub-upgrade/SKILL.md) and run `align --status`. Ask before conversion. Alignment backs up older formats and preserves artifacts.
 
 ## Using two machines
 

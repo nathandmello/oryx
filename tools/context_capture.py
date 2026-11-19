@@ -89,8 +89,9 @@ def verify_excerpts(inputs, entries, private):
     reports = []
     for index, source in enumerate(inputs, 1):
         material = source.get("text")
+        verification = "supplied text"
         link = re.fullmatch(r"\[[^\]\n]+\]\((<[^>\n]+>|[^\s)]+)\)", source["reference"])
-        if material is None and link and source["coverage"] == "read":
+        if link and source["coverage"] == "read":
             url = urlsplit(link[1].strip("<>"))
             local = Path(unquote(url.path))
             if (not url.scheme and not url.netloc and not local.is_absolute() and local.parts
@@ -99,6 +100,7 @@ def verify_excerpts(inputs, entries, private):
                 path = private / local
                 if path.resolve() == path and path.is_file():
                     material = path.read_text(encoding="utf-8")
+                    verification = "workspace file"
         if material is None:
             reports.append({"source": index, "verification": "unavailable" if source["coverage"] == "unavailable"
                             else "prepared excerpts only"})
@@ -113,7 +115,7 @@ def verify_excerpts(inputs, entries, private):
         for quote in set(excerpts):
             matches = list(re.finditer(re.escape(quote), whole))
             if not matches:
-                raise ValueError(f"Source {index}: excerpt differs from the supplied text; retain its original wording")
+                raise ValueError(f"Source {index}: excerpt differs from the {verification}; retain its original wording")
             spans.extend(match.span() for match in matches)
         spans.sort()
         statements = []
@@ -140,7 +142,7 @@ def verify_excerpts(inputs, entries, private):
                     cursor = min(end, right)
                 if re.search(r"\w", whole[cursor:end]):
                     raise ValueError(f"Source {index}: route or explicitly defer the entire commitment: {sentence}")
-        reports.append({"source": index, "verification": "supplied text", "commitment_sentences": len(statements)})
+        reports.append({"source": index, "verification": verification, "commitment_sentences": len(statements)})
     return reports
 
 

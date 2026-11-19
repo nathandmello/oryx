@@ -34,8 +34,10 @@ import initiative_store
 import initiative_views
 import initiative_work
 import experiment_drafts
+import strategy
 
 ROOT = Path(__file__).resolve().parents[1]
+FRAMEWORK_SOURCE = "playbook/sources/product-strategy-mindset.md"
 REQUIRED = (
     "AGENTS.md", "CLAUDE.md", "README.md", ".gitignore",
     "tools/pm.py", "tools/hook.py", "tools/workspace.py", "tools/git_ops.py",
@@ -47,7 +49,8 @@ REQUIRED = (
     ".codex/hooks.json", ".codex/config.toml", ".claude/settings.json",
     ".github/workflows/release.yml", ".github/workflows/review.yml", "tools/publish_release.py", "tools/release_candidate.py",
     ".github/workflows/check.yml", ".github/pull_request_template.md", "tools/release_review.py", "tests/test_pm.py",
-    "playbook/framework.md", "playbook/working.md", "playbook/context.md", "templates/README.md", "tools/records.py",
+    "playbook/framework.md", FRAMEWORK_SOURCE, "playbook/working.md", "playbook/context.md", "templates/README.md", "tools/records.py",
+    "tools/strategy.py", ".agents/skills/pm-strategy/SKILL.md",
     ".agents/skills/red-team/SKILL.md", ".claude/skills/red-team/SKILL.md",
     "playbook/git.md", "playbook/updates.md", "playbook/release.json", "tools/workspace-seed/README.md",
     "tools/workspace-seed/context/README.md", "tools/workspace-seed/workspace/README.md",
@@ -422,7 +425,7 @@ def check(root: Path = ROOT, include_workspace=True) -> list[str]:
         if path.suffix == ".md":
             if any(ARTIFACT.search(Path(part).stem) for part in path.relative_to(root).parts):
                 errors.append(f"{rel}: engineering artifacts belong in the delivery system")
-            if not rel.startswith(".claude/skills/"):
+            if not rel.startswith(".claude/skills/") and rel != FRAMEWORK_SOURCE:
                 errors.extend(f"{rel}:{error}" for error in writing_errors(texts[rel]))
             errors.extend(f"{rel}:{error}" for error in link_errors(root, path, texts[rel]))
             if records.MARKER.match(texts[rel]) and not rel.startswith("templates/"):
@@ -449,6 +452,8 @@ def check(root: Path = ROOT, include_workspace=True) -> list[str]:
     errors.extend(guidance_errors(root, texts))
     errors.extend(hook_errors(texts))
     errors.extend(records.validate(texts))
+    if not strategy.uses_contract(texts.get("templates/strategy.md", "")):
+        errors.append("templates/strategy.md: keep the strategy workflow contract marker")
     if not {"/workspace/", "/private/"} <= set(texts.get(".gitignore", "").splitlines()):
         errors.append(".gitignore: exclude /workspace/ and /private/ from the system repository")
     try:
@@ -704,6 +709,8 @@ def main() -> int:
     task.add_argument("--area", type=layout.slug)
     task.add_argument("--initiative", type=layout.slug)
     task.add_argument("--company", action="store_true")
+    strategy_work = commands.add_parser("strategy", help="Show the next strategy review step")
+    strategy_work.add_argument("path", help="A strategy path inside private/workspace/strategies/")
     commands.add_parser("catalog", help="List private records by title, type, state, and scope")
     commands.add_parser("check-metric", help="Check a numerical claim from JSON on stdin")
     metrics = commands.add_parser("metric", help="Read and maintain the business metric registry")
@@ -824,6 +831,26 @@ def main() -> int:
         if args.command == "area-context":
             private = workspace.repo(ROOT, "workspace")
             print(json.dumps(context_capture.area_context(private, args.product, args.area), indent=2))
+            return 0
+        if args.command == "strategy":
+            private = workspace.repo(ROOT, "workspace")
+            workspace.settings(ROOT)
+            path = upgrades.review_path(private, args.path)
+            if "sources" in Path(args.path).parts or args.path in upgrades.source_paths(private):
+                raise ValueError("Preserve original sources and select an active strategy record")
+            if not layout.valid_work(args.path, "strategy") or not path.is_file():
+                raise ValueError("Select an existing record under workspace/strategies/")
+            storage.require_visible(private, args.path)
+            content = path.read_text(encoding="utf-8")
+            marker = records.MARKER.match(content)
+            if not marker or marker[1] != "strategy":
+                raise ValueError("Use a PM Hub strategy record")
+            report = strategy.next_step(content)
+            if report["step"] in {"ready-for-pm-review", "complete"}:
+                issues = link_errors(ROOT, path, content)
+                if issues:
+                    report.update(step="Sources", issues=issues)
+            print(json.dumps(report, indent=2))
             return 0
         if args.command in {"task-context", "catalog"}:
             private = workspace.repo(ROOT, "workspace")
