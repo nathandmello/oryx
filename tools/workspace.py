@@ -7,6 +7,7 @@ import subprocess
 from urllib.parse import urlsplit
 
 import records
+import upgrades
 
 
 def git(path, *args):
@@ -99,4 +100,5 @@ def initialise(root, owner="", delivery_system="Delivery workspace"):
         text = records.retarget_links(source.read_text(encoding="utf-8"), source, target, root, copies)
         with target.open("x", encoding="utf-8") as output:
             output.write(text)
+    upgrades.fresh(path)
     return path

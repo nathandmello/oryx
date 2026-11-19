@@ -13,17 +13,27 @@ from urllib.parse import unquote, urlsplit
 import records
 import workspace
 import git_ops
+import context_capture
+import storage
+import snapshots
+from storage import inventory
+import upgrades
+import filing
+import conversion
 
 ROOT = Path(__file__).resolve().parents[1]
 REQUIRED = (
     "AGENTS.md", "CLAUDE.md", "README.md", ".gitignore",
     "tools/pm.py", "tools/hook.py", "tools/workspace.py", "tools/git_ops.py",
+    "tools/filing.py", "tools/conversion.py", "tools/snapshots.py", "playbook/filing.md", "playbook/writing.md",
+    "tools/context_capture.py", "tools/storage.py", "tools/upgrades.py",
     ".agents/skills/extend-hub/SKILL.md", ".claude/skills/extend-hub/SKILL.md",
+    ".agents/skills/ingest-context/SKILL.md", ".claude/skills/ingest-context/SKILL.md",
     ".codex/hooks.json", ".codex/config.toml", ".claude/settings.json",
-    ".github/workflows/check.yml", "tests/test_pm.py",
+    ".github/workflows/check.yml", ".github/pull_request_template.md", "tools/release_review.py", "tests/test_pm.py",
     "playbook/framework.md", "playbook/working.md", "playbook/context.md", "templates/README.md", "tools/records.py",
     ".agents/skills/red-team/SKILL.md", ".claude/skills/red-team/SKILL.md",
-    "playbook/git.md", "playbook/release.json", "tools/workspace-seed/README.md",
+    "playbook/git.md", "playbook/updates.md", "playbook/release.json", "tools/workspace-seed/README.md",
     "tools/workspace-seed/context/README.md", "tools/workspace-seed/products/README.md",
     "tools/workspace-seed/.gitignore",
 )
@@ -38,34 +48,18 @@ HOOK_SCRIPT = ('from pathlib import Path; import runpy, sys; p=Path.cwd().resolv
                'sys.path.insert(0, str(root/"tools")); '
                'runpy.run_path(str(root/"tools/hook.py"), run_name="__main__")')
 CODEX_COMMAND = "python3 -c '" + HOOK_SCRIPT + "'"
-SKIP_DIRS = {".git", "__pycache__", ".venv", "node_modules", ".state", ".generated", "worktrees"}
+
 ARTIFACT = re.compile(
     r"(?:^|[-_ ])(?:prds?|specs?|specifications?|requirements|user[-_ ]stories|"
     r"user[-_ ]flows|acceptance[-_ ]criteria)(?:$|[-_ ])", re.I)
 WORDS = re.compile(r"\b[\w]+(?:['’-][\w]+)*\b")
 LINK = re.compile(r"\[([^\]\n]+)\]\((<[^>\n]+>|[^\s)]+)\)")
-BANNED = re.compile(r"\b(?:may|might|could|would|should|thus|delve|leverage)\b", re.I)
-
-
-def inventory(root: Path) -> list[Path]:
-    """Respect Git ignore rules. The fallback supports disposable test fixtures."""
-    if (root / ".git").exists():
-        result = subprocess.run(
-            ["git", "-C", str(root), "ls-files", "-z", "--cached", "--others", "--exclude-standard"],
-            capture_output=True, text=True, check=True,
-        )
-        return sorted({root / p for p in result.stdout.split("\0") if p})
-    paths = []
-    for directory, dirs, names in os.walk(root, followlinks=False):
-        for name in list(dirs):
-            path = Path(directory) / name
-            if path.is_symlink():
-                paths.append(path)
-                dirs.remove(name)
-            elif name in SKIP_DIRS or name == "secrets" or (path == root / "workspace"):
-                dirs.remove(name)
-        paths.extend(Path(directory) / name for name in names)
-    return sorted(paths)
+PROCEDURE_START = re.compile(
+    r"^(?:(?:if|when|before|after|unless)\b[^,]*,\s*)?"
+    r"(?:add|apply|check|choose|close|compare|confirm|copy|create|enter|file|find|include|inspect|keep|"
+    r"link|list|open|preserve|read|record|remove|repeat|replace|restore|review|run|save|select|set|"
+    r"specify|start|store|supply|test|update|use|verify|write)\b", re.I)
+BANNED = re.compile(r"\b(?:thus|delve|leverage)\b", re.I)
 
 
 def prose(text: str):
@@ -121,19 +115,19 @@ def writing_errors(text: str) -> list[str]:
         sentences = re.split(r"(?<=[.!?])\s+", unit)
         if len(sentences) > 6:
             errors.append(f"{line}: paragraph exceeds six sentences")
-        limit = 20 if instruction else 25
         for sentence in sentences:
+            limit = 20 if instruction or PROCEDURE_START.match(sentence) else 25
             count = len(WORDS.findall(sentence))
             if count > limit:
                 errors.append(f"{line}: sentence has {count} words (limit {limit})")
         for word in sorted(set(BANNED.findall(unit))):
             errors.append(f"{line}: replace '{word}' with direct, concrete wording")
     if total > 800:
-        errors.append(f"authored prose has {total} words (limit 800); split by purpose")
+        errors.append(f"authored prose has {total} words (limit 800); edit repeated detail and apply the filing rules")
     return errors
 
 
-def link_errors(root: Path, path: Path, text: str) -> list[str]:
+def link_errors(root: Path, path: Path, text: str, planned=()) -> list[str]:
     errors = []
     fence = None
     metadata = text.startswith("---\n")
@@ -160,7 +154,7 @@ def link_errors(root: Path, path: Path, text: str) -> list[str]:
             destination = (path.parent / unquote(target.path)).resolve() if target.path else path.resolve()
             if root != destination and root not in destination.parents:
                 errors.append(f"{line}: link leaves PM Hub: {match[2]}")
-            elif not destination.exists():
+            elif not destination.exists() and destination not in planned:
                 errors.append(f"{line}: broken link: {match[2]}")
     return errors
 
@@ -185,6 +179,39 @@ def skill_errors(root: Path, files: set[Path]) -> list[str]:
     return errors
 
 
+def guidance_errors(root: Path, texts: dict[str, str]) -> list[str]:
+    """Compare the published template and routing tables with the commands they describe."""
+    index = "templates/README.md"
+    rows, problems = records.table(texts.get(index, ""), "Available templates", ("Template", "Purpose", "Home"))
+    errors = [f"{index}: {problem}" for problem in problems]
+    indexed = set()
+    for name, _, _ in rows:
+        for _, target in LINK.findall(name):
+            url = urlsplit(target.strip("<>"))
+            if not url.scheme and not url.netloc:
+                indexed.add((root / "templates" / unquote(url.path)).resolve())
+    for kind in records.KINDS:
+        if (root / "templates" / f"{kind}.md") not in indexed:
+            errors.append(f"{index}: missing index entry for {kind}.md")
+
+    guide = "playbook/context.md"
+    rows, problems = records.table(texts.get(guide, ""), "Brief routing topics", ("Scope", "Topics"))
+    errors.extend(f"{guide}: {problem}" for problem in problems)
+    documented = {}
+    for label, topics in rows:
+        scope = label.casefold()
+        if scope != "shared" and scope not in context_capture.TOPICS:
+            errors.append(f"{guide}: unsupported brief scope: {label}")
+        documented.setdefault(scope, set()).update(re.findall(r"`([^`]+)`", topics))
+    for scope, topics in context_capture.TOPICS.items():
+        listed = documented.get(scope, set()) | documented.get("shared", set())
+        for topic in sorted(topics.keys() - listed):
+            errors.append(f"{guide}: missing {scope} routing topic: {topic}")
+        for topic in sorted(listed - topics.keys()):
+            errors.append(f"{guide}: unsupported {scope} routing topic: {topic}")
+    return errors
+
+
 def hook_errors(texts: dict[str, str]) -> list[str]:
     errors = []
     for name in (".codex/hooks.json", ".claude/settings.json"):
@@ -193,15 +220,17 @@ def hook_errors(texts: dict[str, str]) -> list[str]:
             if set(config) != {"hooks"}:
                 errors.append(f"{name}: keep client configuration limited to the declared hooks")
             hooks = config["hooks"]
-            for event in ("SessionStart", "Stop"):
-                if len(hooks[event]) != 1 or set(hooks[event][0]) != {"hooks"}:
+            claude = name.startswith(".claude")
+            handler = {"type": "command", "command": CODEX_COMMAND, "timeout": 15}
+            if claude:
+                handler.update(command="python3", args=["-c", HOOK_SCRIPT])
+            for event in ("SessionStart", "Stop", "PreToolUse"):
+                group = {"hooks": [dict(handler, timeout=600 if event == "SessionStart" else 15)]}
+                if event == "PreToolUse":
+                    group["matcher"] = "Write|Edit|MultiEdit" if claude else "apply_patch"
+                elif len(hooks[event]) != 1 or set(hooks[event][0]) != {"hooks"}:
                     errors.append(f"{name}: {event} must run without a matcher")
-                handlers = [handler for group in hooks[event] for handler in group["hooks"]]
-                expected = [{"type": "command", "command": CODEX_COMMAND, "timeout": 15}]
-                if name.startswith(".claude"):
-                    expected = [{"type": "command", "command": "python3",
-                                 "args": ["-c", HOOK_SCRIPT], "timeout": 15}]
-                if handlers != expected:
+                if hooks.get(event) != [group]:
                     errors.append(f"{name}: {event} must call the shared checker once")
         except (ValueError, KeyError, TypeError):
             errors.append(f"{name}: invalid hook configuration")
@@ -218,6 +247,23 @@ def check_workspace(root: Path, system_texts: dict[str, str]) -> list[str]:
         workspace.settings(root)
     except (OSError, ValueError) as exc:
         return [f"workspace/: {exc}"]
+    legacy = {}
+    try:
+        state = upgrades.read_state(private)[1]
+        legacy = state.get(upgrades.RULE)
+        if legacy is None:
+            legacy = upgrades.candidates(private, inventory)
+        for identifier, digest in state.get(upgrades.TRANSACTIONS, {}).items():
+            if upgrades.fingerprint(conversion.archive_path(private, identifier)) != digest:
+                errors.append(f"workspace/: missing or changed recovery archive for {identifier}")
+        if conversion.pointer(private).exists():
+            errors.append("workspace/: finish the pending recoverable filing plan before sharing changes")
+    except (OSError, ValueError) as exc:
+        errors.append(f"workspace/{upgrades.LEDGER}: {exc}")
+    try:
+        context_capture.read_remit(private)
+    except (OSError, ValueError) as exc:
+        errors.append(f"workspace/{context_capture.REMIT_PATH}: {exc}")
     for path in inventory(private):
         rel = path.relative_to(private).as_posix()
         label = f"workspace/{rel}"
@@ -230,7 +276,12 @@ def check_workspace(root: Path, system_texts: dict[str, str]) -> list[str]:
         if not path.is_file():
             continue
         parts = path.relative_to(private).parts
-        if ((len(parts) == 1 and rel not in {"README.md", ".gitignore", "settings.json"})
+        if len(parts) == 2 and parts[0] == conversion.HISTORY and path.suffix == ".zip" and conversion.IDENTIFIER.fullmatch(path.stem):
+            continue
+        item = (legacy or {}).get(rel, {})
+        is_source = item.get("role") == "source" or "sources" in parts
+        old_record = item.get("status") in ("pending", "waiting") and item.get("digest") == upgrades.fingerprint(path)
+        if not old_record and not is_source and ((len(parts) == 1 and rel not in {"README.md", ".gitignore", "settings.json", upgrades.LEDGER, conversion.PENDING})
                 or (len(parts) > 1 and parts[0] not in {"context", "products"})):
             errors.append(f"{label}: use a home from the README placement map")
         if any(ARTIFACT.search(Path(part).stem) for part in parts):
@@ -238,7 +289,13 @@ def check_workspace(root: Path, system_texts: dict[str, str]) -> list[str]:
         if path.suffix == ".md":
             try:
                 texts[rel] = path.read_text(encoding="utf-8")
-                errors.extend(f"{label}:{e}" for e in writing_errors(texts[rel]))
+                try:
+                    if not old_record and not is_source:
+                        filing.verify_note(private, rel, texts[rel])
+                except ValueError as exc:
+                    errors.append(f"{label}: {exc}")
+                if not is_source:
+                    errors.extend(f"{label}:{e}" for e in writing_errors(texts[rel]))
                 errors.extend(f"{label}:{e}" for e in link_errors(root, path, texts[rel]))
             except (OSError, UnicodeError) as exc:
                 errors.append(f"{label}: cannot read text: {exc}")
@@ -291,6 +348,7 @@ def check(root: Path = ROOT, include_workspace=True) -> list[str]:
     if texts.get("CLAUDE.md", "").strip() != "@AGENTS.md":
         errors.append("CLAUDE.md: import AGENTS.md without duplicate instructions")
     errors.extend(skill_errors(root, safe))
+    errors.extend(guidance_errors(root, texts))
     errors.extend(hook_errors(texts))
     errors.extend(records.validate(texts))
     if "/workspace/" not in texts.get(".gitignore", "").splitlines():
@@ -326,16 +384,153 @@ def sync_skills(root: Path = ROOT) -> int:
     return changed
 
 
+def filing_validator(root):
+    private = root / "workspace"
+    def validate(edits, folds, archive, originals):
+        texts = {f"templates/{kind}.md": (root / f"templates/{kind}.md").read_text() for kind in records.KINDS}
+        for path in inventory(private):
+            if path.suffix.lower() == ".md" and path.is_file() and path.resolve() == path:
+                name = path.relative_to(private)
+                if not any(p.startswith(".") or p == "secrets" for p in name.parts):
+                    texts[name.as_posix()] = path.read_text(encoding="utf-8")
+        previous = set(records.validate(texts))
+        for name, row in folds.items():
+            texts.pop(name, None)
+            target = edits[row["into"]]["text"]
+            if not records.MARKER.match(target):
+                raise ValueError("Fold into a typed owning brief or work artifact")
+            marker = records.MARKER.match(originals[name].decode("utf-8").replace("\r\n", "\n"))
+            if marker and edits[row["into"]]["before"] == "absent":
+                if records.work_state(originals[name].decode())[0].get("ID") != records.work_state(target)[0].get("ID"):
+                    raise ValueError("Preserve the stable ID when moving a typed record")
+        problems = []
+        for name, row in edits.items():
+            text = row["text"]
+            old = originals[name].decode("utf-8").replace("\r\n", "\n")
+            marker = records.MARKER.match(old)
+            if marker and (not text.startswith(marker[0]) or records.work_state(old)[0].get("ID") != records.work_state(text)[0].get("ID")):
+                raise ValueError(f"Preserve the record kind and stable ID in {name}")
+            if row["before"] == "absent":
+                new_kind = records.MARKER.match(text)
+                if not new_kind:
+                    raise ValueError("New filing destinations must use an appropriate record template")
+                filing.check_new(private, new_kind[1], name, None, retiring=folds)
+            filing.verify_note(private, name, text)
+            texts[name] = text
+            problems.extend(writing_errors(text) + link_errors(root, private / name, text, planned={archive, *(private / target for target in edits)}))
+        conversion.verify_fragments(private, texts, edits, LINK)
+        for error in records.validate(texts):
+            if error not in previous or error.partition(":")[0] in edits:
+                problems.append(error)
+        if problems:
+            raise ValueError("Invalid filing result: " + " | ".join(problems[:8]))
+    return validate
+
+
+def alignment(root, prepare=False, record=None, outcome=None, digest=None, note=None, backup=None, for_conversion=False):
+    private = workspace.repo(root, "workspace")
+    def inspect():
+        settings_file = private / "settings.json"
+        original = settings_file.read_text(encoding="utf-8") if settings_file.resolve() == settings_file else None
+        settings = workspace.settings(root, compatible=False)
+        release = workspace.release(root)
+        changing = settings["system_version"] != release["system_version"]
+        if settings["workspace_format"] != release["workspace_format"] or (changing and not (
+            settings["system_version"] == "0.1.0" and release == {"system_version": "0.2.0", "workspace_format": 1}
+        )):
+            raise ValueError("Unsupported workspace version; inspect release compatibility before updating")
+        recovery = None
+        if prepare:
+            state = upgrades.read_state(private)[1]
+            if (changing or upgrades.RULE not in state or not upgrades.scan_marker(private).exists()
+                    or conversion.pointer(private).exists() or record or for_conversion):
+                recovery = snapshots.ensure(root, release["system_version"])
+            conversion.resume(private, filing_validator(root), LINK)
+        result = upgrades.run(private, inventory, prepare=prepare, record=record, outcome=outcome, digest=digest, note=note)
+        if changing and prepare:
+            settings["system_version"] = release["system_version"]
+            storage.replace_text(settings_file, original, json.dumps(settings, indent=2) + "\n")
+        result["needs_setup"] |= (changing or conversion.pointer(private).exists()) and not prepare
+        if recovery:
+            result["installation_backup"] = str(recovery)
+        if backup:
+            result["backups"] = upgrades.backup(private, backup)
+        return result
+    if prepare:
+        with storage.writer_lock(private):
+            return inspect()
+    return inspect()
+
+
+def prepare_private_write(root):
+    private = workspace.repo(root, "workspace")
+    settings = workspace.settings(root, compatible=False)
+    if settings["system_version"] != workspace.release(root)["system_version"] or upgrades.RULE not in upgrades.read_state(private)[1] or conversion.pointer(private).exists():
+        alignment(root, prepare=True)
+    return workspace.settings(root)
+
+
+def alignment_notice(root):
+    if not (root / "workspace").exists():
+        return ""
+    try:
+        result = alignment(root)
+    except (OSError, ValueError, subprocess.SubprocessError) as exc:
+        return f"Workspace alignment unavailable: {exc}"
+    items = result["outstanding"]
+    if not result["needs_setup"] and not items:
+        return ""
+    return (f"Context upgrade: {len(items)} record(s) pending or waiting. "
+            "Agent: run python3 tools/pm.py align and execute playbook/updates.md now. "
+            "Read records and sources. Preview and apply verified conversions, and record specific unresolved evidence.")
+
+
+
+def capture_errors(root, target, text):
+    private = root / "workspace"
+    rel = target.relative_to(private).as_posix()
+    texts = {f"templates/{kind}.md": (root / "templates" / f"{kind}.md").read_text(encoding="utf-8")
+             for kind in records.KINDS}
+    for path in inventory(private):
+        parts = path.relative_to(private).parts
+        if (path != target and path.suffix == ".md" and path.resolve() == path and path.is_file()
+                and not any(part == "secrets" or part.startswith(".") for part in parts)):
+            with path.open("rb") as stream:
+                if records.MARKER.match(stream.readline(128).decode("utf-8", errors="replace")):
+                    stream.seek(0)
+                    texts[path.relative_to(private).as_posix()] = stream.read().decode("utf-8")
+    texts[rel] = text
+    errors = [error for error in records.validate(texts) if error.startswith(rel + ":")]
+    return errors + writing_errors(text) + link_errors(root, target, text)
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     commands = parser.add_subparsers(dest="command", required=True)
     checks = commands.add_parser("check")
     checks.add_argument("--system-only", action="store_true")
+    align = commands.add_parser("align", help="Prepare or resume the private context upgrade")
+    align.add_argument("--status", action="store_true", help="Read-only preview")
+    plans = align.add_mutually_exclusive_group()
+    plans.add_argument("--preview-plan", action="store_true", help="Check a filing plan from stdin")
+    plans.add_argument("--apply-plan", action="store_true", help="Apply a recoverable filing plan from stdin")
+    align.add_argument("--record")
+    align.add_argument("--outcome", choices=("reviewed", "waiting", "source"))
+    align.add_argument("--digest")
+    align.add_argument("--note")
+    align.add_argument("--backup", nargs="+", metavar="PATH")
     commands.add_parser("sync-skills")
     new = commands.add_parser("new")
     new.add_argument("kind", choices=records.KINDS)
     new.add_argument("path", help="Path under workspace/, starting with context/ or products/")
     new.add_argument("--title")
+    new.add_argument("--parent")
+    new.add_argument("--basis", choices=filing.BASES)
+    new.add_argument("--reason")
+    new.add_argument("--trigger")
+    route = commands.add_parser("route-context", help="Route supplied context evidence from JSON on stdin")
+    route.add_argument("--write", metavar="PATH", help="Apply entries to one authorised context record")
+    commands.add_parser("set-remit", help="Save a PM-confirmed remit from JSON on stdin")
     initialise = commands.add_parser("init-workspace")
     initialise.add_argument("--owner", default="")
     initialise.add_argument("--delivery-system", default="Delivery workspace")
@@ -344,6 +539,27 @@ def main() -> int:
     git.add_argument("operation", choices=("status", "fetch", "pull", "push"))
     args = parser.parse_args()
     try:
+        if args.command == "align":
+            if args.preview_plan or args.apply_plan:
+                if any((args.status, args.record, args.outcome, args.note, args.digest, args.backup)):
+                    raise ValueError("Use a filing plan option on its own")
+                private = workspace.repo(ROOT, "workspace")
+                plan = json.load(os.sys.stdin)
+                validator = filing_validator(ROOT)
+                if args.apply_plan:
+                    alignment(ROOT, prepare=True, for_conversion=True)
+                    with storage.writer_lock(private):
+                        report = conversion.apply(private, plan, validator, LINK)
+                else:
+                    alignment(ROOT)
+                    report = conversion.apply(private, plan, validator, LINK, preview=True)
+                print(json.dumps(report, indent=2))
+                return 0
+            if args.status and any((args.record, args.outcome, args.note, args.digest, args.backup)):
+                raise ValueError("Use --status alone for a read-only preview")
+            report = alignment(ROOT, not args.status, args.record, args.outcome, args.digest, args.note, args.backup)
+            print(json.dumps(report, indent=2, ensure_ascii=False))
+            return 0
         if args.command == "init-workspace":
             workspace.initialise(ROOT, args.owner, args.delivery_system)
             print("Initialised workspace/ as a separate Git repository. No remote, commit, or push was created.")
@@ -355,21 +571,56 @@ def main() -> int:
                     raise ValueError("Checks failed before push:\n" + "\n".join(failures))
             print(git_ops.run(ROOT, args.role, args.operation))
             if args.operation == "pull":
+                update = subprocess.run([os.sys.executable, str(ROOT / "tools/pm.py"), "align"])
+                if update.returncode:
+                    return update.returncode
                 result = subprocess.run([os.sys.executable, str(ROOT / "tools/pm.py"), "check"])
                 return result.returncode
             return 0
         if args.command == "new":
             workspace.repo(ROOT, "workspace")
-            settings = workspace.settings(ROOT)
+            settings = prepare_private_write(ROOT)
             if any(ARTIFACT.search(Path(part).stem) for part in Path(args.path).parts):
                 raise ValueError("Engineering artifacts belong in the delivery system")
-            created = records.create(ROOT, args.kind, args.path, args.title, owner=settings["owner"])
+            private = ROOT / "workspace"
+            with storage.writer_lock(private):
+                filing.check_new(private, args.kind, args.path, args.title)
+                contract = None
+                if args.kind == "context-note":
+                    contract = filing.note_contract(private, args.path, args.parent, args.basis, args.reason, args.trigger)
+                elif any((args.parent, args.basis, args.reason, args.trigger)):
+                    raise ValueError("Filing details apply to supporting context notes")
+                created = records.create(ROOT, args.kind, args.path, args.title, owner=settings["owner"], filing_contract=contract)
             print(f"Created {created.relative_to(ROOT)} as a draft.")
+            return 0
+        if args.command == "set-remit":
+            private = workspace.repo(ROOT, "workspace")
+            prepare_private_write(ROOT)
+            context_capture.write_remit(private, json.load(os.sys.stdin))
+            print(f"Saved workspace/{context_capture.REMIT_PATH}.")
+            return 0
+        if args.command == "route-context":
+            private = ROOT / "workspace"
+            if private.exists() or private.is_symlink() or args.write is not None:
+                workspace.repo(ROOT, "workspace")
+            plan = context_capture.route(json.load(os.sys.stdin), private, context_capture.read_remit(private))
+            plan["written"] = None
+            if args.write is not None:
+                settings = prepare_private_write(ROOT)
+                if any(ARTIFACT.search(Path(part).stem) for part in Path(args.write).parts):
+                    raise ValueError("Engineering artifacts belong in the delivery system")
+                if context_capture.apply(ROOT, args.write, plan, settings["owner"], capture_errors):
+                    plan["written"] = args.write
+            print(json.dumps(plan, indent=2, ensure_ascii=False))
             return 0
         if args.command == "sync-skills":
             print(f"Updated {sync_skills()} Claude skill file(s).")
             return 0
         errors = check(include_workspace=not args.system_only)
+        if not args.system_only:
+            notice = alignment_notice(ROOT)
+            if notice:
+                print(notice)
     except (OSError, ValueError, subprocess.SubprocessError) as exc:
         print(f"FAIL: {exc}")
         return 1

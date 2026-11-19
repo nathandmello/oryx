@@ -1,60 +1,131 @@
-# Company and product context
+# Company, product, and initiative context
 
-Company context explains the business. Product context explains the product's place within it. Strategy records choices through Nathan's Why, Who, What, and How.
+Context supports recurring work. Keep facts, rules, examples, and open questions that change the work. Use [the starters](../templates/README.md) and cut unused sections.
 
-Use [the templates](../templates/README.md) when context work starts. Aim for 400–600 words per brief. Link to detail.
+## Scope and authority
 
-## Ownership and relationships
+Keep standing company facts and commitments in `workspace/context/company.md`. Link time-bound developments and detailed records.
 
-Keep company context under `workspace/context/`. Add a business-unit brief only when the work needs one; link its parent company context.
+Link product context to its company. Link initiative context to its product. Each level records the decisions, exceptions, and practical details it owns.
 
-Keep product context under `workspace/products/<product>/`. Link its relevant company context in Parent context. Reference shared facts; add product-specific facts and differences.
+Apply more specific guidance within its authority. Keep inherited commitments in force. A new exception needs evidence of approval from the decision owner.
 
-Link to authoritative goals, performance sources, research, and strategy. Keep each artifact in its existing home.
+Reuse authoritative records for goals, research, and delivery details. Apply [the filing rules](filing.md) before creating any supporting note.
 
-Keep PRDs, user stories, detailed flows, acceptance criteria, and engineering specifications in the configured delivery system. Context describes the current business and product.
+## Make the brief usable
 
-## Claims and sources
+- Write instructions that change a decision, a word, or an action. Include the reason for a guardrail.
+- Keep local terms with their meanings, owners, and misleading alternatives.
+- Keep closed decisions with the question, scope, named decision-maker and date, evidence and rationale, and the next step.
+- Link an approved working example or include a permitted excerpt. Put a recurring mistake beside the concrete example that resolves it.
+- Put data boundaries first when access is sensitive. For regulated work, list permitted inputs and name the review roles and approval gates.
+- Keep known gaps where they matter. Trim stale material and inherited detail. One-off work can use a short brief in the reply.
 
-Write each entry as a labelled bullet:
+| Product type | Emphasis |
+| --- | --- |
+| Customer-facing SaaS | Buyer and user jobs, account vocabulary, plan entitlements |
+| Internal tool | Teams, savings in their measures, dependent systems and owners, prior decisions |
+| Platform or API | Integrators and buyers, resource model, versioning, compatibility, approved interface or deprecation examples |
+| Regulated or safety-relevant | Applicable obligations, internal owners, dated approvals, permitted inputs, review path |
 
-- `Fact:` an established claim with a source reference, such as `[S1]`.
-- `Interpretation:` your reading of evidence. Cite its basis when available.
-- `Assumption:` a belief that needs a test.
-- `Unknown:` a gap or unresolved conflict. State its effect on the current question.
+For company work, emphasise binding policies, exclusions, and shared terminology. For initiatives, emphasise the outcome, scope, dependencies, and release evidence.
 
-Keep one claim per entry. Indent continuation lines. Preserve conflicting sources and separate official direction from personal interpretation.
+## PM remit
 
-List each source once under Sources. Use unique IDs such as `S1`. Reference those IDs beside the claims they inform.
+Save PM-confirmed responsibilities in `workspace/context/pm-remit.json` using `python3 tools/pm.py set-remit` with JSON on standard input. Link goals and metrics.
 
-Record a link or a named person and discussion reference. Record the source date and the date you checked it.
+```json
+{
+  "responsibilities": [
+    {"subject": "product/checkout", "role": "owner", "goals": ["products/checkout/goal.md"], "depends_on": ["product/billing"]},
+    {"subject": "area/pricing", "role": "shared", "goals": [], "depends_on": []}
+  ],
+  "follow": ["product/search", "topic/industry-benchmarks"]
+}
+```
 
-Use `unknown` or `undated` when the source date is unavailable. A personal statement establishes its origin; it does not establish company approval.
+An upstream dependency signals interest. Mark the PM’s work affected only for a confirmed consequence. The remit guides relevance. The subject and accountable owner determine the record's home. With no remit, report unknown PM relevance outside company scope.
 
-## Reviews and partial work
+## Route supplied evidence
 
-Set the maintainer, review deadline, and change triggers before context leaves draft. Record Last reviewed only after an actual review.
+[Ingestion](../.agents/skills/ingest-context/SKILL.md) applies automatically. Use `python3 tools/pm.py route-context` with JSON on standard input. Preview first. Write one authorised record per `--write PATH` call.
 
-Choose the review deadline for the decision and source volatility. A new file or text edit does not reset review dates.
+New captures start with the sections they use. Add sections as new evidence warrants them. Retain the context controls, sources, and work state.
 
-Review parent-context changes for their effect on product context and linked work. Revisit goals, strategy, and other affected records when the change matters.
+```json
+{
+  "sources": [
+    {"reference": "Fictional approved minutes, section 3", "date": "2026-01-01", "coverage": "read", "checked_on": "2026-01-01"}
+  ],
+  "entries": [
+    {"scope": "company", "topic": "constraints", "source": 1, "location": "Section 3", "quote": "We will not create or own LLMs."},
+    {"scope": "product", "product": "checkout", "topic": "vocabulary", "source": 1, "location": "Section 3", "quote": "A workspace is the boundary for shared access.", "term": {"name": "workspace", "owner": "Product", "avoid": "account"}},
+    {"scope": "initiative", "product": "checkout", "initiative": "renewals", "topic": "decisions", "source": 1, "location": "Section 3", "quote": "We use existing sessions because renewal needs no new login.", "decision": {"question": "How do users authenticate?", "scope": "Renewal pilot", "person": "Fixture PM", "date": "2026-01-01", "next_step": "Brief the pilot team."}}
+  ]
+}
+```
 
-Use Unknown entries for unresolved gaps. Complete means usable for the stated scope; it does not mean every question has an answer.
+## Brief routing topics
 
-Use [the existing checkpoints](working.md) across sessions. Context work can pause for evidence or another person's input.
+| Scope | Topics |
+| --- | --- |
+| Company | `organisation`, `markets`, `business-model`, `direction`, `operations`, `constraints` |
+| Product | `offer`, `vision`, `purpose`, `customers`, `contribution`, `ownership`, `constraints`, `goals` |
+| Initiative | `outcome`, `workflow`, `constraints` |
+| Shared | `vocabulary`, `decisions`, `examples`, `data-boundaries`, `reviews` |
 
-## Checks and judgment
+For an area, use `area` with `subject: area/<slug>`. For another reference topic, use `reference` with `subject: topic/<slug>`.
 
-The checker validates sections, labels, source IDs, dates, parent links, review deadlines, and work state. Drafts can retain prompts and unset review dates.
+Deferred scopes are `delivery`, `detail`, and `unclear`.
 
-An overdue review fails checks for active, waiting, or complete context. Review the record; preserve an honest gap if review remains blocked.
+Use established slugs. New initiatives use `products/<product>/initiatives/<initiative>/context.md`. Existing product headings still accept their original topics.
 
-Agents assess source authority, claim accuracy, conflicts, and affected work. Checks cannot prove these judgments or detect external changes.
+Base local Markdown source links on the private workspace root. Each distinct inspection date retains its own source ID.
+
+List each source with coverage `read`, `partial`, or `unavailable`. Omit `checked_on` for unavailable sources. Source numbers start at one.
+
+Supply permitted inspected `text` for pasted material or extracts. Read local Markdown and text links from the workspace root.
+
+The router checks literal excerpts and common commitment sentences against available text. Route an irrelevant commitment as deferred. Report excerpt-only checks explicitly.
+
+Use exact single-line quotes and locators. Provide `rule` for an actionable instruction or `interpretation` for a sourced implication. Cite evidence for factual claims.
+
+Use `question` for an unknown. Cite new evidence with `answers` to resolve the exact question. Keep vocabulary and decision rows in their dedicated tables.
+
+Omit the topic to keep an update at its source. Use `affects` for confirmed effects. For existing records, supply the path and reason. A new supporting record also needs its parent, basis, and review trigger.
+
+## Review and maintain
+
+Set a maintainer and concrete triggers before active use. Review when a decision closes, a release ships, or a material source changes.
+
+Use an event-driven review or a dated deadline. Set Last reviewed after an actual review. Carry parent changes through to the affected briefs and goals.
+
+Try the brief in a fresh task. Add what the worker had to ask. Cut what they never needed. Use [checkpoints](working.md) for unresolved work.
+
+The checker validates structure, source references, parent links, decision rows, and review fields. Assess fidelity, source authority, approvals, and current evidence during review.
+
+## Review existing context
+
+Follow [the upgrade workflow](updates.md). Review older briefs, including those without companions.
+
+List briefs, loose notes, sources, and incoming links. Include untracked notes.
+
+Establish each record’s purpose and authority from its contents.
+
+Compare material claims with the available originals clause by clause. Restore actors, exclusions, conditions, dates, and positive commitments within their documented scope.
+
+If evidence is inaccessible or conflicts, record the specific question and affected claim. Keep decisions open until the evidence supports them.
+
+Show what to retain, merge, reroute, or retire, with reasons and affected links. Keep substantive events and unique evidence where they belong.
+
+Back up affected files. Apply authorised repairs, including links and citations. Use a verified filing plan for reversible folds. Ask before permanent removal.
+
+Rerun the Hub check and compare the repaired claims with their sources. Record the review scope and open questions in the existing checkpoint.
+
+Report remaining gaps and unavailable evidence.
 
 ## Basis
 
-Nathan approved these outlines after a comparison of established methods. This format adapts them for PM Hub:
+Based on the supplied *Product Context File Templates* and PM Hub's existing context and ownership rules.
 
-- [Strategyzer Business Model Canvas](https://www.strategyzer.com/library/the-business-model-canvas): business model structure.
-- [Product Talk Business Fundamentals](https://www.producttalk.org/business-fundamentals-course/): public questions about business context.
-- [Roman Pichler Product Vision Board](https://www.romanpichler.com/tools/product-vision-board/): product, customers, needs, and business goals.
+The company and product outlines also draw on [Strategyzer](https://www.strategyzer.com/library/the-business-model-canvas), [Product Talk](https://www.producttalk.org/business-fundamentals-course/), and [Roman Pichler](https://www.romanpichler.com/tools/product-vision-board/).

@@ -180,7 +180,7 @@ class RepositoryTests(unittest.TestCase):
         note = (self.work / "context/notes.md").read_bytes()
         source = self.contributor("system")
         metadata = workspace.release(source)
-        metadata["system_version"] = "0.2.0"
+        metadata["system_version"] = "0.2.1"
         (source / "playbook/release.json").write_text(json.dumps(metadata) + "\n")
         self.commit(source, "Release a compatible system update")
         self.git(source, "push", "origin", "main")
@@ -188,7 +188,7 @@ class RepositoryTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertEqual(self.git(self.work, "rev-parse", "HEAD"), private_head)
         self.assertEqual((self.work / "context/notes.md").read_bytes(), note)
-        self.assertEqual(workspace.settings(self.root)["system_version"], "0.2.0")
+        self.assertEqual(workspace.settings(self.root)["system_version"], "0.2.1")
 
     def test_incompatible_system_update_stops_before_any_workspace_change(self):
         self.connect()
@@ -258,6 +258,59 @@ class RepositoryTests(unittest.TestCase):
         self.git(self.work, "config", "branch.main.merge", "refs/heads/other")
         with self.assertRaisesRegex(ValueError, "another destination"):
             git_ops.run(self.root, "workspace", "push")
+
+    def test_shared_update_refuses_to_track_the_private_tree(self):
+        self.connect()
+        contributor = self.contributor("system")
+        head = self.git(self.root, "rev-parse", "HEAD")
+        local = self.work / "local-notes.md"
+        local.write_text("Original private untracked bytes.")
+        collision = contributor / "workspace/local-notes.md"
+        collision.parent.mkdir()
+        collision.write_text("Incoming shared path")
+        self.git(contributor, "add", "-f", "workspace/local-notes.md")
+        self.git(contributor, "commit", "-m", "Fictional accidental private-tree collision")
+        self.git(contributor, "push", "origin", "main")
+        with self.assertRaisesRegex(ValueError, "tracks the private workspace"):
+            git_ops.run(self.root, "system", "pull")
+        self.assertEqual(self.git(self.root, "rev-parse", "HEAD"), head)
+        self.assertEqual(local.read_text(), "Original private untracked bytes.")
+
+    def test_official_private_push_checks_recovery_bytes_in_the_commit(self):
+        import conversion
+        import upgrades
+        self.connect()
+        archive = conversion.archive_path(self.work, "board-fold")
+        archive.parent.mkdir()
+        archive.write_bytes(b"Fictional recovery blob")
+        ledger = self.work / upgrades.LEDGER
+        state = json.loads(ledger.read_text())
+        state[upgrades.TRANSACTIONS] = {"board-fold": upgrades.fingerprint(archive)}
+        ledger.write_text(upgrades.encode(state))
+        ignore = self.work / ".gitignore"
+        ignore.write_text(ignore.read_text() + "\n*.zip\n")
+        self.commit(self.work, "Save private ledger, accidentally omit recovery")
+        result = self.cli("git", "workspace", "push")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("verified recovery archive in the private commit", result.stdout)
+        self.git(self.work, "add", "-f", ".hub-history/board-fold.zip")
+        self.git(self.work, "commit", "-m", "Preserve the private recovery blob")
+        self.assertEqual(self.cli("git", "workspace", "push").returncode, 0)
+
+    def test_ordinary_shared_git_pull_preserves_modified_and_untracked_private_files(self):
+        self.connect()
+        local = self.work / "product-peculiar.md"
+        local.write_bytes(b"Private untracked work\r\n")
+        tracked = self.work / "context/notes.md"
+        tracked.write_bytes(b"Uncommitted private changes\r\n")
+        other = self.contributor("system")
+        guide = other / "README.md"
+        guide.write_text(guide.read_text() + "\nShared fixture update.\n")
+        self.commit(other, "Shared-only update")
+        self.git(other, "push", "origin", "main")
+        self.git(self.root, "pull", "--ff-only", "origin", "main")
+        self.assertEqual(local.read_bytes(), b"Private untracked work\r\n")
+        self.assertEqual(tracked.read_bytes(), b"Uncommitted private changes\r\n")
 
 
 if __name__ == "__main__":

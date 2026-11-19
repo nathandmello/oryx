@@ -1,7 +1,11 @@
 <!-- pm: company-context -->
 # {{title}}
 
-Use [the context rules](../playbook/context.md). Label entries as Fact, Interpretation, Assumption, or Unknown.
+Use [the context rules](../playbook/context.md). Keep a broad overview and the company rules that guide decisions.
+
+## Data boundaries
+
+{{Record company rules for evidence used in agent work, including restrictions, reasons, and policy owners.}}
 
 ## Organisation and scope
 
@@ -25,7 +29,27 @@ Use [the context rules](../playbook/context.md). Label entries as Fact, Interpre
 
 ## Constraints and open questions
 
-{{Financial, legal, contractual, and operational limits. Record gaps, conflicts, and their effect on current work.}}
+{{Capture binding company limits and exclusions, their authority, and any conditions. State unresolved gaps and their effect.}}
+
+## Vocabulary
+
+| Term | Meaning | Owner | Avoid |
+| --- | --- | --- | --- |
+| {{Preferred term}} | {{Specific meaning}} | {{Accountable owner}} | {{Confusing term}} |
+
+## Decisions already closed
+
+| Question | Scope | Person and date | Evidence | Next step |
+| --- | --- | --- | --- | --- |
+| {{Question resolved}} | {{Where it applies}} | {{Name, YYYY-MM-DD}} | {{Source reference and rationale}} | {{Action the decision enables}} |
+
+## What good output looks like
+
+{{Link an approved example of a shared artifact or standard. Record a common pitfall when it affects company work.}}
+
+## Review and approvals
+
+{{Name company-wide decision and review roles if they change the work. Link applicable policy.}}
 
 ## Context controls
 
@@ -34,8 +58,8 @@ Use [the context rules](../playbook/context.md). Label entries as Fact, Interpre
 | Parent context | none |
 | Maintainer | {{owner}} |
 | Last reviewed | not reviewed |
-| Review by | {{YYYY-MM-DD}} |
-| Review triggers | {{Changes that require a review, such as new goals, prices, or organisational structure.}} |
+| Review by | event-driven |
+| Review triggers | {{New direction, changed commitments, or a material change to the business.}} |
 
 ## Sources
 

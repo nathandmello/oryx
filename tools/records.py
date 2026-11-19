@@ -5,10 +5,13 @@ from os.path import relpath
 from pathlib import Path
 from posixpath import normpath
 import re
-from urllib.parse import unquote, urlsplit, urlunsplit
+
+import storage
+from urllib.parse import quote, unquote, urlsplit, urlunsplit
 from uuid import uuid4
 
-KINDS = ("company-context", "product-context", "goal", "problem", "strategy", "experiment", "roadmap")
+CONTEXT_KINDS = ("company-context", "product-context", "initiative-context", "context-note")
+KINDS = (*CONTEXT_KINDS, "goal", "problem", "strategy", "experiment", "roadmap")
 FIELDS = ("ID", "State", "Mode", "Last checkpoint", "Next action", "Waiting on", "Resume when")
 STATES = {"draft", "active", "waiting", "complete"}
 MODES = {"thought-partner", "quiet"}
@@ -16,6 +19,42 @@ MARKER = re.compile(r"\A<!-- pm: ([a-z-]+) -->\n")
 PLACEHOLDER = re.compile(r"\{\{[^{}]+\}\}")
 CONTEXT_FIELDS = ("Parent context", "Maintainer", "Last reviewed", "Review by", "Review triggers")
 SOURCE_COLUMNS = ("ID", "Source", "Source date", "Checked on")
+CONTEXT_METADATA = {"Context controls", "Sources", "Work state"}
+SHARED_TOPICS = {
+    "vocabulary": "Vocabulary",
+    "decisions": "Decisions already closed",
+    "examples": "What good output looks like",
+    "data-boundaries": "Data boundaries",
+    "reviews": "Review and approvals",
+}
+CONTEXT_TOPICS = {
+    "company": {
+        "organisation": "Organisation and scope", "markets": "Customers and markets",
+        "business-model": "Business model", "direction": "Direction and goals",
+        "operations": "How the business operates", "constraints": "Constraints and open questions",
+        **SHARED_TOPICS,
+    },
+    "product": {
+        "offer": "The product", "contribution": "The product",
+        "purpose": "The vision", "vision": "The vision", "customers": "The users",
+        "ownership": "Constraints", "constraints": "Constraints", "goals": "Goals, performance, and gaps",
+        **SHARED_TOPICS,
+    },
+    "initiative": {
+        "outcome": "Outcome and scope", "workflow": "Users and workflow",
+        "constraints": "Dependencies and constraints", **SHARED_TOPICS,
+    },
+}
+LEGACY_PRODUCT_TOPICS = {
+    "purpose": "Purpose and boundaries", "vision": "Purpose and boundaries", "customers": "Customers and their work",
+    "offer": "Current offer", "contribution": "Business contribution and market",
+    "ownership": "Ownership and constraints", "constraints": "Ownership and constraints",
+}
+CONTEXT_TABLES = {
+    "Vocabulary": ("Term", "Meaning", "Owner", "Avoid"),
+    "Decisions already closed": ("Question", "Scope", "Person and date", "Evidence", "Next step"),
+}
+SOURCE_REFERENCE = re.compile(r"\[S[1-9]\d*\]")
 
 
 def work_state(text):
@@ -111,12 +150,76 @@ def context_location(kind, path):
         return "company context belongs under context/"
     if kind == "product-context" and (parts[:1] != ("products",) or len(parts) < 3):
         return "product context belongs under products/<product>/"
+    if kind == "initiative-context" and (
+        parts[:1] != ("products",) or len(parts) < 3 or (len(parts) == 3 and parts[-1] == "context.md")
+    ):
+        return "initiative context belongs in a distinct record under products/<product>/"
+    if kind == "context-note" and parts[:1] != ("context",) and (
+        parts[:1] != ("products",) or len(parts) < 3
+    ):
+        return "context notes belong under context/ or products/<product>/"
     return None
+
+
+def existing_briefs(private, canonical, scope):
+    """Find subject-matched, typed older briefs when the standard file is absent."""
+    parent = Path(canonical).parent
+    found = []
+    for path in storage.inventory(private):
+        rel = path.relative_to(private)
+        if (path.suffix != ".md" or path.resolve() != path or not path.is_file()
+                or any(p.startswith(".") or p == "secrets" for p in rel.parts)
+                or parent not in rel.parents):
+            continue
+        if scope == "product" and "initiatives" in rel.parts[2:]:
+            continue
+        with path.open("rb") as stream:
+            marker = MARKER.match(stream.readline(128).decode("utf-8", errors="replace"))
+        if marker and marker[1] == f"{scope}-context":
+            found.append(rel.as_posix())
+    return found
+
+
+def context_sections(kind):
+    if kind == "context-note":
+        return {"Context"}
+    scope = kind.removesuffix("-context")
+    sections = set(CONTEXT_TOPICS[scope].values())
+    if scope == "product":
+        sections.update(LEGACY_PRODUCT_TOPICS.values())
+    return sections
+
+
+def context_table_errors(text, name, draft):
+    columns = CONTEXT_TABLES[name]
+    rows, errors = table(text, name, columns)
+    if any(line.strip() and not line.strip().startswith("|") for line in section(text, name).splitlines()):
+        errors.append(f"{name} needs a Markdown table")
+    for row in rows:
+        if draft and all(PLACEHOLDER.fullmatch(cell) for cell in row):
+            continue
+        if any(not cell or PLACEHOLDER.search(cell) for cell in row):
+            errors.append(f"{name} rows need every field")
+            continue
+        if name == "Vocabulary" and not SOURCE_REFERENCE.search(row[1]):
+            errors.append("Vocabulary needs a source reference in Meaning")
+        if name == "Decisions already closed":
+            person, separator, decided_on = row[2].rpartition(", ")
+            try:
+                decided = date.fromisoformat(decided_on)
+                if not separator or not specific(person) or decided.isoformat() != decided_on or decided > date.today():
+                    raise ValueError()
+            except ValueError:
+                errors.append("Closed decisions need a named person and a YYYY-MM-DD decision date")
+            if not SOURCE_REFERENCE.search(row[3]):
+                errors.append("Closed decisions need a source reference in Evidence")
+    return errors
 
 
 def context_errors(path, text, kind, texts, content_sections, template=False):
     errors, parent = [], None
-    draft = work_state(text)[0].get("State") == "draft"
+    state = work_state(text)[0].get("State")
+    draft = state == "draft"
     if not template and context_location(kind, path):
         errors.append(context_location(kind, path))
     rows, problems = table(text, "Context controls", ("Field", "Value"))
@@ -150,14 +253,15 @@ def context_errors(path, text, kind, texts, content_sections, template=False):
         return result
 
     reviewed = day(controls.get("Last reviewed", ""), "Last reviewed", past=True, unreviewed=True)
-    due = day(controls.get("Review by", ""), "Review by")
+    review_by = controls.get("Review by", "")
+    due = None if review_by == "event-driven" else day(review_by, "Review by")
     if reviewed and due and due < reviewed:
         errors.append("Review by cannot precede Last reviewed")
     if not draft and due and due < date.today():
         errors.append("context review is overdue; review the record and its sources")
 
     value = controls.get("Parent context", "")
-    if value == "none" and kind == "company-context":
+    if value == "none" and kind in {"company-context", "context-note"}:
         pass
     elif draft and PLACEHOLDER.fullmatch(value):
         pass
@@ -165,11 +269,16 @@ def context_errors(path, text, kind, texts, content_sections, template=False):
         link = re.fullmatch(r"\[[^\]\n]+\]\(([^\s)]+)\)", value)
         parsed = urlsplit(link[1]) if link else None
         if not parsed or parsed.scheme or parsed.netloc or not parsed.path:
-            errors.append("Parent context needs one local Markdown link to company context")
+            errors.append("Parent context needs one local Markdown link")
         else:
             parent = normpath((Path(path).parent / unquote(parsed.path)).as_posix())
             marker = MARKER.match(texts.get(parent, ""))
-            if not parent.startswith("context/") or not marker or marker[1] != "company-context":
+            if kind == "initiative-context":
+                product = Path(path).parts[:2]
+                if (len(product) != 2 or Path(parent).parts[:2] != product
+                        or not marker or marker[1] != "product-context"):
+                    errors.append("Parent context must link to the same product's product-context record")
+            elif not parent.startswith("context/") or not marker or marker[1] != "company-context":
                 errors.append("Parent context must link to a company-context record inside PM Hub")
 
     rows, problems = table(text, "Sources", SOURCE_COLUMNS)
@@ -194,12 +303,18 @@ def context_errors(path, text, kind, texts, content_sections, template=False):
         if published and checked_on and published > checked_on:
             errors.append(f"{identifier}: Source date cannot follow Checked on")
 
-    for reference in set(re.findall(r"\[(S[1-9]\d*)\]", text)) - sources:
+    claims = re.sub(r"(?ms)^## Sources[ \t]*$.*?(?=^## |\Z)", "", text)
+    for reference in set(re.findall(r"\[(S[1-9]\d*)\]", claims)) - sources:
         errors.append(f"unknown source reference: {reference}")
+    substantive = False
     for name in sorted(content_sections):
         body = section(text, name)
         if body is None:
             errors.append(f"use exactly one {name} section")
+            continue
+        if name in CONTEXT_TABLES:
+            errors.extend(context_table_errors(text, name, draft))
+            substantive = substantive or bool(table(text, name, CONTEXT_TABLES[name])[0])
             continue
         if not body.strip() and not draft:
             errors.append(f"{name} needs an entry or an explicit Unknown")
@@ -207,17 +322,20 @@ def context_errors(path, text, kind, texts, content_sections, template=False):
         for line in body.splitlines():
             if not line.strip() or PLACEHOLDER.fullmatch(line.strip()):
                 continue
-            entry = re.fullmatch(r"- (Fact|Interpretation|Assumption|Unknown): (.+)", line)
+            entry = re.fullmatch(r"- (Fact|Rule|Example|Interpretation|Assumption|Unknown): (.+)", line)
             if entry:
                 current = [entry[1], entry[2]]
                 entries.append(current)
             elif line.startswith("  ") and current:
                 current[1] += " " + line.strip()
             else:
-                errors.append(f"{name}: use labelled Fact, Interpretation, Assumption, or Unknown bullets")
+                errors.append(f"{name}: use labelled context bullets")
         for label, claim in entries:
-            if label == "Fact" and not PLACEHOLDER.fullmatch(claim) and not re.search(r"\[S[1-9]\d*\]", claim):
-                errors.append(f"{name}: Fact entries need a source reference such as [S1]")
+            substantive = substantive or label in {"Fact", "Rule", "Example"}
+            if label in {"Fact", "Rule", "Example"} and not PLACEHOLDER.fullmatch(claim) and not SOURCE_REFERENCE.search(claim):
+                errors.append(f"{name}: {label} entries need a source reference such as [S1]")
+    if state == "complete" and not substantive:
+        errors.append("complete context needs a sourced fact, rule, example, or structured entry")
     return errors, parent
 
 
@@ -239,8 +357,10 @@ def validate(texts):
         if values.get("Mode") != "thought-partner":
             problems.append("templates must start in thought-partner mode")
         contracts[kind] = set(re.findall(r"^## (.+)$", text, re.M))
-        if kind in {"company-context", "product-context"}:
-            content = contracts[kind] - {"Context controls", "Sources", "Work state"}
+        if kind in CONTEXT_KINDS:
+            content = contracts[kind] - CONTEXT_METADATA
+            if content - context_sections(kind):
+                problems.append("template contains an unknown context section")
             extra, _ = context_errors(path, text, kind, texts, content, template=True)
             problems.extend(extra)
         errors.extend(f"{path}: {problem}" for problem in problems)
@@ -257,11 +377,12 @@ def validate(texts):
             errors.append(f"{path}: unknown artifact type: {kind}")
             continue
         sections = set(re.findall(r"^## (.+)$", text, re.M))
-        for missing in sorted(contracts[kind] - sections):
+        required = CONTEXT_METADATA if kind in CONTEXT_KINDS else contracts[kind]
+        for missing in sorted(required - sections):
             errors.append(f"{path}: missing section: {missing}")
         identifier, problems = state_errors(text)
-        if kind in {"company-context", "product-context"}:
-            content = contracts[kind] - {"Context controls", "Sources", "Work state"}
+        if kind in CONTEXT_KINDS:
+            content = sections & context_sections(kind)
             extra, parent = context_errors(path, text, kind, texts, content)
             problems.extend(extra)
             if parent:
@@ -286,19 +407,19 @@ def retarget_links(text, source, target, root, copies=None):
     """Keep links to shared rules valid after a template enters the workspace."""
     def retarget(match):
         label, link = match.groups()
-        parsed = urlsplit(link)
+        parsed = urlsplit(link.strip("<>"))
         if parsed.scheme or parsed.netloc or not parsed.path:
             return match[0]
         linked = (source.parent / unquote(parsed.path)).resolve()
         linked = (copies or {}).get(linked, linked)
         if root not in linked.parents and linked != root:
             raise ValueError("Template link leaves PM Hub")
-        relative_link = Path(relpath(linked, target.parent)).as_posix()
+        relative_link = quote(Path(relpath(linked, target.parent)).as_posix())
         return f"[{label}]({urlunsplit(('', '', relative_link, parsed.query, parsed.fragment))})"
-    return re.sub(r"\[([^\]\n]+)\]\(([^\s)]+)\)", retarget, text)
+    return re.sub(r"\[([^\]\n]+)\]\((<[^>\n]+>|[^\s)]+)\)", retarget, text)
 
 
-def create(root, kind, destination, title=None, owner=""):
+def create(root, kind, destination, title=None, owner="", filing_contract=None):
     root = root.resolve()
     relative = Path(destination)
     if relative.is_absolute() or relative.parts[:1] not in (("context",), ("products",)):
@@ -313,6 +434,17 @@ def create(root, kind, destination, title=None, owner=""):
         raise ValueError(f"Unknown template: {kind}")
     if context_location(kind, relative):
         raise ValueError(context_location(kind, relative))
+    text = draft_text(root, kind, target, title, owner)
+    if filing_contract:
+        import filing
+        text = filing.add_contract(text, workspace, target, filing_contract)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    with target.open("x", encoding="utf-8", newline="\n") as output:
+        output.write(text)
+    return target
+
+
+def draft_text(root, kind, target, title=None, owner=""):
     source = root / "templates" / f"{kind}.md"
     if source.resolve() != source:
         raise ValueError("Templates must be regular files inside PM Hub")
@@ -329,7 +461,25 @@ def create(root, kind, destination, title=None, owner=""):
     text = text.replace("{{id}}", f"{kind}-{uuid4().hex[:12]}")
     text = text.replace("{{date and result}}", f"{date.today().isoformat()}: Draft created.")
     text = retarget_links(text, source, target, root)
-    target.parent.mkdir(parents=True, exist_ok=True)
-    with target.open("x", encoding="utf-8", newline="\n") as output:
-        output.write(text)
-    return target
+    if kind in {"product-context", "initiative-context"}:
+        private = root / "workspace"
+        if kind == "product-context":
+            parent = private / "context/company.md"
+            expected, label = "company-context", "Company context"
+            placeholder = "{{Local Markdown link to the relevant company-context record.}}"
+        else:
+            product = target.relative_to(private).parts[1]
+            parent = private / "products" / product / "context.md"
+            expected, label = "product-context", "Product context"
+            placeholder = "{{Local Markdown link to the same product's product-context record.}}"
+        if not parent.exists():
+            alternatives = existing_briefs(private, parent.relative_to(private), expected.removesuffix("-context"))
+            if len(alternatives) == 1:
+                parent = private / alternatives[0]
+        if parent.resolve() == parent and parent.is_file():
+            with parent.open(encoding="utf-8") as stream:
+                marker = MARKER.match(stream.readline())
+            if marker and marker[1] == expected:
+                link = Path(relpath(parent, target.parent)).as_posix()
+                text = text.replace(placeholder, f"[{label}]({link})")
+    return text

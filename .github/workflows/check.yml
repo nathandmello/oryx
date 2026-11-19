@@ -1,19 +1,39 @@
 name: PM Hub checks
 
-on: [push, pull_request, workflow_dispatch]
+on:
+  push:
+    branches: [main]
+  pull_request:
+    types: [opened, reopened, synchronize, edited, ready_for_review]
+  workflow_dispatch:
+    inputs:
+      release_pr:
+        description: Merged release pull request to verify before publication
+        required: true
+        type: string
 
 permissions:
   contents: read
+  actions: read
+  pull-requests: read
 
 jobs:
   check:
-    runs-on: self-hosted
-    timeout-minutes: 5
+    runs-on: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository && 'ubuntu-latest' || 'self-hosted' }}
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - name: Check the hub
+      - name: Check Hub structure, skills, templates, hooks and dependencies
         run: python3 tools/pm.py check --system-only
-      - name: Test enforcement
+      - name: Test PM workflows, consumer upgrades and recovery
         run: python3 -m unittest discover -s tests -v
+      - name: Verify engineering and quality review evidence
+        if: github.event_name == 'pull_request'
+        run: python3 tools/release_review.py
+      - name: Verify the merged release candidate before publication
+        if: github.event_name == 'workflow_dispatch'
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: python3 tools/release_review.py

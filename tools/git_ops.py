@@ -7,6 +7,10 @@ import subprocess
 from urllib.parse import urlsplit
 
 import workspace
+import upgrades
+import conversion
+import storage
+import snapshots
 
 
 def identity(url):
@@ -74,6 +78,17 @@ def run(root, role, operation):
     if tracking and (tracking != "origin" or tracked_branch != f"refs/heads/{branch}"):
         raise ValueError(f"{role}: branch tracks another destination; inspect it before synchronisation")
     if operation == "push":
+        if role == "workspace":
+            committed = subprocess.run(["git", "-C", str(path), "show", f"HEAD:{upgrades.LEDGER}"], capture_output=True)
+            local = upgrades.read_state(path)[1]
+            published = {} if committed.returncode else json.loads(committed.stdout)
+            if (upgrades.TRANSACTIONS in published or upgrades.TRANSACTIONS in local) and published != local:
+                raise ValueError("Save the current private filing ledger before sharing it")
+            for identifier, expected in published.get(upgrades.TRANSACTIONS, {}).items():
+                rel = conversion.archive_path(path, identifier).relative_to(path).as_posix()
+                blob = subprocess.run(["git", "-C", str(path), "cat-file", "blob", f"HEAD:{rel}"], capture_output=True)
+                if blob.returncode or conversion.digest(blob.stdout) != expected:
+                    raise ValueError(f"Save the verified recovery archive in the private commit: {rel}")
         workspace.git(path, "-c", "push.followTags=false", "push", "--set-upstream", "origin",
                       f"HEAD:refs/heads/{branch}")
         return f"Pushed {role} branch {branch} to its confirmed origin."
@@ -81,7 +96,12 @@ def run(root, role, operation):
     metadata_path = "playbook/release.json" if role == "system" else "settings.json"
     incoming = json.loads(workspace.git(path, "show", f"FETCH_HEAD:{metadata_path}"))
     if role == "system":
+        for revision in ("HEAD", "FETCH_HEAD"):
+            if workspace.git(path, "ls-tree", revision, "--", "workspace"):
+                raise ValueError("Shared Git history tracks the private workspace; stopped before merging")
         workspace.validate_release(incoming)
+        if tuple(map(int, incoming["system_version"].split("."))) < tuple(map(int, settings["system_version"].split("."))):
+            raise ValueError("Incoming Hub predates this private workspace; use the documented recovery procedure")
     if not isinstance(incoming, dict):
         raise ValueError("Incoming workspace settings must be a JSON object")
     if incoming.get("workspace_format") != settings["workspace_format"]:
@@ -89,9 +109,22 @@ def run(root, role, operation):
     if role == "workspace" and (incoming.get("system_version") != settings["system_version"]
                                 or incoming.get("remotes") != settings["remotes"]):
         raise ValueError("Incoming workspace changes its system version or destinations; review them before updating")
-    workspace.git(path, "merge", "--ff-only", "FETCH_HEAD")
     if role == "system":
-        settings["system_version"] = workspace.release(root)["system_version"]
-        target = root / "workspace/settings.json"
-        target.write_text(json.dumps(settings, indent=2) + "\n", encoding="utf-8")
+        private = root / "workspace"
+        with storage.writer_lock(private):
+            target = private / "settings.json"
+            if target.resolve() != target:
+                raise ValueError("Use regular private settings inside PM Hub")
+            original = target.read_text(encoding="utf-8")
+            latest = workspace.settings(root, compatible=False)
+            if latest["workspace_format"] != incoming["workspace_format"] or latest["system_version"] != settings["system_version"]:
+                raise ValueError("Workspace version changed during the update; recheck alignment")
+            if latest["system_version"] != incoming["system_version"]:
+                snapshots.ensure(root, incoming["system_version"])
+            workspace.git(path, "merge", "--ff-only", "--no-overwrite-ignore", "FETCH_HEAD")
+            if latest["system_version"] != incoming["system_version"]:
+                latest["system_version"] = incoming["system_version"]
+                storage.replace_text(target, original, json.dumps(latest, indent=2) + "\n")
+    else:
+        workspace.git(path, "merge", "--ff-only", "--no-overwrite-ignore", "FETCH_HEAD")
     return f"Updated {role} branch {branch}. Run the checks before further work."

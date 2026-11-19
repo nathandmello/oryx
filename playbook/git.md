@@ -76,3 +76,46 @@ Use explicit private paths when the agent searches or checks PM work. Root Git c
 Record system and workspace format versions together. Structural changes need a tested migration and a recovery point in the private repository.
 
 Keep migrations small. Add one when an actual format change needs it. Hook checks never fetch, pull, push, or migrate.
+
+## Existing workspaces at release
+
+For each shipped change, state which existing records it affects and how a consumer can verify alignment.
+
+| Effect | Release requirement |
+| --- | --- |
+| New work only | Explain why existing records remain valid. |
+| Existing records need review | Define how to find candidates, inspect original evidence, resolve each finding, and verify the affected records. |
+| Stored format changes | Supply a tested migration, compatibility requirements, a read-only preview, and a recovery procedure. |
+
+Test with a populated workspace from the previous supported release. Exercise the consumer update path. Include skipped releases when supported.
+
+Check whether older supported clients can read newly written records. For incompatible changes, document how the previous updater reaches the migration.
+
+For a cleanup, test an affected record, a legitimate exception, an interrupted run, and a second run after completion.
+
+Ship each required cleanup's identifier, detection rule, and instructions inside the shared checkout. Track progress privately, separately from the installed system version.
+
+Provide a read-only check after a system pull and at session start. Support direct Git updates, restored workspaces, and clients with hooks disabled.
+
+Preview affected paths and reasons. Preserve local edits and untracked records in a recoverable snapshot before applying approved changes.
+
+Verify links, stable IDs, citations, and the intended outcome. Keep missing evidence or deferred work visible at the affected record.
+
+Follow [the 0.2.0 upgrade procedure](updates.md) for all existing private records, regardless of filename.
+
+## Engineering and quality review before publication
+
+Merging to the default branch makes changes available to consumers who pull it. Apply this process to every Hub release. Compare the candidate with the last published version and the PM requirements.
+
+| Stage | Evidence required to advance |
+| --- | --- |
+| Implement | Contribution branch, dependency review, passing system check and full test suite. |
+| Engineering review | An independent reviewer checks correctness, compatibility, upgrade ordering, and recovery. Resolve findings and retest. |
+| Quality review | A separate reviewer exercises the PM requirements on fresh and upgraded installations. Include failure and restore scenarios. |
+| Pull request | Record both reviewers, decisions, evidence, user impact, recovery, and verification limits. Bind evidence to the full head SHA. |
+| Merge | Refresh reviews after candidate changes. Require green pull request checks and maintainer authorisation. |
+| Publication | Run “PM Hub checks” on the default branch with the merged release PR number. Publish that commit only after a pass and explicit authorisation. |
+
+Use the merge gate for default-branch consumers. Use the publication check before tagging or announcing a release.
+
+The read-only publication check verifies the default branch tip, reviewed tree, merged pull request, and successful pull request checks.
