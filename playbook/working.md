@@ -53,6 +53,6 @@ Use the [template index](../templates/README.md) to create a working artifact. F
 
 Use [the framework](framework.md) as the method reference. Keep detailed engineering artifacts in the configured delivery system.
 
-For a red-team review, use `red-team`. Supply the artifact, its maturity, the decision at stake, and relevant source references.
+Use `red-team` when the PM asks to challenge a product decision, its assumptions, or the evidence supporting it. Supply the artifact, its maturity, the decision at stake, and relevant sources.
 
 Keep critique separate from edits. Apply an accepted finding to the authoritative record, then update its checkpoint and affected links.

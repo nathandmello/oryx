@@ -35,6 +35,17 @@ class HubTests(unittest.TestCase):
     def test_scaffold_passes(self):
         self.assertEqual(pm.check(self.root), [])
 
+    def test_system_check_catches_stale_template_index_and_routing_guide(self):
+        index = self.root / "templates/README.md"
+        guide = self.root / "playbook/context.md"
+        # Both links still resolve. The product template has disappeared from the index.
+        index.write_text(index.read_text().replace("](product-context.md)", "](company-context.md)"))
+        guide.write_text(guide.read_text().replace("`purpose`", "`old-purpose`"))
+        errors = pm.check(self.root, include_workspace=False)
+        self.assertTrue(any("templates/README.md" in e and "product-context.md" in e for e in errors), errors)
+        self.assertTrue(any("product" in e and "missing" in e and "purpose" in e for e in errors), errors)
+        self.assertTrue(any("product" in e and "unsupported" in e and "old-purpose" in e for e in errors), errors)
+
     def test_skill_drift_is_rejected_and_sync_is_idempotent(self):
         target = self.root / ".claude/skills/extend-hub/SKILL.md"
         target.write_text("Changed adapter.\n")
@@ -54,9 +65,11 @@ class HubTests(unittest.TestCase):
         self.assertEqual(pm.writing_errors("Use clear words.\n"), [])
         self.assertTrue(pm.writing_errors(" ".join(["word"] * 26) + "."))
         self.assertTrue(pm.writing_errors("1. " + " ".join(["word"] * 21) + "."))
+        self.assertTrue(pm.writing_errors("- Check " + " ".join(["word"] * 20) + "."))
         self.assertTrue(pm.writing_errors("Short sentence. " * 7))
         self.assertTrue(pm.writing_errors("A word.\n\n" * 401))
-        self.assertTrue(pm.writing_errors("We should add this."))
+        self.assertTrue(pm.writing_errors("Delve into the results."))
+        self.assertEqual(pm.writing_errors("The board could raise prices if the regulator approves."), [])
 
     def test_source_quotes_and_code_keep_their_words(self):
         text = '> We should preserve this quote.\n\n```text\n' + 'long ' * 50 + '\n```\n'
@@ -128,6 +141,33 @@ class HubTests(unittest.TestCase):
         self.assertIn("failed", retry["systemMessage"])
         self.assertIn("systemMessage", hook.response("SessionStart", ["A failed check."]))
         self.assertEqual(self.run_hook("invalid json").returncode, 2)
+
+    def test_hooks_load_ingestion_and_redirect_new_native_context_files(self):
+        cwd = self.work / "context"
+        startup = self.run_hook(json.dumps({"hook_event_name": "SessionStart", "cwd": str(cwd)}))
+        self.assertEqual(startup.returncode, 0, startup.stderr)
+        guidance = json.loads(startup.stdout)["hookSpecificOutput"]["additionalContext"]
+        self.assertIn("automatically read", guidance)
+        self.assertIn("ingest-context/SKILL.md", guidance)
+        for tool, inputs, denied in (
+            ("apply_patch", {"command": "*** Begin Patch\n*** Add File: company-audit.md\n+x\n*** End Patch"}, True),
+            ("apply_patch", {"command": "*** Add File: ../products/example/context.md\n+x"}, True),
+            ("apply_patch", {"command": "*** Add File: ../products/example/initiatives/pilot/context.md\n+x"}, True),
+            ("Write", {"file_path": str(cwd / "company-research.md")}, True),
+            ("Write", {"file_path": str(cwd / "README.md")}, False),
+            ("Write", {"file_path": str(self.work / "products/example/plan.md")}, True),
+            ("apply_patch", {"command": "*** Add File: ../../templates/new.md\n+x"}, False),
+        ):
+            with self.subTest(tool=tool, inputs=inputs):
+                result = self.run_hook(json.dumps({"hook_event_name": "PreToolUse", "cwd": str(cwd),
+                                                   "tool_name": tool, "tool_input": inputs}))
+                self.assertEqual(result.returncode, 0, result.stderr)
+                output = json.loads(result.stdout)
+                if denied:
+                    self.assertEqual(output["hookSpecificOutput"]["permissionDecision"], "deny")
+                    self.assertIn("route-context", output["hookSpecificOutput"]["permissionDecisionReason"])
+                else:
+                    self.assertEqual(output, {})
 
     def test_each_template_creates_a_valid_unfinished_draft(self):
         for kind in records.KINDS:
@@ -215,7 +255,9 @@ class HubTests(unittest.TestCase):
         target = records.create(self.root, kind, path, owner="Fixture PM")
         text = target.read_text()
         for name in re.findall(r"^## (.+)$", text, re.M):
-            if name not in {"Context controls", "Sources", "Work state"}:
+            if name in records.CONTEXT_TABLES:
+                text = re.sub(rf"^## {re.escape(name)}\n.*?(?=^## |\Z)", "", text, count=1, flags=re.M | re.S)
+            elif name not in records.CONTEXT_METADATA:
                 text = text.replace(records.section(text, name), "\n- Unknown: Evidence has not arrived.\n\n")
         today = date.today().isoformat()
         values = {
@@ -337,6 +379,328 @@ class HubTests(unittest.TestCase):
         text = text.replace("| Resume when | none |", "| Resume when | Fixture PM supplies the goals. |")
         target.write_text(text)
         self.assertEqual(pm.check(self.root), [])
+
+    def context_capture(self, payload, *args):
+        return subprocess.run(
+            [sys.executable, "-B", str(self.root / "tools/pm.py"), "route-context", *args],
+            input=json.dumps(payload), text=True, capture_output=True, cwd=self.work,
+        )
+
+    def test_capture_routes_mixed_sources_and_writes_only_the_requested_brief(self):
+        stamp = date.today().isoformat()
+        exclusion = "We will not enter the data centre business or create or own LLMs."
+        rental = "We will rent capacity as required and use existing models."
+        product_detail = "Example offers branch reporting."
+        data = {
+            "sources": [
+                {"reference": "Fictional strategy, section 3", "date": "undated",
+                 "coverage": "read", "checked_on": stamp},
+                {"reference": "Fictional appendix", "date": "unknown", "coverage": "unavailable"},
+            ],
+            "entries": [
+                {"scope": "company", "topic": "constraints", "source": 1, "location": "Section 3",
+                 "quote": exclusion},
+                {"scope": "product", "product": "example", "topic": "offer", "source": 1,
+                 "location": "Section 3", "quote": product_detail},
+                {"scope": "company", "topic": "constraints", "source": 1, "location": "Section 3",
+                 "quote": rental},
+                {"scope": "delivery", "source": 1, "location": "Section 4",
+                 "quote": "Validate each branch ID."},
+            ],
+        }
+        before = set(pm.inventory(self.work))
+        preview = self.context_capture(data)
+        self.assertEqual(preview.returncode, 0, preview.stdout + preview.stderr)
+        plan = json.loads(preview.stdout)
+        self.assertEqual([row["destination"] for row in plan["entries"]],
+                         ["context/company.md", "products/example/context.md", "context/company.md", None])
+        self.assertEqual([row["coverage"] for row in plan["sources"]], ["read", "unavailable"])
+        self.assertEqual(set(pm.inventory(self.work)), before)
+
+        def write(destination):
+            result = self.context_capture(data, "--write", destination)
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            return json.loads(result.stdout)["written"]
+
+        self.assertEqual(write("context/company.md"), "context/company.md")
+        company = self.work / "context/company.md"
+        company_text = company.read_text()
+        constraints = records.section(company_text, "Constraints and open questions")
+        self.assertIn(exclusion, constraints)
+        self.assertIn(rental, constraints)
+        self.assertNotIn(product_detail, company_text)
+        self.assertEqual(set(pm.inventory(self.work)) - before, {company})
+        self.assertIsNone(write("context/company.md"))
+        self.assertEqual(company.read_text(), company_text)
+
+        self.assertEqual(write("products/example/context.md"), "products/example/context.md")
+        product = self.work / "products/example/context.md"
+        self.assertIn(product_detail, records.section(product.read_text(), "The product"))
+        self.assertNotIn(exclusion, product.read_text())
+        self.assertEqual(company.read_text(), company_text)
+        self.assertEqual(set(pm.inventory(self.work)) - before, {company, product})
+        self.assertEqual(pm.check(self.root), [])
+
+    def test_capture_keeps_open_questions_and_resolves_only_the_addressed_question(self):
+        company = self.context_record()
+        prior = company.read_text()
+        question = "Who approves capacity purchases?"
+        other = "Who owns supplier reviews?"
+        questions = {"sources": [], "entries": [
+            {"scope": "company", "topic": "operations", "question": item}
+            for item in (question, other)
+        ]}
+        result = self.context_capture(questions, "--write", "context/company.md")
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        text = company.read_text()
+        self.assertIn(f"- Unknown: {question}", text)
+        self.assertIn(f"- Unknown: {other}", text)
+        self.assertEqual(records.work_state(text)[0]["ID"], records.work_state(prior)[0]["ID"])
+        self.assertEqual(records.section(text, "Context controls"), records.section(prior, "Context controls"))
+
+        answer = "The procurement lead approves capacity purchases."
+        resolved = {
+            "sources": [{"reference": "Fictional procurement notes", "date": "undated",
+                         "coverage": "partial", "checked_on": date.today().isoformat()}],
+            "entries": [{"scope": "company", "topic": "operations", "source": 1,
+                         "location": "Page 2", "quote": answer, "answers": question}],
+        }
+        result = self.context_capture(resolved, "--write", "context/company.md")
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        text = company.read_text()
+        self.assertIn(answer, text)
+        self.assertNotIn(question, text)
+        self.assertIn(other, text)
+        self.assertIn("Page 2", text)
+        self.assertEqual(pm.check(self.root), [])
+
+    def test_capture_rejects_companion_files_and_unavailable_citations(self):
+        payload = {"sources": [], "entries": [
+            {"scope": "company", "topic": "operations", "question": "Who owns procurement?"}
+        ]}
+        before = set(pm.inventory(self.work))
+        for target in ("context/company-audit.md", "context/company-research.md",
+                       "context/company-north-star.md", "context/../company.md"):
+            with self.subTest(target=target):
+                result = self.context_capture(payload, "--write", target)
+                self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+        payload["sources"] = [{"reference": "Unavailable source", "date": "unknown", "coverage": "unavailable"}]
+        payload["entries"] = [{"scope": "company", "topic": "direction", "source": 1,
+                               "location": "Page 1", "quote": "No source read."}]
+        result = self.context_capture(payload, "--write", "context/company.md")
+        self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+        self.assertIn("cannot supply an excerpt", result.stdout)
+        self.assertEqual(set(pm.inventory(self.work)), before)
+
+    def save_remit(self, remit):
+        return subprocess.run(
+            [sys.executable, "-B", str(self.root / "tools/pm.py"), "set-remit"],
+            input=json.dumps(remit), text=True, capture_output=True, cwd=self.work,
+        )
+
+    def test_pm_remit_changes_relevance_without_moving_records(self):
+        records.create(self.root, "goal", "products/checkout/goal.md")
+        records.create(self.root, "company-context", "context/company.md")
+        remit = {
+            "responsibilities": [
+                {"subject": "product/checkout", "role": "owner", "goals": ["products/checkout/goal.md"],
+                 "depends_on": ["product/billing"]},
+                {"subject": "area/pricing", "role": "shared", "goals": [], "depends_on": []},
+            ],
+            "follow": ["topic/benchmarks"],
+        }
+        result = self.save_remit(remit)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        sources = [{"reference": "Fixture company update", "date": "undated", "coverage": "read",
+                    "checked_on": date.today().isoformat()}]
+        entries = [
+            {"scope": "product", "product": "checkout", "topic": "offer", "quote": "Checkout supports invoicing."},
+            {"scope": "product", "product": "billing", "quote": "Billing will retire its old API."},
+            {"scope": "company", "topic": "direction", "quote": "The company will change its pricing.",
+             "affects": {"product/checkout": "Checkout fees change."}},
+            {"scope": "area", "subject": "area/pricing", "quote": "Pricing reviews occur quarterly.",
+             "record": {"path": "context/records/pricing-review.md", "parent": "context/company.md",
+                        "basis": "maintained-reference", "trigger": "Finance publishes a price change.",
+                        "reason": "Track the recurring reviews."}},
+            {"scope": "reference", "subject": "topic/benchmarks", "quote": "New benchmarks are available."},
+            {"scope": "product", "product": "search", "quote": "Search released saved filters."},
+        ]
+        payload = {"sources": sources, "entries": [dict(entry, source=1, location="Page 1") for entry in entries]}
+
+        def preview():
+            result = self.context_capture(payload)
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            return json.loads(result.stdout)["entries"]
+
+        initial = preview()
+        self.assertEqual([entry["relevance"] for entry in initial],
+                         ["owned", "dependency", "affected", "shared", "following", "fyi"])
+        self.assertEqual(initial[1]["responsibilities"][0]["goals"], ["products/checkout/goal.md"])
+        self.assertEqual(initial[1]["disposition"], "source")
+        self.assertEqual(initial[5]["disposition"], "source")
+        remit["responsibilities"].pop(0)
+        result = self.save_remit(remit)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        updated = preview()
+        self.assertEqual([entry["relevance"] for entry in updated],
+                         ["fyi", "fyi", "company", "shared", "following", "fyi"])
+        self.assertEqual([entry["destination"] for entry in updated],
+                         [entry["destination"] for entry in initial])
+        self.assertEqual(pm.check(self.root), [])
+
+    def test_context_capture_reuses_records_and_creates_only_an_authorised_note(self):
+        goal = records.create(self.root, "goal", "context/renewal-goal.md")
+        original = goal.read_text()
+        source = {"reference": "Fixture supplier memo", "date": "undated", "coverage": "read",
+                  "checked_on": date.today().isoformat()}
+        entry = {"scope": "area", "subject": "area/vendor-risk", "source": 1, "location": "Section 2",
+                 "quote": "We will review contracts every quarter."}
+        paths = "context/records/renewal-goal/vendor-reviews.md", "context/renewal-goal.md"
+        payload = {"sources": [source], "entries": [
+            dict(entry, record={"path": path, "reason": "Track review obligations.", "parent": paths[1],
+                                "basis": "maintained-reference", "trigger": "The vendor renews a contract."}) for path in paths
+        ]}
+        before = set(pm.inventory(self.work))
+        preview = self.context_capture(payload)
+        self.assertEqual(preview.returncode, 0, preview.stdout + preview.stderr)
+        self.assertEqual([item["disposition"] for item in json.loads(preview.stdout)["entries"]],
+                         ["new-note", "existing"])
+        self.assertEqual(set(pm.inventory(self.work)), before)
+        result = self.context_capture(payload, "--write", paths[1])
+        self.assertEqual(result.returncode, 1)
+        self.assertEqual(goal.read_text(), original)
+        result = self.context_capture(payload, "--write", paths[0])
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        note = self.work / paths[0]
+        self.assertIn(entry["quote"], note.read_text())
+        self.assertEqual(set(pm.inventory(self.work)) - before, {note})
+        preview = self.context_capture(payload)
+        self.assertEqual(json.loads(preview.stdout)["entries"][0]["disposition"], "existing")
+        result = self.context_capture(payload, "--write", paths[0])
+        self.assertIsNone(json.loads(result.stdout)["written"])
+        self.assertEqual(pm.check(self.root), [])
+
+    def test_capture_records_a_product_implication_with_its_source(self):
+        cite = {"reference": "Fixture Billing retirement announcement", "date": "undated",
+                "coverage": "read", "checked_on": date.today().isoformat()}
+        quote = "Billing will retire the legacy API in June."
+        effect = "Checkout needs to migrate before the Billing API retirement."
+        payload = {"sources": [cite], "entries": [
+            {"scope": "product", "product": "billing", "source": 1, "location": "Announcement", "quote": quote},
+            {"scope": "product", "product": "checkout", "topic": "ownership", "source": 1,
+             "location": "Announcement", "quote": quote, "interpretation": effect},
+        ]}
+        result = self.context_capture(payload, "--write", "products/checkout/context.md")
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        context = self.work / "products/checkout/context.md"
+        text = context.read_text()
+        self.assertIn(f"- Interpretation: {effect} [S1] (Announcement)", text)
+        self.assertIn(f"  > {quote}", text)
+        self.assertIn(cite["reference"], text)
+        self.assertFalse((self.work / "products/billing").exists())
+        self.assertEqual(pm.check(self.root), [])
+
+    def test_lean_context_keeps_optional_sections_out_and_accepts_event_review(self):
+        company = self.context_record()
+        text = company.read_text()
+        names = set(re.findall(r"^## (.+)$", text, re.M))
+        for name in names - records.CONTEXT_METADATA - {"Constraints and open questions"}:
+            text = re.sub(rf"^## {re.escape(name)}\n.*?(?=^## |\Z)", "", text, count=1, flags=re.M | re.S)
+        text = re.sub(r"\| Review by \| .* \|", "| Review by | event-driven |", text)
+        company.write_text(text)
+        payload = {"sources": [], "entries": [
+            {"scope": "company", "topic": "constraints", "question": "Who owns the pricing exception?"}
+        ]}
+        result = self.context_capture(payload, "--write", "context/company.md")
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn("Who owns the pricing exception?", company.read_text())
+        self.assertEqual(set(re.findall(r"^## (.+)$", company.read_text(), re.M)),
+                         records.CONTEXT_METADATA | {"Constraints and open questions"})
+        self.assertEqual(pm.check(self.root), [])
+        company.write_text(company.read_text().replace("| State | active |", "| State | complete |"))
+        self.assertTrue(any("complete context needs" in error for error in pm.check(self.root)))
+
+    def test_capture_keeps_legacy_product_routes_without_adding_duplicate_sections(self):
+        target = records.create(self.root, "product-context", "products/example/context.md")
+        target.write_text(target.read_text().replace("## The product", "## Current offer"))
+        stamp = date.today().isoformat()
+        payload = {
+            "sources": [{"reference": "Fixture offer summary", "date": "undated",
+                         "checked_on": stamp, "coverage": "read"}],
+            "entries": [{"scope": "product", "product": "example", "topic": "offer",
+                         "source": 1, "location": "Page 1", "quote": "It supports branch reporting."}],
+        }
+        result = self.context_capture(payload, "--write", "products/example/context.md")
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        text = target.read_text()
+        self.assertIn("It supports branch reporting.", records.section(text, "Current offer"))
+        self.assertIsNone(records.section(text, "The product"))
+        self.assertEqual(pm.check(self.root), [])
+
+    def test_capture_routes_structured_context_across_company_product_and_initiative(self):
+        stamp = date.today().isoformat()
+        paths = ("context/company.md", "products/example/context.md",
+                 "products/example/initiatives/renewals/context.md")
+        person = "Fixture PM"
+        payload = {
+            "sources": [{"reference": "Fixture approved decisions", "date": stamp,
+                         "checked_on": stamp, "coverage": "read"}],
+            "entries": [
+                {"scope": "company", "topic": "data-boundaries", "rule": "Use approved usage summaries.",
+                 "quote": "We permit approved usage summaries for planning."},
+                {"scope": "product", "product": "example", "topic": "vocabulary",
+                 "term": {"name": "workspace", "owner": "Product", "avoid": "account"},
+                 "quote": "A workspace is the access boundary."},
+                {"scope": "initiative", "product": "example", "initiative": "renewals", "topic": "decisions",
+                 "decision": {"question": "How do users authenticate?", "scope": "Renewal pilot", "person": person,
+                              "date": stamp, "next_step": "Brief the pilot team."},
+                 "quote": "Use existing sessions because renewal needs no new login."},
+                {"scope": "initiative", "product": "example", "initiative": "renewals", "topic": "examples",
+                 "quote": "Pilot instructions use the approved renewal wording."},
+            ],
+        }
+        payload["entries"] = [dict(entry, source=1, location="Page 1") for entry in payload["entries"]]
+        for path in paths:
+            before = set(pm.inventory(self.work))
+            result = self.context_capture(payload, "--write", path)
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            self.assertEqual(set(pm.inventory(self.work)) - before, {self.work / path})
+        company, product, initiative = (self.work / path for path in paths)
+        self.assertIn("- Rule: Use approved usage summaries.", company.read_text())
+        self.assertIn("| workspace | A workspace is the access boundary.", product.read_text())
+        self.assertIsNone(records.section(product.read_text(), "The users"))
+        self.assertIn("[Product context](../../context.md)", initiative.read_text())
+        decisions = records.section(initiative.read_text(), "Decisions already closed")
+        self.assertIn(f"| How do users authenticate? | Renewal pilot | {person}, {stamp} |", decisions)
+        self.assertIn("Use existing sessions because renewal needs no new login. [S1]", decisions)
+        self.assertIn("| Brief the pilot team. |", decisions)
+        self.assertIn("- Example: Source excerpt [S1]", initiative.read_text())
+        self.assertEqual(pm.check(self.root), [])
+
+        original = initiative.read_text()
+        invalid = original.replace("| Brief the pilot team. |", "|  |")
+        initiative.write_text(invalid)
+        self.assertTrue(any("need every field" in error for error in pm.check(self.root)))
+        initiative.write_text(original.replace("[Product context](../../context.md)", "[Company](../../../../context/company.md)"))
+        self.assertTrue(any("same product" in error for error in pm.check(self.root)))
+        initiative.write_text(original)
+        payload["entries"][2]["decision"].pop("next_step")
+        result = self.context_capture(payload, "--write", paths[2])
+        self.assertEqual(result.returncode, 1)
+        self.assertEqual(initiative.read_text(), original)
+
+    def test_invalid_pm_remit_keeps_the_previous_profile(self):
+        blank = {"responsibilities": [], "follow": []}
+        result = self.save_remit(blank)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        target = self.work / "context/pm-remit.json"
+        blank["responsibilities"] = [
+            {"subject": "area/pricing", "role": "owner", "goals": ["context/missing.md"], "depends_on": []}
+        ]
+        result = self.save_remit(blank)
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("has no workspace record", result.stdout)
+        self.assertEqual(json.loads(target.read_text())["responsibilities"], [])
 
     def run_hook(self, payload):
         return subprocess.run(

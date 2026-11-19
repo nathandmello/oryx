@@ -1,9 +1,15 @@
 ---
 name: red-team
-description: Challenge PM text or artifacts when the PM requests a red-team or critical review. Review only; excludes routine edits.
+description: Review PM content when the PM asks for a red-team or critical review of a product decision, strategy, or other PM artifact.
 ---
 
 # Red-team review
+
+Help the PM decide whether a product choice holds up against the evidence. Challenge the reasoning and surface the smallest test that matters.
+
+Use this skill on request for PM decisions, strategy, discovery, roadmaps, and other PM work. The PM owns the decision and any revision.
+
+Route reviews of Hub code, hooks, upgrades, or implementation against requirements to engineering review through `extend-hub`.
 
 Review the supplied text against [the strategy framework](../../../playbook/framework.md) and the decision it serves. Read `AGENTS.md` and relevant source material.
 

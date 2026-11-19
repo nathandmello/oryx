@@ -1,32 +1,51 @@
 <!-- pm: product-context -->
 # {{title}}
 
-Use [the context rules](../playbook/context.md). Reference company context and add product-specific facts.
-Label entries as Fact, Interpretation, Assumption, or Unknown.
+Use [the context rules](../playbook/context.md). Keep sections that guide recurring product work.
 
-## Purpose and boundaries
+## Data boundaries
 
-{{Current purpose, remit, scope limits, and relationships with other products.}}
+{{Record what can enter agent work, any restricted material, and the reason. For regulated work, lead with an inclusion list.}}
 
-## Customers and their work
+## The product
 
-{{Buyers, users, administrators, and partners. Their main jobs, needs, and usage conditions.}}
+{{What it does, who uses it, and how it makes money or saves work. Use the team's measures.}}
 
-## Current offer
+## The vision
 
-{{Main capabilities, product maturity, and how customers buy, adopt, and use the product. Keep an overview.}}
+{{Why users return, one to three core actions, and how often each occurs.}}
 
-## Business contribution and market
+## The users
 
-{{Why the organisation funds this product, its contribution, customer alternatives, and evidence for claimed differences.}}
+{{For each key segment, name its job, current alternative, and where users give up. Distinguish buyers from users.}}
 
-## Ownership and constraints
+## Vocabulary
 
-{{Relevant teams, decision owners, dependencies, commitments, and product-specific limits.}}
+| Term | Meaning | Owner | Avoid |
+| --- | --- | --- | --- |
+| {{Preferred term}} | {{Specific meaning}} | {{Accountable owner}} | {{Confusing term}} |
+
+## Constraints
+
+{{Capture binding technical, commercial, contractual, and regulatory rules. Name owners, exceptions, and dependencies.}}
+
+## Decisions already closed
+
+| Question | Scope | Person and date | Evidence | Next step |
+| --- | --- | --- | --- | --- |
+| {{Question resolved}} | {{Where it applies}} | {{Name, YYYY-MM-DD}} | {{Source reference and rationale}} | {{Action the decision enables}} |
+
+## What good output looks like
+
+{{Link an approved artifact or include an approved excerpt. Pair a recurring mistake with a concrete example that meets the standard.}}
+
+## Review and approvals
+
+{{If needed, name the reviewer roles, what they review, and when their approval is required.}}
 
 ## Goals, performance, and gaps
 
-{{Links to current goals and performance sources. Record gaps, conflicts, and their effect on current work.}}
+{{Link active goals and measures where useful. State open questions that affect work.}}
 
 ## Context controls
 
@@ -35,8 +54,8 @@ Label entries as Fact, Interpretation, Assumption, or Unknown.
 | Parent context | {{Local Markdown link to the relevant company-context record.}} |
 | Maintainer | {{owner}} |
 | Last reviewed | not reviewed |
-| Review by | {{YYYY-MM-DD}} |
-| Review triggers | {{Changes that require a review, such as new company direction, product scope, or customer evidence.}} |
+| Review by | event-driven |
+| Review triggers | {{Product release, closed decision, new evidence, or a change to obligations.}} |
 
 ## Sources
 

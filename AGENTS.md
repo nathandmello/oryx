@@ -1,16 +1,18 @@
 # PM Hub constitution
 
-PM Hub is a personal workspace for product management. The human PM makes product decisions. Agents help with the work.
+PM Hub supports personal product management. The PM makes product decisions.
 
 ## Start and scope
 
-Read [README.md](README.md), then `workspace/settings.json` and relevant records. Open the outer PM Hub directory in Codex or Claude.
+Open the outer Hub. Read [README.md](README.md). For an installed workspace, run `python3 tools/pm.py align` and follow [upgrade guidance](playbook/updates.md). Read relevant records and settings.
 
 The system and `workspace/` are independent Git repositories. The system ignores `workspace/`. Read private records explicitly; root Git searches omit them.
 
 Read [the Git rules](playbook/git.md) before any commit, pull, push, remote change, or GitHub action.
 
 Keep work inside this checkout. A PM Hub task grants no permission to change delivery repositories or other workspaces.
+
+Use [ingest-context](.agents/skills/ingest-context/SKILL.md) automatically for requests to capture or update context. Apply the workflow from the PM's intent.
 
 ## Purpose
 
@@ -46,22 +48,22 @@ Research and results can change earlier choices. Keep learning, delivery progres
 
 ## Agent conduct
 
-- Complete authorised local work without repeated permission requests. Ask about unresolved product choices and actions outside existing approval.
+- Complete authorised local work. Ask about unresolved product choices and actions outside approval.
 - Preserve session limits. Get approval for destructive changes, publication, messages, pushes, and merges unless already authorised.
 - Keep secrets and raw personal data out of both repositories. Use source references or de-identified evidence.
 - Use specialists only when warranted and delegation is authorised. One agent integrates shared edits.
 - Save useful findings and decisions in private records. Chat and private agent memory cannot replace them.
 - Default to thought-partner mode. Quiet mode stops unsolicited critique and questions; complete the requested work or wait.
-- Run red-team reviews when requested. Use [the working practices](playbook/working.md) for modes, checkpoints, and work across sessions.
-- End with the result, checks, and material gaps. Keep the response short.
+- Use `red-team` for requested PM content reviews. Use engineering review for Hub changes. Follow [the working practices](playbook/working.md) across sessions.
+- Briefly report results, checks, and material gaps.
 
 ## Growth and structure
 
-- Add capabilities when needed. Implement the smallest complete workflow for the requested need.
+- Implement the smallest complete workflow for each need.
 - Follow the README placement map. Add templates only for requested artifact types.
-- Use `extend-hub` for new workflows, tools, integrations, or record formats. Normal content edits need no new capability.
+- Use [extend-hub](.agents/skills/extend-hub/SKILL.md) automatically for every shared Hub change, including fixes and documentation edits.
 - Prefer files, existing tools, and one command layer. Add dependencies or services for demonstrated needs.
-- Keep one authoritative record per artifact. Preserve stable identifiers when files move.
+- Apply [the filing rules](playbook/filing.md) before creating or converting any record. Keep one authoritative record per artifact. Preserve stable identifiers when files move.
 - Define sources, ownership, relationships, completion conditions, and review triggers for each new capability.
 - Use scripts for deterministic rules and skills for guided work. Apply the same checks through both agents and CI.
 - Keep drafts usable. Enforce completeness before the action that needs it. People judge evidence and strategy.
@@ -74,12 +76,14 @@ Use restrained Hemingway prose in files and replies:
 - Write short, declarative sentences. Use active voice, concrete words, and precise verbs.
 - Keep necessary modifiers. State each point once. Prefer positive phrasing; remove filler.
 - In narrative text, show emotion through action and dialogue. Use Iceberg Theory only for narrative text.
-- For technical text, use ASD-STE100 Simplified Technical English. Make essential information explicit.
+- Use ASD-STE100 Simplified Technical English (STE), Issue 9, for technical text. Apply [the writing rules and official dictionary](playbook/writing.md).
 - Limit instructions to 20 words, descriptions to 25 words, and paragraphs to six sentences.
-- Keep authored prose within 800 words per file. Split longer material by purpose.
+- Keep authored prose within 800 words per file. Edit repetition first. Apply the filing test before splitting.
 - Preserve necessary names and technical terms; define unfamiliar terms. Clarity, accuracy, and completeness take priority.
 
 ## Checks
+
+Before finishing a Hub change, trace its dependencies and update affected guidance, examples, tools, and tests. Report any unverified impact.
 
 Run `python3 tools/pm.py check` after changes. Run affected tests after tool changes.
 

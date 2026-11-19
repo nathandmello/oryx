@@ -1,11 +1,13 @@
 ---
 name: extend-hub
-description: Add a requested workflow, tool, integration, or record format to PM Hub. Excludes routine content edits.
+description: Use automatically when changing the shared PM Hub, including fixes, instructions, playbooks, skills, templates, tools, and tests. Routine private PM record edits use their own workflow.
 ---
 
 # Extend PM Hub
 
-Read `AGENTS.md` and the existing work relevant to the request.
+Read `AGENTS.md` and the existing work relevant to the request. Complete the dependency review for every shared change.
+
+## Add or change a capability
 
 1. Define the immediate need and observable completion condition. Reuse an existing capability when it fits.
 2. Find the authoritative sources and artifact owners. Preserve the boundary with the configured delivery system.
@@ -14,9 +16,27 @@ Read `AGENTS.md` and the existing work relevant to the request.
 5. Put judgment and method guidance in the skill. Put deterministic checks in scripts.
 6. Support partial progress and explicit wait points. Enforce required information before the action that depends on it.
 7. Add meaningful tests for new enforcement. Check a valid case and a rejected case.
-8. Keep instructions portable. Author skills under `.agents/skills/`, then run `python3 tools/pm.py sync-skills`.
-9. Update the entry points that the new work needs. Run `python3 tools/pm.py check` and affected tests.
-10. Report the capability, its checks, and its limits. Keep the response concise.
+8. Keep instructions portable. Author shared skills under `.agents/skills/`.
+
+## Dependency review
+
+1. Identify the changed behaviour, command, path, field, or term. Trace what defines it and what relies on it.
+2. Search for old and new names, including hidden project directories. Follow callers, links, examples, and tests.
+3. Compare those uses with the intended behaviour. Read related guidance even when it describes the behaviour in different words.
+4. Check the README, playbooks, skills, templates, workspace seeds, tools, hooks, CI, and tests wherever the change reaches them.
+5. Fix stale dependants in the same change. Check existing records and fresh workspace setup when a format or default changes.
+6. Review staged and unstaged changes, including new, renamed, and deleted files. Run `python3 tools/pm.py sync-skills` after skill changes.
+7. Run affected tests. Exercise changed instructions and examples through their normal entry points.
+8. Run `python3 tools/pm.py check`. In a system-only checkout, use `--system-only` and verify affected private workflows in a disposable workspace.
+9. Report what you traced and corrected. Name the checks you ran and any remaining gaps.
+
+## Prepare a release
+
+Test existing installations with arbitrary filenames, untracked records, missing evidence, and a second run when filing changes. Verify that original bytes remain recoverable.
+
+For each change, record its effect on installed workspaces in the release or pull request description. Follow [the release process](../../../playbook/git.md#existing-workspaces-at-release).
+
+Follow [the prepublication gates](../../../playbook/git.md#engineering-and-quality-review-before-publication). Record independent engineering and quality reviews for the current pull request commit. Retest fixes and state verification limits.
 
 The PM's request authorises work within its scope. Ask only for a missing decision or an action outside that authority.
 

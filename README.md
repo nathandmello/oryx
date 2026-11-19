@@ -20,7 +20,11 @@ Read `workspace/settings.json` for the owner, delivery system, system version, w
 
 Read `workspace/README.md` for the current session checkpoint and next action. Keep that handoff current before ending a session.
 
-Company context, product context, and strategy start empty. Capture them in separate sessions, in that order.
+For first-time setup, start with company context, then product context and strategy. Mixed sources can inform several records in one session.
+
+Link a recurring initiative to its product context when the work warrants a separate brief.
+
+Agents automatically use [ingest-context](.agents/skills/ingest-context/SKILL.md) for context capture. Set the PM remit when responsibilities are known.
 
 ## Placement
 
@@ -29,8 +33,11 @@ Keep only `README.md`, `AGENTS.md`, `CLAUDE.md`, and `.gitignore` as root files.
 | Home | Purpose | Repository |
 | --- | --- | --- |
 | `workspace/context/` | Organisation and business context | Private workspace |
-| `workspace/products/<product>/` | Product context and active PM work | Private workspace |
+| `workspace/context/pm-remit.json` | Optional PM responsibilities, goals, dependencies, and topics to follow | Private workspace |
+| `workspace/products/<product>/` | Product context, initiative context, and active PM work | Private workspace |
 | `workspace/settings.json` | Personal settings and expected remotes | Private workspace |
+| `workspace/.hub-history/` | Verified original files and conversion plans for recovery | Private workspace |
+| `workspace/.hub-upgrades.json` | Private progress on release-specific reviews | Private workspace |
 | `playbook/` | Methods, working practices, Git rules, and release metadata | Shared system |
 | `templates/` | Starters for requested artifact types | Shared system |
 | `tools/` and `tests/` | Commands, empty workspace seeds, and checks | Shared system |
@@ -39,7 +46,7 @@ Keep only `README.md`, `AGENTS.md`, `CLAUDE.md`, and `.gitignore` as root files.
 
 Paths such as `context/` in artifact commands are relative to `workspace/`. Keep shared product goals and research at product level.
 
-Group initiative records when needed. Keep records in place as work advances; their state changes, and their location follows their subject.
+Use [the filing rules](playbook/filing.md) to decide when a section earns a separate file. Keep records in place as work advances; their state changes, and their location follows their subject.
 
 A new home needs a current purpose and updated checks. Add templates for requested artifact types.
 
@@ -47,7 +54,7 @@ A new home needs a current purpose and updated checks. Add templates for request
 
 - [Framework](playbook/framework.md): strategy, goals, evidence, and experiments.
 - [Templates](templates/README.md): company context, product context, and PM artifacts.
-- [Context rules](playbook/context.md): sources, parent links, dates, and gaps.
+- [Context rules](playbook/context.md) cover routing, sources, parent links, dates, and gaps.
 - [Working practices](playbook/working.md): checkpoints, thought-partner mode, and quiet mode.
 - [Git rules](playbook/git.md): the correct repository for saves, updates, and contributions.
 
@@ -61,7 +68,9 @@ python3 tools/pm.py git system status
 python3 tools/pm.py new company-context context/company.md --title "Company context"
 ```
 
-Use `extend-hub` to add capabilities and `red-team` for requested critique. Say "quiet" or "just capture" to stop unsolicited critique.
+Shared Hub changes automatically use [extend-hub](.agents/skills/extend-hub/SKILL.md) to trace dependencies and correct stale guidance. Use `red-team` when you want a product decision challenged against its evidence.
+
+Say "quiet" or "just capture" to stop unsolicited critique.
 
 ## GitHub and updates
 
@@ -81,17 +90,25 @@ These commands act when invoked; they do not grant permission. Read the Git rule
 
 Pulls require clean files and a fast-forward update. Format changes stop for migration review. System updates record the accepted version in private settings.
 
-Shared CI runs `check --system-only` and tests against fictional workspaces. Local checks also inspect ignored private records explicitly.
+After pulling, open the Hub and work as usual. The agent handles [existing-workspace alignment](playbook/updates.md) and raises decisions that need you.
+
+Shared CI runs `check --system-only` and tests against fictional workspaces. Follow [the engineering and quality gates](playbook/git.md#engineering-and-quality-review-before-publication) before publication. Local checks also inspect ignored private records explicitly.
 
 ## Hooks and checks
 
-Both clients check the hub at session start and before a normal stop. Hook commands locate the system from nested workspace directories.
+Both clients load the context capture rule at session start and check the hub before a normal stop. Hooks work from nested workspace directories.
+
+The edit hook redirects native attempts to create active private Markdown files to the shared commands. Original sources have a separate home. Existing records still support direct maintenance.
 
 In Codex, review and trust the project hooks through `/hooks`. In Claude, accept project trust and inspect `/hooks`.
 
 Managed settings can disable hooks. A failed stop requests one correction, then permits a handoff with the unresolved failure visible.
 
+The router checks one write target per call. Hooks cover configured native tools. Shell and external editor writes depend on the workspace rules.
+
 Checks cover repository boundaries, agent entry points, skill copies, links, writing limits, artifact contracts, source dates, and review deadlines.
+
+The checker compares the template index and the playbook's routing topics with the commands that use them.
 
 Semantic review covers clarity, accuracy, source authority, and decision quality. External change detection arrives when needed.
 
