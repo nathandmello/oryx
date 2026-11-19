@@ -58,6 +58,17 @@ class InitiativeTests(unittest.TestCase):
         subprocess.run(["ssh-keygen", "-q", "-t", "ed25519", "-N", "", "-f", str(key)], check=True)
         return key
 
+    def test_initiative_work_resolves_signed_initiatives_without_changing_the_register(self):
+        self.submit(self.setup_event())
+        self.submit(self.capture())
+        self.submit(self.capture(f"{self.product_id}/sources", "Follow billing handoffs", "Planning notes, item 9"))
+        original = self.ledger.read_bytes()
+        result = json.loads(self.cli("launch-checklist", "init", "example", "renewal"))
+        self.assertEqual(result["launch_readiness"], "pending")
+        self.cli("launch-checklist", "init", "example", "sources", error="reserved sources and secrets paths")
+        self.assertEqual(self.ledger.read_bytes(), original)
+        self.assertIn("PASS", self.cli("check"))
+
     def cli(self, *args, value=None, error=None):
         result = subprocess.run(
             [sys.executable, str(self.root / "tools/pm.py"), *args], env=self.env,

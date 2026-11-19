@@ -42,6 +42,7 @@ Keep only `README.md`, `AGENTS.md`, `CLAUDE.md`, and `.gitignore` as root files.
 | `private/workspace/` | Work in progress and completed PM artifacts, organised by type | Private |
 | `private/workspace/backlogs/<product>/initiatives.json` | Signed initiative register used by the backlog and roadmap commands | Private |
 | `private/workspace/initiatives/<product>/<initiative>/` | Discovery Brief and Initiative Brief for the same initiative ID | Private |
+| `private/workspace/initiatives/<product>/<initiative>/{tasks,launch-checklist}.json` | PM tasks and launch checkpoints | Private |
 | `private/workspace/experiments/<product>/<initiative>/` | Editable metric-linked experiment drafts | Private |
 | `private/workspace/roadmaps/<product>/<cycle>.md` | Comparison of candidates for the planning cycle | Private |
 | `private/settings.json` | Installation settings and expected remotes | Private |
@@ -64,6 +65,7 @@ Start reference material in the entity overview. Create a topic folder only for 
 - [Framework](playbook/framework.md): strategy, goals, evidence, and experiments.
 - [Opportunity workflow](playbook/opportunities.md) covers intake, discovery, Initiative Brief approval, and roadmap selection.
 - [Generated backlog and roadmap](playbook/initiative-views.md) use the signed register.
+- [Initiative work](playbook/initiative-work.md) covers PM tasks and launch readiness.
 - [Templates](templates/README.md): company context, product context, and PM artifacts.
 - [Context rules](playbook/context.md) cover routing, sources, parent links, dates, and gaps.
 - [Working practices](playbook/working.md): checkpoints, thought-partner mode, and quiet mode.

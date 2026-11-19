@@ -139,8 +139,9 @@ def choose_scope(private, documents, prompt, cwd, previous, explicit):
     if explicit:
         return explicit, []
     prompt = SWITCH.sub("", prompt)
-    artifacts = re.findall(r"(?:private/)?((?:context|workspace)/[\w./-]+?\.md)\b", prompt)
-    known = [scope for name in artifacts if (scope := resolved_artifact(name, documents))]
+    artifacts = re.findall(r"(?:private/)?((?:context|workspace)/[\w./-]+?\.(?:md|json))\b", prompt)
+    known = [scope for name in artifacts if (name.endswith(".md") or layout.initiative_work_identity(name))
+             and (scope := resolved_artifact(name, documents))]
     for value in re.findall(r"\bproduct/([a-z0-9-]+)(?:/area/([a-z0-9-]+))?", prompt):
         known.append({"product": value[0], "area": value[1] or None, "initiative": None})
     for product, doc in overview.items():

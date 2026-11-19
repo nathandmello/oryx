@@ -32,6 +32,7 @@ import pm_profile
 import initiatives_cli
 import initiative_store
 import initiative_views
+import initiative_work
 import experiment_drafts
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -52,6 +53,8 @@ REQUIRED = (
     "tools/workspace-seed/.gitignore", "tools/opportunities.py", "tools/brief_review.py", "playbook/opportunities.md",
     "tools/initiative_events.py", "tools/initiative_store.py", "tools/initiatives_cli.py", "tools/initiative_views.py",
     "tools/initiative_areas.py", "tools/initiative_intake.py", "tools/experiment_drafts.py",
+    "tools/initiative_work.py", "templates/launch-checklist.json", "playbook/initiative-work.md",
+    ".agents/skills/manage-initiative-work/SKILL.md",
     "templates/views/backlog.json", "templates/views/roadmap.json",
     "playbook/initiative-approvals.md", "playbook/initiative-views.md",
     ".agents/skills/manage-backlog/SKILL.md", ".agents/skills/run-discovery/SKILL.md",
@@ -299,6 +302,7 @@ def check_workspace(root: Path, system_texts: dict[str, str]) -> list[str]:
     except (OSError, ValueError) as exc:
         errors.append(f"private/{metric_registry.PRIVATE}: {exc}")
     files = inventory(private)
+    initiative_work_homes = set()
     for path in files:
         rel = path.relative_to(private).as_posix()
         label = f"private/{rel}"
@@ -328,9 +332,12 @@ def check_workspace(root: Path, system_texts: dict[str, str]) -> list[str]:
                 or (len(parts) > 1 and parts[0] not in {"context", "workspace"})):
             errors.append(f"{label}: use a home from the README placement map")
         managed = opportunities.path_kind(rel)
+        execution = layout.initiative_work_identity(rel)
+        if execution and not is_source and not old_record:
+            initiative_work_homes.add(execution[:2])
         if (not is_source and not old_record and len(parts) > 1 and parts[0] in {"context", "workspace"}
-                and path.suffix.lower() != ".md" and managed not in {"register", "experiment-draft"}):
-            errors.append(f"{label}: file original evidence under sources/ and use Markdown for active artifacts")
+                and path.suffix.lower() != ".md" and not execution and managed not in {"register", "experiment-draft"}):
+            errors.append(f"{label}: file original evidence under sources/ and use a supported format for active artifacts")
         if not is_source and not old_record and any(ARTIFACT.search(Path(part).stem) for part in parts):
             errors.append(f"{label}: engineering artifacts belong in the delivery system")
         if path.suffix == ".md":
@@ -371,6 +378,7 @@ def check_workspace(root: Path, system_texts: dict[str, str]) -> list[str]:
             errors.append(f"private/{required}: required file is missing")
     try:
         registrations = dict(initiative_store.registrations(root))
+        errors.extend(f"private/{error}" for error in initiative_work.check(root, initiative_work_homes, registrations))
         errors.extend(f"private/{e}" for e in experiment_drafts.misplaced(private, files, registrations))
         for product, register in registrations.items():
             errors.extend(f"private/{e}" for e in experiment_drafts.check(private, product, register))
@@ -433,6 +441,10 @@ def check(root: Path = ROOT, include_workspace=True) -> list[str]:
         metric_registry.defaults(root)
     except (OSError, ValueError) as exc:
         errors.append(f"{metric_registry.DEFAULTS}: {exc}")
+    try:
+        initiative_work.template(root)
+    except (OSError, ValueError) as exc:
+        errors.append(f"{initiative_work.TEMPLATE}: {exc}")
     errors.extend(guidance_errors(root, texts))
     errors.extend(hook_errors(texts))
     errors.extend(records.validate(texts))
@@ -679,6 +691,7 @@ def main() -> int:
     new.add_argument("--reason")
     new.add_argument("--trigger")
     initiatives_cli.add_commands(commands)
+    initiative_work.add_commands(commands)
     route = commands.add_parser("route-context", help="Route supplied context evidence from JSON on stdin")
     route.add_argument("--write", metavar="PATH", help="Apply entries to one authorised context record")
     area = commands.add_parser("area-context", help="Locate a product area's context and its source records")
@@ -762,6 +775,18 @@ def main() -> int:
             if args.command == "initiative" and args.operation in {"apply", "sync-drafts", "draft-experiment"}:
                 prepare_private_write(ROOT)
             initiatives_cli.run(ROOT, args)
+            return 0
+        if args.command in {"task", "launch-checklist"}:
+            writing = args.operation != "list" and not args.preview
+            if writing:
+                prepare_private_write(ROOT)
+                private = workspace.repo(ROOT, "workspace")
+                with storage.writer_lock(private):
+                    initiative_work.run(ROOT, args, write=True)
+            else:
+                workspace.repo(ROOT, "workspace")
+                workspace.settings(ROOT)
+                initiative_work.run(ROOT, args)
             return 0
         if args.command == "new":
             workspace.repo(ROOT, "workspace")
