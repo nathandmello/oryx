@@ -46,6 +46,12 @@
       "cli": ["new", "strategy"],
       "example": ["workspace/strategies/checkout.md"]
     },
+    "strategy brief check": {
+      "summary": "Show the next review step and gaps in an existing strategy brief.",
+      "effect": "read",
+      "cli": ["strategy"],
+      "example": ["workspace/strategies/checkout.md"]
+    },
     "strategy goal draft": {
       "summary": "Create a goal draft for an outcome and its measure.",
       "effect": "local-write",

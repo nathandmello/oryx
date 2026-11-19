@@ -16,6 +16,17 @@ A direct request overrides a saved mode. A requested red-team review permits tha
 
 Both modes retain source checks, ownership boundaries, and existing permissions.
 
+## Run a workflow
+
+1. Read the [constitution](../AGENTS.md), `private/settings.json`, and handoff. Identify the requested action and mode.
+2. Reuse the authoritative record. Consult the [filing rules](filing.md) and [template](../templates/README.md) before creating a record.
+3. From the outer Hub, run `python3 tools/pm.py new <kind> <path>` with a private-relative path.
+4. Preserve gaps and unapproved choices. Check parent commitments, data boundaries, and closed decisions.
+
+Follow [context review](context.md#review-existing-context) for flagged briefs and [ingestion](../.agents/skills/ingest-context/SKILL.md) for context changes. Link evidence from the owning record.
+
+Report an unavailable private workspace when an action requires it. Honour requests for discussion and preview.
+
 ## Reply preferences
 
 Use [Hub commands](commands.md) to find the preference actions.
@@ -79,6 +90,8 @@ Record the current state:
 | complete | This artifact is complete for its stated purpose. This state does not establish product success. |
 
 Keep a wait visible. Do not invent evidence, advance to the next activity, or complete a discovery process to finish a session.
+
+Update `private/README.md` when handing off active work. Point to the current record and name its next action.
 
 Resume on The PM's request. Dates and events guide review; they do not create background jobs or permission for external actions.
 

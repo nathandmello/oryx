@@ -8,7 +8,7 @@
 - **Experiment or readout.** Pair Assumption Audit with Falsification. Check whether the design or result supports the intended decision.
 - **Roadmap, launch, or operating plan.** Pair Pre-mortem with Failure Mode Analysis. Check dependencies, incentives, trade-offs, and recovery.
 
-For product bets, use the [PM framework](../../../../playbook/framework.md) to trace goal, customer problem, approach, and outcome. Check value, usability, feasibility, and viability with their owners.
+For product bets, use [Product Strategy Mindset](../../../../playbook/sources/product-strategy-mindset.md) to trace goal, customer problem, approach, and outcome. Check all four risks with their leads. Test value against demand, observed impact, and experimental evidence.
 
 ## Check context and authority
 

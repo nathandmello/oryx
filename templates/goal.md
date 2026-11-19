@@ -3,7 +3,7 @@
 
 ## Alignment
 
-{{Goal level, parent goal, customer outcome, and the expected contribution. Identify the decision owner.}}
+{{Business objective, product contribution, and customer outcome. Link the parent and applicable initiative or feature goal. Identify the decision owner.}}
 
 ## Outcome
 

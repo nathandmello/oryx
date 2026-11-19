@@ -12,7 +12,7 @@ Clone the shared system, then open its root in Codex or Claude. Initialise a pri
 python3 tools/pm.py init-workspace --owner "Your name" --delivery-system "Your delivery system"
 ```
 
-The command creates `private/` with its own Git repository and starter guides. Configure a remote when you need one.
+The command creates `private/` with its own Git repository and guides.
 
 To restore existing work, clone its private repository into `private/`. Run the shared Hub on each machine before opening the restored data.
 
@@ -22,7 +22,7 @@ Read `private/README.md` for the current session checkpoint and next action. Kee
 
 Start with company context, product context, and strategy.
 
-For area work, read the product brief and its area-specific evidence. Maintain a separate [area brief](playbook/filing.md#product-area-context) when the work warrants it.
+For area work, consult the product brief and [area guidance](playbook/filing.md#product-area-context).
 
 Use the [opportunity workflow](playbook/opportunities.md) for proposed investments. Standing initiative guidance stays in context. Briefs, experiments, and planning comparisons belong in the workspace.
 
@@ -62,7 +62,7 @@ Start reference material in the entity overview. Create a topic folder only for 
 
 ## Work
 
-- [Framework](playbook/framework.md): strategy, goals, evidence, and experiments.
+- [Product Strategy Mindset](playbook/sources/product-strategy-mindset.md) defines the method. The [framework index](playbook/framework.md) links source sections, skills, and templates.
 - [Opportunity workflow](playbook/opportunities.md) covers intake, discovery, Initiative Brief approval, and roadmap selection.
 - [Generated backlog and roadmap](playbook/initiative-views.md) use the signed register.
 - [Initiative work](playbook/initiative-work.md) covers PM tasks and launch readiness.
@@ -77,6 +77,7 @@ Use Git and Python 3.9 or later. Initiative approval and its tests also require 
 
 ```sh
 python3 tools/pm.py check
+python3 tools/pm.py action strategy brief check workspace/strategies/example.md
 python3 tools/pm.py backlog
 python3 tools/pm.py roadmap
 python3 -m unittest discover -s tests -v

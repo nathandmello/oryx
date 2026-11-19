@@ -1,5 +1,7 @@
 # Plan the investigation
 
+Read the [research question matrix](../../../playbook/sources/product-strategy-mindset.md#types-of-questions) and the [hypothesis test matrix](../../../playbook/sources/product-strategy-mindset.md#the-test-matrix). Use them to choose research and tests for the current decision.
+
 **Entry condition.** A registered initiative has an evaluated problem and a decision that depends on missing evidence.
 
 1. Read company and product context, then the evidence for areas explicitly linked to the initiative. Identify the decision-critical uncertainty.

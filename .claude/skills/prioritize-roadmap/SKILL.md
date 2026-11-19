@@ -15,7 +15,8 @@ For a selection decision, read [the initiative workflow](../../../playbook/oppor
 2. Agree the planning period, available capacity, effort unit, and intended outcomes with the PM and accountable owners.
 3. Identify how each option supports acquisition, retention, expansion, margin, obligations, product health, or strategic advantage.
 4. Cite the buyer, customer, engineering, or financial evidence. Distinguish commercial exposure from attributable impact. Mark estimates and unresolved claims.
-5. Compare customer benefit, urgency, confidence, effort, risk, dependencies, and reversibility. Identify which existing commitment or alternative would give way.
+5. Rank outcomes by confidence in their ability to create value. Explain how urgency, effort, risk, or dependencies affect the order.
+   Identify the commitment or alternative that gives way. Apply [the roadmap framework](../../../playbook/sources/product-strategy-mindset.md#section-7-iterations).
 6. Open the [planning comparison](../../../templates/prioritization.md) named for the cycle ID. Keep incomplete comparisons in draft.
 7. Under `Comparison`, use the columns `Initiative ID` and `Assessment`. Include each proposed cycle option exactly once.
 8. With one eligible option, compare it with existing commitments or keeping capacity available. Record that alternative in prose.

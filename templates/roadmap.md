@@ -3,7 +3,7 @@
 
 ## Scope and structure
 
-{{Product, audience, strategy and goal references, chosen structure, and planning period.}}
+{{Product, audience, strategy and goals, chosen framework structure, and planning period. Stack-rank outcomes by confidence in their ability to create value.}}
 
 ## Ordered outcomes
 
@@ -13,7 +13,7 @@
 
 ## Changes and decisions
 
-{{Dated changes to order or scope, their reasons, and decision sources. Distinguish proposals from commitments.}}
+{{Dated changes to order or scope, reasons, and decision sources. Include the rationale for deferred alternatives. Keep proposals distinct from commitments.}}
 
 ## Sources
 

@@ -19,11 +19,11 @@
 
 ## Research and findings
 
-{{Current research question, method, completed findings, contradictions, and sampling limits. Preserve source dates.}}
+{{Product or market question, chosen research method, quantitative and qualitative findings, contradictions, and sampling limits. Preserve source dates.}}
 
 ## Riskiest assumption
 
-{{Assumption, consequence if wrong, and the next useful test.}}
+{{Belief or unknown with the highest cost if wrong. Record the consequence and next useful test.}}
 
 ## Decisions
 

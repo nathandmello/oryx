@@ -1,6 +1,6 @@
 # Company, PM, product, product area, and initiative context
 
-Use [the starters](../templates/README.md) for recurring reference. Keep facts, rules, examples, and material unknowns.
+Use [the starters](../templates/README.md) for recurring facts, rules, examples, and unknowns.
 
 ## Scope and authority
 
@@ -112,7 +112,7 @@ Base local Markdown source links on the private repository root. Each inspection
 
 List each source with coverage `read`, `partial`, or `unavailable`. Omit `checked_on` for unavailable sources. Source numbers start at one.
 
-Supply permitted inspected `text` for pasted material or extracts.
+Supply inspected `text` for permitted extracts. Full reads prefer linked local Markdown or text originals.
 
 The router checks literal excerpts and common commitment sentences against available text. Route an irrelevant commitment as deferred. Report excerpt-only checks explicitly.
 
