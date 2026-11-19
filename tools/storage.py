@@ -1,11 +1,17 @@
 """Serialize local Hub writers and publish complete files atomically."""
 
 from contextlib import contextmanager
+from contextvars import ContextVar
 import os
 from pathlib import Path
 import stat
 import subprocess
 from tempfile import NamedTemporaryFile
+
+
+# Windows permits reading a locked range through the lock owner’s file handle.
+# Keep that handle available only during the context that acquired it.
+_repository_handles = ContextVar("pm_hub_repository_handles", default=())
 
 
 def private_root(root):
@@ -33,7 +39,29 @@ def repository_lock(private):
         else:
             import fcntl
             fcntl.flock(stream, fcntl.LOCK_EX)
-        yield  # Closing the descriptor also releases the lock after exceptions.
+        token = _repository_handles.set((*_repository_handles.get(), (lock, stream)))
+        try:
+            yield
+        finally:
+            _repository_handles.reset(token)  # Closing the descriptor releases its lock.
+
+
+@contextmanager
+def snapshot_reader(path):
+    """Read the exact bytes of a held lock without reopening its mandatory Windows range."""
+    for locked_path, stream in _repository_handles.get():
+        if locked_path == path:
+            if not os.path.samestat(os.fstat(stream.fileno()), path.lstat()):
+                raise ValueError(f"The held repository lock was replaced during backup: {path}")
+            position = stream.tell()
+            try:
+                stream.seek(0)
+                yield stream
+            finally:
+                stream.seek(position)
+            return
+    with path.open("rb") as source:
+        yield source
 
 
 @contextmanager

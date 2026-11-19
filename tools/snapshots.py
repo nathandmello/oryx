@@ -73,7 +73,7 @@ def create(root, store, archive):
             if member is None:
                 raise ValueError(f"Unsupported backup entry: {name}")
             member.pax_headers.update(attributes(path))
-            with path.open("rb") if member.isfile() and stat.S_ISREG(info[0]) else nullcontext() as source:
+            with storage.snapshot_reader(path) if member.isfile() and stat.S_ISREG(info[0]) else nullcontext() as source:
                 out.addfile(member, source)
     seen = set()
     # Independently read back the archive and compare every file against the installation.
@@ -91,7 +91,7 @@ def create(root, store, archive):
             elif member.islnk():
                 matches = member.linkname in seen and os.path.samefile(path, root / member.linkname)
             elif member.isfile():
-                with path.open("rb") as source, saved.extractfile(member) as copy:
+                with storage.snapshot_reader(path) as source, saved.extractfile(member) as copy:
                     matches = checksum(source) == checksum(copy)
             else:
                 matches = False

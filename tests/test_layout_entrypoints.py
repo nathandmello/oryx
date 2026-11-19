@@ -1,15 +1,19 @@
 """Exercise the physical checkout transition and the client boundaries that protect it."""
 
 import json
+import os
 from pathlib import Path
 import subprocess
 import sys
+import tarfile
 import unittest
+from unittest.mock import patch
 
 import test_pm
 import context_capture
 import hook
 import pm
+import snapshots
 import storage
 import upgrades
 
@@ -36,7 +40,7 @@ class LayoutEntrypointTests(unittest.TestCase):
         self.assertEqual(choice.returncode, 0, choice.stdout)
         self.assertFalse(self.work.exists())
         first = self.cli("align")
-        self.assertEqual(first.returncode, 0, first.stdout)
+        self.assertEqual(first.returncode, 0, first.stdout + first.stderr)
         result = json.loads(first.stdout)
         self.assertEqual(result["private_root_move"], {"from": "workspace", "to": "private"})
         self.assertTrue(Path(result["installation_backup"]).is_file())
@@ -53,7 +57,40 @@ class LayoutEntrypointTests(unittest.TestCase):
         self.assertNotIn(row["path"], [item["path"] for item in json.loads(second.stdout)["outstanding"]])
         self.assertIn(row["path"], upgrades.source_paths(self.work))
         self.assertFalse(json.loads(second.stdout)["layout"]["changed"])
-        self.assertEqual(self.cli("check").returncode, 0)
+        checked = self.cli("check")
+        self.assertEqual(checked.returncode, 0, checked.stdout + checked.stderr)
+
+    def test_backup_reads_both_locked_files_through_their_own_handles(self):
+        locks = {self.root / ".git/pm-hub-writer.lock": b"outer lock\x00\x17",
+                 self.work / ".git/pm-hub-writer.lock": b"private lock\xff\r\n"}
+        for path, data in locks.items():
+            path.write_bytes(data)
+        regular_open = Path.open
+
+        def guarded_open(path, *args, **kwargs):
+            if path in locks:
+                raise PermissionError("A separate handle cannot read this locked byte range")
+            return regular_open(path, *args, **kwargs)
+
+        with storage.writer_lock(self.work), patch.object(Path, "open", guarded_open):
+            archive = snapshots.ensure(self.root, "0.3.0", layout_change=True)
+        with tarfile.open(archive, "r:gz") as saved:
+            for path, data in locks.items():
+                member = path.relative_to(self.root).as_posix()
+                self.assertEqual(saved.extractfile(member).read(), data)
+                self.assertEqual(path.read_bytes(), data)
+
+    @unittest.skipUnless(os.name == "posix", "Windows excludes replacement of the open lock file")
+    def test_snapshot_detects_lockfile_replaced_before_backup_inventory(self):
+        path = self.work / ".git/pm-hub-writer.lock"
+        with storage.writer_lock(self.work):
+            replacement = path.with_suffix(".replacement")
+            replacement.write_bytes(b"new file at the locked path")
+            replacement.replace(path)
+            with self.assertRaisesRegex(ValueError, "lock was replaced"):
+                snapshots.ensure(self.root, "0.3.0", layout_change=True)
+        self.assertEqual(path.read_bytes(), b"new file at the locked path")
+        self.assertEqual(list((self.root / ".git/pm-hub-backups").glob("*/hub.tar.gz")), [])
 
     def test_native_work_and_profile_source_guards(self):
         old = self.root / "workspace/products/obsolete.md"
