@@ -172,10 +172,11 @@ def pair_candidates(claims, owner=None):
         pairs = chain(combinations(local, 2), product(local, others))
     for a, b in pairs:
         if conflicts(a, b):
-            sides = sorted((a, b), key=lambda c: (c["record"], c["text"]))
+            sides = sorted((a, b), key=lambda c: (c["record_id"] or c["record"], c["section"], c["text"]))
             key = identifier([(c["record_id"], c["section"], c["text"],
                                [(s["Source"], s["Source date"], s.get("coverage")) for s in c["sources"]]) for c in sides])
-            yield {"id": key, "owner": sides[-1]["record"], "scope": {k: a["scope"][k] or b["scope"][k] for k in a["scope"]},
+            owner_side = max(sides, key=lambda claim: sum(bool(v) for v in claim["scope"].values()))
+            yield {"id": key, "owner": owner_side["record"], "scope": {k: a["scope"][k] or b["scope"][k] for k in a["scope"]},
                    "state": "open", "classification": "potential conflict", "reason": "Potentially conflicting guidance. Verify authority before committing.",
                    "claims": sides, "targets": []}
 
@@ -236,7 +237,8 @@ def reported(doc, selected, sources, *, assess_plan=False):
         if not risk and not restriction and not (partial or assess_plan):
             continue
         scope = scope_for(doc, entry.get("product_area"))
-        detail = {"record": doc["record"], "section": entry["section"], "text": claim,
+        detail = {"record": doc["record"], "record_id": records.work_state(doc["text"])[0].get("ID"),
+                  "section": entry["section"], "text": claim,
                   "location": entry.get("location"), "source": source,
                   "authority": risk.get("authority") or entry.get("decision", {}).get("person") or "Source owner to verify"}
         reason = risk.get("reason")

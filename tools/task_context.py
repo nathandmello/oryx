@@ -272,10 +272,16 @@ def resolve(private, prompt="", *, cwd=None, previous=None, explicit=None, inclu
     scope, choices = choose_scope(private, docs, prompt, cwd, previous, explicit)
     risk_ids = set(re.findall(r"\brisk-[0-9a-f]{20}\b", prompt))
     saved_reviews = evidence_reviews.stored(docs.values(), through.isoformat())
-    if not scope and not choices and len(risk_ids) == 1:
-        review = saved_reviews.get(next(iter(risk_ids)))
-        if review:
+    if not explicit and len(risk_ids) == 1:
+        requested = next(iter(risk_ids))
+        review = saved_reviews.get(requested)
+        if review is None and not scope:
+            # Legacy records have no journal yet. Reconstruct this one ID without changing either record.
+            candidates = evidence_reviews.pair_candidates(evidence_reviews.observations(docs.values(), through))
+            review = next((candidate for candidate in candidates if candidate["id"] == requested), None)
+        if review and not scope:
             scope = review["scope"] if review["scope"].get("product") else {"company": True}
+            choices = []
     status = "ambiguous" if choices else "resolved" if scope else "unscoped"
     result = {"status": status, "scope": scope, "choices": choices, "entries": [], "warnings": []}
     metrics = metric_registry.effective(private.parent, private, scope.get("product"), through.isoformat())
@@ -331,7 +337,10 @@ def resolve(private, prompt="", *, cwd=None, previous=None, explicit=None, inclu
         entries.extend(linked_entries(doc, areas, through))
     candidates = evidence_reviews.pair_candidates(evidence_reviews.observations(review_documents, through))
     relevant = {r["id"]: r for r in candidates if evidence_reviews.applicable(r, scope, areas)}
-    relevant.update({k: r for k, r in saved_reviews.items() if evidence_reviews.applies_to_task(r, scope, areas, docs)})
+    for key, review in saved_reviews.items():
+        recall_owner = (key in risk_ids or include_history) and evidence_reviews.applicable(review, scope, areas)
+        if recall_owner or evidence_reviews.applies_to_task(review, scope, areas, docs):
+            relevant[key] = review
     for review in signed_reviews:
         relevant[("signal", review["initiative"], review["id"])] = review
     active = [r for r in relevant.values() if r.get("active", r["state"] in evidence_reviews.OPEN)

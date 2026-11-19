@@ -173,3 +173,23 @@ class ContextRiskTests(unittest.TestCase):
         row, = [r for r in result["entries"] if "The cohort excludes" in r["text"]]
         self.assertEqual(row["sources"][0]["coverage"], "read")
         self.assertEqual({r["state"] for r in result["risk_history"]}, {"dismiss", "open"})
+
+    def test_recall_by_id_for_cross_product_risk_and_unfiled_legacy_conflict(self):
+        h = self.h
+        packet = self.packet("Supply assessment", "The transfer date moved to March.",
+                             risk={"reason": "A different product depends on the February transfer.",
+                                   "targets": ["product-context-0123456789ab/transfer"]})
+        event, = self.capture(h.product_context, packet)["risk_events"]
+        self.assertEqual(json.loads(h.cli("task-context", "Show " + event["id"]))["risk_history"][0]["id"], event["id"])
+        self.capture(*self.committee("company", "EU release requires Legal clearance.", "Legal"))
+        owner, second = self.committee("product", "Proceed with EU release before clearance.", "Product")
+        pair, = self.capture(owner, second)["risk_events"]
+        # Simulate copied legacy records that predate evidence journals.
+        path = h.work / owner
+        text = path.read_text()
+        start = text.index("## Evidence review history")
+        path.write_text(text[:start] + text[text.index("## Context controls", start):])
+        before = path.read_bytes()
+        recalled = json.loads(h.cli("task-context", "Show " + pair["id"]))["risk_history"]
+        self.assertEqual([r["id"] for r in recalled], [pair["id"]])
+        self.assertEqual(path.read_bytes(), before)
