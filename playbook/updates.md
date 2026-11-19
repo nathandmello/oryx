@@ -2,8 +2,10 @@
 
 Pull and open the shared Hub. The agent handles private updates.
 
-Release 0.3.1 keeps private format 2 and adds the signed initiative workflow. Existing Markdown stays in place.
-Both updaters read the release version in `playbook/release.json`. Its format 1 value lets older clients fetch the migration code. The Hub reads the installed private format from `playbook/workspace-format.json`.
+Release 0.3.1 adds the signed initiative workflow. Release 0.3.2 adds [brief and hypothesis review](brief-review.md).
+Both keep private format 2. Apply the new checks at the next review.
+
+`playbook/release.json` reports format 1 for older updaters. The private format is in `playbook/workspace-format.json`.
 
 For signed prototype registers, read [workflow compatibility](initiative-approvals.md#existing-private-work) before upgrading.
 

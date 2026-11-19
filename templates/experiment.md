@@ -3,19 +3,19 @@
 
 ## Hypothesis
 
-{{We believe that: customer, context, expected behaviour, and the assumption being tested. Link the problem or initiative.}}
+{{State one claim about the population, context, and expected result. Link the problem or initiative.}}
 
 ## Test
 
-{{To verify that, we will: method, participants, owner, cost, period, and relevant permissions.}}
+{{Describe the method, participants, owner, cost, period, and relevant permissions. Define any comparison that the claim requires.}}
 
 ## Measure
 
-{{We will measure: metric definition, source, observation period, and guardrails.}}
+{{Define the primary measure, source, observation window, and guardrails. Check that the measure addresses the claim.}}
 
 ## Decision criterion
 
-{{We are right if: threshold and decision rule recorded before the test. Define an inconclusive result and stop conditions.}}
+{{Set the minimum result worth acting on before testing. State the decision for supportive, adverse, and inconclusive results.}}
 
 ## Evidence and confidence
 

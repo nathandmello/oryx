@@ -13,7 +13,7 @@ Create only the artifact needed for the current work. Templates guide thought; t
 | [Context note](context-note.md) | Supporting detail that passes [the filing test](../playbook/filing.md) | One topic level under the owning context entity, when the filing rule permits it |
 | [Goal](goal.md) | The five outcome components and their alignment | `workspace/goals/` |
 | [Problem](problem.md) | Customer problem, evidence, knowledge audit, and research | `workspace/problems/` |
-| [Strategy](strategy.md) | Why, Who, What, and How | `workspace/strategies/` |
+| [Strategy](strategy.md) | Why, Who, What, When, and How | `workspace/strategies/` |
 | [Experiment](experiment.md) | Hypothesis, test, measure, criterion, and result | `workspace/experiments/` |
 | [Discovery Brief](discovery-brief.md) | Timebox, learning goals, evidence, and conclusion | `workspace/initiatives/<product>/<initiative>/discovery-brief.md` |
 | [Initiative Brief](initiative-brief.md) | Investment case, scope, launch, and success measures | `workspace/initiatives/<product>/<initiative>/initiative-brief.md` |
@@ -74,5 +74,6 @@ Context records follow [the context rules](../playbook/context.md). Remove unuse
 Keep sources and related artifacts as links. The command resolves internal links from the new file's location.
 
 Use [the working practices](../playbook/working.md) for checkpoints and modes. Follow [the framework](../playbook/framework.md) for the method.
+Use [the brief-review checks](../playbook/brief-review.md) to review a strategy, initiative, or test.
 
 Add another artifact type only when the PM requests it.

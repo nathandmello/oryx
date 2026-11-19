@@ -7,15 +7,19 @@
 
 ## Who
 
-{{Selected customers, their problem, and the scope of this choice.}}
+{{Name the priority customers and their workflow. State the observed problem and the scope of this choice.}}
 
 ## What
 
-{{Problem to pursue first, supporting and contradictory evidence, alternatives, and priority rationale.}}
+{{Name the priority problem. Compare credible alternatives and explain the trade-off. Cite evidence for and against the choice.}}
+
+## When
+
+{{State the decision horizon, consequence of waiting, and review trigger.}}
 
 ## How
 
-{{High-level approach, expected mechanism, and the outcomes it can influence. Link measures and initiatives.}}
+{{Explain the approach, how it should work, and the capabilities it needs. Link outcomes, measures, and initiatives.}}
 
 ## Risks and tradeoffs
 

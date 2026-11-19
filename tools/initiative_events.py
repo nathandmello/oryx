@@ -190,6 +190,13 @@ def validate_event(event, approved=False):
                 raise ValueError("Provide a dated follow_up with on and action, or null to close")
         elif not VALIDATORS[value_type](event[name]):
             raise ValueError(f"{kind}.{name} needs {value_type}")
+    if not approved and kind in {"hypothesis", "experiment"}:
+        required_answers = ("statement", "source") if kind == "hypothesis" else ("method", "criterion", "source")
+        for name in required_answers:
+            if not brief_review.has_answer(event[name]):
+                raise ValueError(f"{kind}.{name} needs a concrete answer before review")
+        if kind == "experiment" and brief_review.words(event["method"]) == brief_review.words(event["criterion"]):
+            raise ValueError("experiment.criterion needs a decision rule distinct from the test method")
     if approved and "references" in known:
         check_reference(event)
 

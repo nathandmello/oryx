@@ -7,11 +7,11 @@
 
 ## Proposal
 
-{{Describe the proposed change. Reference the initiative for the problem, audience, outcome, and success measures.}}
+{{Describe the proposed change. Reference the initiative for the problem, audience, outcome, and success measures. Name the decision requested.}}
 
 ## Value and alignment
 
-{{Link the company objective, product strategy, and applicable area evidence. Explain the intended customer outcome. Explain the relevant value mechanisms, supporting evidence, and limits.}}
+{{Link the company objective, product strategy, and applicable area evidence. Explain the intended customer outcome. Explain the relevant value mechanisms, supporting evidence, and limits. Trace that outcome to the business objective.}}
 
 ## Approach and scope
 
@@ -19,7 +19,7 @@
 
 ## Delivery and launch
 
-{{Outline sequencing, rollout, launch and go-to-market, enablement, and cross-functional responsibilities. Link delivery work when available.}}
+{{Outline sequencing, rollout, launch and go-to-market, enablement, and cross-functional responsibilities. Link delivery work when available. State the consequence of waiting and when to review the outcome.}}
 
 ## Assumptions and risks
 

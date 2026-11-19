@@ -405,6 +405,8 @@ def validate(texts):
             continue
         sections = set(re.findall(r"^## (.+)$", text, re.M))
         required = CONTEXT_METADATA if kind in CONTEXT_KINDS else contracts[kind]
+        if kind == "strategy":
+            required = required - {"When"}  # Earlier strategy records predate this prompt.
         for missing in sorted(required - sections):
             errors.append(f"{path}: missing section: {missing}")
         identifier, problems = state_errors(text)
