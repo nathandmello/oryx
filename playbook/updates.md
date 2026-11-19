@@ -4,6 +4,8 @@ Pull and open the shared Hub. The agent handles private updates.
 
 Release 0.3.0 uses private format 2. Both updaters read the release version in `playbook/release.json`. Its format 1 value lets older clients fetch the migration code. The new Hub reads the installed private format from `playbook/workspace-format.json`.
 
+For signed prototype registers, read [workflow compatibility](initiative-approvals.md#existing-private-work) before upgrading.
+
 ## What runs
 
 1. The trusted session-start hook calls `python3 tools/pm.py align`. With hooks disabled, the agent follows AGENTS.md.

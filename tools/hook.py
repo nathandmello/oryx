@@ -1,6 +1,7 @@
 """Guide and check PM Hub work through Codex and Claude hooks."""
 
 import json
+from os.path import abspath
 from pathlib import Path
 import re
 import sys
@@ -10,7 +11,11 @@ import pm
 
 CAPTURE_GUIDANCE = (
     "For requests to capture or update context, automatically read .agents/skills/ingest-context/SKILL.md. "
-    "Read the PM remit when available. Preview routes before writing to an authorised record."
+    "Read the PM remit when available. Preview routes before writing to an authorised record. "
+    "For intake, discovery, initiative briefs, or prioritization, read playbook/opportunities.md. "
+    "Read the current records using pm.py initiative show. Use initiative propose for proposed changes. "
+    "Find metric-linked experiment drafts with initiative show. Leave unknown fields empty. "
+    "Only the PM signs and applies changes with the protected signing key."
 )
 
 
@@ -24,7 +29,7 @@ def edit_guard(root, cwd, payload):
         blocks = re.split(r"(?m)^\*\*\* ", command)
         for block in blocks:
             header, _, body = block.partition("\n")
-            if header.startswith(("Add File: ", "Update File: ", "Move to: ")):
+            if header.startswith(("Add File: ", "Move to: ", "Update File: ", "Delete File: ")):
                 added = "\n".join(row[1:] for row in body.splitlines() if row.startswith("+"))
                 edits.append((header.split(": ", 1)[1], added + "\n"))
         if isinstance(inputs, dict) and inputs.get("workdir"):
@@ -37,25 +42,44 @@ def edit_guard(root, cwd, payload):
 
     private = pm.workspace.private_root(root)
     for value, content in edits:
-        target = (cwd / value).resolve()
-        if private.name == "private" and (target == root / "workspace" or root / "workspace" in target.parents):
-            reason = "This is the retired private root. File PM work under private/workspace/ and reference material under private/context/."
-        elif private not in target.parents or target.suffix.lower() != ".md":
-            continue
-        else:
-            relative = target.relative_to(private)
-            parts = relative.parts
-            typed = any(line.startswith("<!-- pm:") for line in content.splitlines())
-            plain_work = pm.layout.valid_work(relative) and parts[1] in {"initiatives", "backlogs"}
-            if plain_work and typed:
-                reason = "File the typed artifact at its canonical home. Backlogs and initiative plans are plain working documents."
-            elif target.exists() or plain_work or any(p in {"sources", "secrets"} or p.startswith(".") for p in parts):
-                continue
-            else:
-                reason = "Use pm.py route-context to preview and write context. Use pm.py new for another typed record."
-        return {"hookSpecificOutput": {"hookEventName": "PreToolUse", "permissionDecision": "deny",
-                                       "permissionDecisionReason": reason}}
+        reason = edit_reason(root, private, Path(abspath(cwd / value)), content)
+        if reason:
+            return {"hookSpecificOutput": {"hookEventName": "PreToolUse", "permissionDecision": "deny",
+                                           "permissionDecisionReason": reason}}
     return {}
+
+
+def edit_reason(root, private, requested, content):
+    target = requested.resolve()
+    if private.name == "private" and (target == root / "workspace" or root / "workspace" in target.parents):
+        return "This is the retired private root. File PM work under private/workspace/ and reference material under private/context/."
+    if any(private in path.parents and pm.opportunities.path_kind(path.relative_to(private)) == "register"
+           for path in (requested, target)):
+        return "Use pm.py initiative propose for register changes. The PM signs and applies the proposal."
+    if private not in target.parents:
+        return None
+    relative = target.relative_to(private)
+    parts = relative.parts
+    managed = pm.opportunities.path_kind(relative)
+    if managed:
+        try:
+            pm.storage.require_visible(private, relative)
+        except ValueError as exc:
+            return str(exc)
+        if managed == "experiment-draft" and not target.exists():
+            return "Start the linked draft with pm.py initiative draft-experiment."
+    if target.suffix.lower() != ".md":
+        return None
+    if (not target.exists() and len(parts) == 3 and parts[:2] in {("workspace", "backlogs"), ("workspace", "roadmaps")}
+            and pm.layout.SLUG.fullmatch(target.stem) and (private / pm.layout.initiative_register(target.stem)).is_file()):
+        return "Use pm.py backlog or pm.py roadmap for this registered product."
+    typed = any(line.startswith("<!-- pm:") for line in content.splitlines())
+    plain_work = not managed and pm.layout.valid_work(relative) and parts[1] in {"initiatives", "backlogs"}
+    if plain_work and typed:
+        return "File the typed artifact at its canonical home. Backlogs and initiative plans are plain working documents."
+    if target.exists() or plain_work or any(p in {"sources", "secrets"} or p.startswith(".") for p in parts):
+        return None
+    return "Use pm.py route-context for context. Use pm.py new to initialise typed records, including initiative and discovery briefs."
 
 
 def response(event, errors, retry=False):

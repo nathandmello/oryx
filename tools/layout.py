@@ -8,6 +8,7 @@ COMPANY = "context/company/overview.md"
 PROFILE = "context/pm/context.md"
 WORK_FOLDERS = {"goal": "goals", "problem": "problems", "strategy": "strategies",
                 "roadmap": "roadmaps", "experiment": "experiments"}
+INITIATIVE_BRIEFS = ("discovery-brief", "initiative-brief")
 MAX_TOPICS = 6
 
 
@@ -27,6 +28,44 @@ def area(product_name, area_name):
 
 def initiative(name):
     return f"context/initiatives/{slug(name)}/overview.md"
+
+
+def initiative_register(product_name):
+    return f"workspace/backlogs/{slug(product_name)}/initiatives.json"
+
+
+def initiative_brief(product_name, initiative_slug, kind):
+    if kind not in INITIATIVE_BRIEFS:
+        raise ValueError("Choose a Discovery Brief or Initiative Brief")
+    return f"workspace/initiatives/{slug(product_name)}/{slug(initiative_slug)}/{kind}.md"
+
+
+def prioritization(product_name, cycle):
+    return f"workspace/roadmaps/{slug(product_name)}/{slug(cycle)}.md"
+
+
+def experiment_draft_home(product_name, initiative_slug):
+    return f"workspace/experiments/{slug(product_name)}/{slug(initiative_slug)}"
+
+
+def governed_kind(name):
+    """Identify product-qualified records. Format-2 standalone files keep their original routes."""
+    path = Path(name)
+    parts = path.parts
+    if (len(parts) not in (4, 5) or parts[0] != "workspace" or not SLUG.fullmatch(parts[2])
+            or (isinstance(name, str) and path.as_posix() != name)):
+        return None
+    if len(parts) == 4:
+        if parts[1] == "backlogs" and path.name == "initiatives.json":
+            return "register"
+        if parts[1] == "roadmaps" and path.suffix == ".md" and SLUG.fullmatch(path.stem):
+            return "prioritization"
+    elif SLUG.fullmatch(parts[3]):
+        if parts[1] == "initiatives" and path.suffix == ".md" and path.stem in INITIATIVE_BRIEFS:
+            return path.stem
+        if parts[1] == "experiments" and re.fullmatch(rf"experiment\.({SLUG.pattern})\.draft\.json", path.name):
+            return "experiment-draft"
+    return None
 
 
 def entity(name):
@@ -69,6 +108,9 @@ def valid_work(name, kind=None):
     parts = path.parts
     if len(parts) < 3 or parts[0] != "workspace" or path.suffix != ".md" or not SLUG.fullmatch(path.stem):
         return False
+    governed = governed_kind(name)
+    if governed:
+        return kind is None or kind == governed
     if kind:
         return len(parts) == 3 and WORK_FOLDERS.get(kind) == parts[1]
     if parts[1] == "initiatives":

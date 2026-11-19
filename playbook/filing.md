@@ -10,6 +10,11 @@ Choose the purpose first. File information used for reference in `context/`. Fil
 | Reusable initiative guidance | `context/initiatives/<initiative>/overview.md`, linked to the owning product |
 | PM background, preferences, responsibilities, or interests | `context/pm/context.md` |
 | Priorities, plans, progress, or tests | The applicable work type under `workspace/`, such as `workspace/experiments/` |
+| Proposed investments, sources, and lifecycle decisions | Signed `workspace/backlogs/<product>/initiatives.json` |
+| Formal discovery or proposed investment | `discovery-brief.md` or `initiative-brief.md` under `workspace/initiatives/<product>/<initiative>/` |
+| Test for an initiative metric | `workspace/experiments/<product>/<initiative>/experiment.<metric-id>.draft.json` during drafting |
+| Investment comparison for a planning cycle | `workspace/roadmaps/<product>/<cycle>.md` |
+| Current backlog or selected roadmap | Generate either view from the register with `pm.py backlog` or `pm.py roadmap` |
 | Original reports, announcements, or external deliverables | Their source of record. Cite the location, date, and relevant passage. |
 | Capture diagnostics, audit results, or drafting scratch | The reply. Record citations in the brief’s Sources section. |
 
@@ -48,6 +53,10 @@ With `pm.py new context-note`, add `--topic-question` and `--topic-peer` for the
 An area is a lasting part of one product. Keep product-wide rules in its overview. Keep initiative plans and delivery progress in the workspace.
 
 One area fact fits inline. Create `context/products/<product>/areas/<area>/overview.md` when readers independently need recurring area guidance and a specific change triggers review.
+
+An initiative can concern zero, one, or several product areas. Record confirmed area subjects once on the registered initiative.
+For example, `product/checkout/area/refunds` identifies the refunds area of checkout.
+A remit, folder name, or sibling area alone provides insufficient evidence for that assignment.
 
 For area work, run `python3 tools/pm.py area-context <product> <area>`. Read the product overview, the area overview, and relevant inline entries. Each source ID belongs to its original record. Inspect older unlabelled text before assigning an area.
 

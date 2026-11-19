@@ -2,11 +2,51 @@
 
 from contextlib import contextmanager
 from contextvars import ContextVar
+import json
 import os
 from pathlib import Path
 import stat
 import subprocess
 from tempfile import NamedTemporaryFile
+
+SHARED_GROUP = "PM_HUB_SHARED_GROUP"
+
+
+def initiative_mode(path, *, draft):
+    """Opt in only on deliberately provisioned group directories for governed files."""
+    group = os.environ.get(SHARED_GROUP)
+    if not group:
+        return None
+    if os.name != "posix":
+        raise ValueError(f"{SHARED_GROUP} needs a POSIX filesystem with group permissions")
+    import grp
+    try:
+        gid = grp.getgrnam(group).gr_gid
+    except KeyError as exc:
+        raise ValueError(f"{SHARED_GROUP} must name an existing group") from exc
+    mode = 0o2770 if draft else 0o2750
+    parent = path.parent
+    if parent.resolve() != parent or not parent.is_dir():
+        raise ValueError(f"Provision {parent} for group {group} with mode {mode:04o}")
+    info = parent.stat()
+    if info.st_gid != gid or stat.S_IMODE(info.st_mode) != mode:
+        raise ValueError(f"Provision {parent} for group {group} with mode {mode:04o}")
+    return 0o660 if draft else 0o640
+
+
+def unique_keys(pairs):
+    result = {}
+    for key, value in pairs:
+        if key in result:
+            raise ValueError(f"Duplicate JSON key: {key}")
+        result[key] = value
+    return result
+
+
+def json_input(value):
+    def reject(constant):
+        raise ValueError(f"Invalid JSON number: {constant}")
+    return json.loads(value, object_pairs_hook=unique_keys, parse_constant=reject)
 
 
 # Windows permits reading a locked range through the lock owner’s file handle.
@@ -28,7 +68,10 @@ def repository_lock(private):
     lock = private / ".git" / "pm-hub-writer.lock"
     if lock.resolve() != lock or not lock.parent.is_dir():
         raise ValueError("Expected a lock inside the private repository")
-    with lock.open("a+b") as stream:
+    shared = os.name == "posix" and os.environ.get(SHARED_GROUP)
+    if shared and not lock.is_file():
+        raise ValueError("Provision a group-readable PM Hub writer lock before enabling group sharing")
+    with lock.open("rb" if shared else "a+b") as stream:
         if os.name == "nt":
             import msvcrt
             if stream.tell() == 0:
@@ -89,7 +132,7 @@ def require_visible(private, relative):
         raise ValueError(f"Cannot verify the private Git status of {relative}")
 
 
-def replace_text(target, original, candidate):
+def replace_text(target, original, candidate, *, mode=None):
     """Call under writer_lock. Reject stale or redirected paths before publishing."""
     if target.resolve() != target:
         raise ValueError("Use a regular workspace file")
@@ -101,11 +144,14 @@ def replace_text(target, original, candidate):
         tmp = Path(stream.name)
         try:
             stream.write(candidate.encode("utf-8"))
+            if mode is not None:
+                os.fchmod(stream.fileno(), mode)
             stream.close()
             if original is None:
                 os.link(tmp, target)
             else:
-                os.chmod(tmp, stat.S_IMODE(target.stat().st_mode))
+                if mode is None:
+                    os.chmod(tmp, stat.S_IMODE(target.stat().st_mode))
                 os.replace(tmp, target)
         finally:
             tmp.unlink(missing_ok=True)

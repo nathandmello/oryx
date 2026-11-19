@@ -1,0 +1,27 @@
+{
+  "title": "Product roadmap",
+  "columns": {
+    "product": "Product",
+    "areas": "Product areas",
+    "cycle": "Planning cycle",
+    "period_start": "Period start",
+    "period_end": "Period end",
+    "horizon": "Horizon",
+    "rank": "Priority order",
+    "id": "Initiative ID",
+    "title": "Initiative",
+    "outcome": "Intended outcome",
+    "success_metrics": "Success metrics",
+    "phase": "Phase",
+    "effort": "Effort",
+    "unit": "Effort unit",
+    "trade_off": "Trade-off",
+    "planning_record": "Planning record",
+    "delivery": "Delivery reference"
+  },
+  "sources": [
+    "https://www.gov.uk/service-manual/agile-delivery/developing-a-roadmap",
+    "https://www.atlassian.com/software/jira/templates/product-roadmap",
+    "https://www.atlassian.com/software/confluence/templates/product-roadmap/"
+  ]
+}
