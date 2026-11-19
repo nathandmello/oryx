@@ -14,7 +14,12 @@ Use [the installed-workspace procedure](../../../playbook/updates.md). Keep the 
 3. Summarize concrete findings by path. Explain which changes would improve readability, context retrieval, or the evidence behind a decision.
 4. Flag uncertain claims and historical decisions. Review metric comparability and preserve the recorded basis of signed results.
 
-With this update, briefs have a predictable structure. Workspace tasks can use scoped context. The metric registry gives analyses a consistent starting point and supports company definitions.
+For an upgrade to 0.7.0, inspect the initiatives the PM relies on:
+- Use `initiative show` to inspect the signed decisions, source dates, targets, guardrails and readings.
+- For active launches, review the checklist and its linked tasks. Ask the verifier about evidence with an unknown history.
+- For planned work, compare recorded restrictions and new signals with the approved assumptions and decision owner.
+- For shipped work, offer to record an earlier guardrail only when dated evidence establishes the agreed limit.
+- Mark unavailable evidence as a gap. Keep any later correction and its source beside the original reading.
 
 ## Offer a choice
 

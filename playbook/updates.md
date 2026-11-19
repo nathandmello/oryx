@@ -1,11 +1,10 @@
 # Updating an installed Hub
 
-Open the updated Hub to verify compatibility.
-
-Releases 0.3.1 through 0.5.0 use private format 2.
+Releases 0.3.1 through 0.7.0 use private format 2.
 
 | Release | Change |
 | --- | --- |
+| 0.7.0 | Adds launch evidence history, decision conflict reviews, guardrail readings, and measurement corrections. |
 | 0.5.0 | Adds [Hub commands](commands.md) and optional [reply preferences](working.md#reply-preferences). Existing profiles use Hub defaults. |
 | 0.4.2 | Automates [publication](publication.md). |
 
@@ -19,7 +18,8 @@ Release 0.3.5 adds [context section leads](filing.md#when-a-section-earns-its-pl
 
 Check [signed prototype compatibility](initiative-approvals.md#existing-private-work).
 
-Update every client before sharing newly formatted records, initiative JSON lists, or signed changes. The Hub reads existing format-2 signatures.
+Update every client before sharing new records. Older clients reject new transaction types. Existing format-2 signatures remain readable.
+Verify historical readiness and thresholds against dated sources.
 For an active discovery approved before source binding, review the plan and sources together. Sign a fresh `start-discovery` before concluding.
 
 ## What runs
