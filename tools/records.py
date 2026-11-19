@@ -23,6 +23,7 @@ PLACEHOLDER = re.compile(r"\{\{[^{}]+\}\}")
 CONTEXT_FIELDS = ("Parent context", "Maintainer", "Last reviewed", "Review by", "Review triggers")
 SOURCE_COLUMNS = ("ID", "Source", "Source date", "Checked on")
 CONTEXT_METADATA = {"Context controls", "Sources", "Work state"}
+CONTEXT_RESERVED_SECTIONS = CONTEXT_METADATA | {"Filing"}
 SHARED_TOPICS = {
     "vocabulary": "Vocabulary",
     "decisions": "Decisions already closed",
@@ -57,6 +58,38 @@ LEGACY_PRODUCT_TOPICS = {
 CONTEXT_TABLES = {
     "Vocabulary": ("Term", "Meaning", "Owner", "Avoid"),
     "Decisions already closed": ("Question", "Scope", "Person and date", "Evidence", "Next step"),
+}
+CONTEXT_LEAD = "<!-- pm: context-lead -->"
+CONTEXT_LEAD_HEADING = re.compile(rf"(?m)^## ([^\n]+)\n(?:[ \t]*\n)*{re.escape(CONTEXT_LEAD)}[ \t]*$")
+CONTEXT_LEADS = {
+    "Context": "Consult when checking the evidence for the subject named in this note.",
+    "Data boundaries": "Consult before selecting, sharing, or retaining data for PM work.",
+    "Organisation and scope": "Consult when identifying the company, business unit, or product responsible for a decision.",
+    "Customers and markets": "Consult when identifying buyers, users, partners, or markets for a product decision.",
+    "Business model": "Consult when assessing how an opportunity affects customer value, revenue, or costs.",
+    "Direction and goals": "Consult when checking whether proposed work supports company priorities.",
+    "How the business operates": "Consult when finding decision owners, operating dependencies, or the teams involved in PM work.",
+    "Constraints and open questions": "Consult before making commitments that depend on company limits or unresolved questions.",
+    "The product": "Consult when checking the current offer, product scope, or business contribution.",
+    "The vision": "Consult when assessing a proposal against the product's intended direction.",
+    "The users": "Consult when identifying users and the work the product supports.",
+    "Constraints": "Consult before committing work that depends on product ownership, obligations, or limits.",
+    "Goals, performance, and gaps": "Consult when assessing progress or choosing the next product priority.",
+    "Area scope and ownership": "Consult when deciding whether work belongs to this area or depends on its owners.",
+    "Area outcomes": "Consult when assessing work against the outcomes for this product area.",
+    "Area users and workflow": "Consult when checking which users and workflows are affected by area work.",
+    "Outcome and scope": "Consult when checking which outcomes and commitments apply to this initiative.",
+    "Users and workflow": "Consult when assessing who the initiative affects and how their work changes.",
+    "Dependencies and constraints": "Consult before making commitments that depend on initiative handoffs or limits.",
+    "Vocabulary": "Consult when choosing terms for plans, decisions, and communications.",
+    "Decisions already closed": "Consult before revisiting a decision or acting on its approved scope.",
+    "What good output looks like": "Consult when preparing a deliverable that has an approved example or standard.",
+    "Review and approvals": "Consult when deciding who must review or approve the work.",
+    "Purpose and boundaries": "Consult when assessing whether proposed work fits the product's direction and boundaries.",
+    "Customers and their work": "Consult when identifying customers and the work the product supports.",
+    "Current offer": "Consult when checking what the product currently offers.",
+    "Business contribution and market": "Consult when assessing the product's market or contribution to the business.",
+    "Ownership and constraints": "Consult before making commitments that depend on product ownership or limits.",
 }
 SOURCE_REFERENCE = re.compile(r"\[S[1-9]\d*\]")
 
@@ -217,10 +250,44 @@ def context_sections(kind):
     return sections
 
 
+def split_context_lead(body):
+    """Return a marked navigation lead and the substantive content beneath it."""
+    body = body.strip()
+    first, _, rest = body.partition("\n")
+    if first != CONTEXT_LEAD:
+        return None, body
+    lead, _, body = rest.partition("\n")
+    return lead, body.strip()
+
+
+def valid_context_lead(lead):
+    return (specific(lead) and lead == lead.strip() and lead.splitlines() == [lead]
+            and re.match(r"\w", lead) is not None and "<" not in lead and ">" not in lead)
+
+
+def context_entries(body):
+    entries, unlabelled = [], False
+    current = None
+    for line in body.splitlines():
+        if not line.strip() or PLACEHOLDER.fullmatch(line.strip()):
+            continue
+        entry = re.fullmatch(r"- (Fact|Rule|Example|Interpretation|Assumption|Unknown): (.+)", line)
+        if entry:
+            current = [entry[1], entry[2]]
+            entries.append(current)
+        elif line.startswith("  ") and current:
+            current[1] += " " + line.strip()
+        else:
+            current = None
+            unlabelled = True
+    return entries, unlabelled
+
+
 def context_table_errors(text, name, draft):
     columns = CONTEXT_TABLES[name]
     rows, errors = table(text, name, columns)
-    if any(line.strip() and not line.strip().startswith("|") for line in section(text, name).splitlines()):
+    _, body = split_context_lead(section(text, name) or "")
+    if any(line.strip() and not line.strip().startswith("|") for line in body.splitlines()):
         errors.append(f"{name} needs a Markdown table")
     for row in rows:
         if draft and all(PLACEHOLDER.fullmatch(cell) for cell in row):
@@ -339,24 +406,18 @@ def context_errors(path, text, kind, texts, content_sections, template=False):
         if body is None:
             errors.append(f"use exactly one {name} section")
             continue
+        lead, body = split_context_lead(body)
+        if lead is not None and not valid_context_lead(lead):
+            errors.append(f"{name}: give the section a short prose lead")
         if name in CONTEXT_TABLES:
             errors.extend(context_table_errors(text, name, draft))
             substantive = substantive or bool(table(text, name, CONTEXT_TABLES[name])[0])
             continue
-        if not body.strip() and not draft:
+        if not body and not draft:
             errors.append(f"{name} needs an entry or an explicit Unknown")
-        entries, current = [], None
-        for line in body.splitlines():
-            if not line.strip() or PLACEHOLDER.fullmatch(line.strip()):
-                continue
-            entry = re.fullmatch(r"- (Fact|Rule|Example|Interpretation|Assumption|Unknown): (.+)", line)
-            if entry:
-                current = [entry[1], entry[2]]
-                entries.append(current)
-            elif line.startswith("  ") and current:
-                current[1] += " " + line.strip()
-            else:
-                errors.append(f"{name}: use labelled context bullets")
+        entries, unlabelled = context_entries(body)
+        if unlabelled:
+            errors.append(f"{name}: use labelled context bullets")
         for label, claim in entries:
             substantive = substantive or label in {"Fact", "Rule", "Example"}
             if label in {"Fact", "Rule", "Example"} and not PLACEHOLDER.fullmatch(claim) and not SOURCE_REFERENCE.search(claim):
@@ -411,7 +472,10 @@ def validate(texts):
             errors.append(f"{path}: missing section: {missing}")
         identifier, problems = state_errors(text)
         if kind in CONTEXT_KINDS:
-            content = sections & context_sections(kind)
+            # Older versions allowed custom prose outside the standard sections.
+            # Apply the entry contract when a custom section adopts a lead.
+            marked = {name.rstrip() for name in CONTEXT_LEAD_HEADING.findall(text)}
+            content = (sections & context_sections(kind)) | (marked - CONTEXT_RESERVED_SECTIONS)
             extra, parent = context_errors(path, text, kind, texts, content)
             problems.extend(extra)
             if parent:

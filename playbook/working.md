@@ -18,7 +18,8 @@ Both modes retain source checks, ownership boundaries, and existing permissions.
 
 ## Resume
 
-Read the record in `private/workspace/`, its checkpoint, and linked context. Check the sources behind accepted decisions. Report only changes or gaps that matter now.
+Read the record in `private/workspace/`, its checkpoint, and linked context. Use headings and section leads to find context that applies to the work.
+Read the relevant entries and applicable parent rules before acting. Check the sources behind accepted decisions. Report only changes or gaps that matter now.
 
 At startup, ask once about any `remit_prompt` from `pm.py align` when questions are welcome. Respect quiet mode and deferrals. Capture agreed responsibilities in the [PM profile](context.md#pm-remit).
 

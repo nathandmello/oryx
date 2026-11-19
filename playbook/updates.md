@@ -1,10 +1,11 @@
 # Updating an installed Hub
 
-Pull and open the shared Hub. The agent handles private updates.
+Open the updated Hub to align private records.
 
-Releases 0.3.1 through 0.3.4 use private format 2. Apply [brief review](brief-review.md) and the [red-team methods](../.agents/skills/red-team/SKILL.md) at the next review.
+Releases 0.3.1 through 0.3.5 use private format 2. Apply [brief review](brief-review.md) and [red-team methods](../.agents/skills/red-team/SKILL.md) at the next review.
 
-Release 0.3.4 adds [initiative meeting transcripts](../.agents/skills/summarize-meeting/SKILL.md).
+0.3.4 adds [initiative meeting transcripts](../.agents/skills/summarize-meeting/SKILL.md).
+0.3.5 adds [context section leads](filing.md#when-a-section-earns-its-place).
 
 `playbook/release.json` reports format 1 for older updaters. The private format is in `playbook/workspace-format.json`.
 

@@ -71,16 +71,18 @@ Separate multiple values within a cell with `<br>`. Resolve local goal links fro
 
 [Ingestion](../.agents/skills/ingest-context/SKILL.md) applies automatically. Use `python3 tools/pm.py route-context` with JSON on standard input. Preview first. Write one authorised record per `--write PATH` call.
 
-Add sections as evidence warrants. Retain controls, sources, and work state.
+Apply the [section rules](filing.md#when-a-section-earns-its-place). Retain controls, sources, and work state.
 
 ```json
 {
   "sources": [
-    {"reference": "Fictional approved minutes, section 3", "date": "2026-01-01", "coverage": "read", "checked_on": "2026-01-01"}
+    {"reference": "Fictional approved minutes, section 3", "date": "2026-01-01", "coverage": "read", "checked_on": "2026-01-01"},
+    {"reference": "Fictional UK rollout announcement", "date": "2026-06-15", "coverage": "read", "checked_on": "2026-06-15"}
   ],
   "entries": [
     {"scope": "pm", "topic": "preferences", "question": "How does the PM prefer to review a roadmap?"},
     {"scope": "company", "topic": "constraints", "source": 1, "location": "Section 3", "quote": "We will not create or own LLMs."},
+    {"scope": "company", "heading": "UK merchant adoption before rollout", "lead": "Consult when comparing UK merchant adoption before and after rollout.", "source": 2, "location": "Paragraph 1", "quote": "On 31 May, we had 2,000 active UK merchants."},
     {"scope": "product", "product": "checkout", "topic": "vocabulary", "source": 1, "location": "Section 3", "quote": "A workspace is the boundary for shared access.", "term": {"name": "workspace", "owner": "Product", "avoid": "account"}},
     {"scope": "initiative", "product": "checkout", "initiative": "renewals", "topic": "decisions", "source": 1, "location": "Section 3", "quote": "We use existing sessions because renewal needs no new login.", "decision": {"question": "How do users authenticate?", "scope": "Renewal pilot", "person": "Fixture PM", "date": "2026-01-01", "next_step": "Brief the pilot team."}}
   ]

@@ -75,3 +75,23 @@ python3 tools/pm.py eval-red-team --suite context-guardrails rubric context-dist
 python3 tools/pm.py eval-red-team --suite context-guardrails score .generated/context-grades.json \
   --fingerprint .generated/context-inputs.json
 ```
+
+## Real-world context sections
+
+Four frozen source packets cover annual GMV, renewal eligibility, storefront rules, and API versions.
+The cases contain source links and paraphrases. Treat the supplied dates and scope as the evidence for each scenario.
+
+Use the capture tests to replay reference routes through `route-context`. They check previews, leads, citations, replays, and rejection of a wrong source.
+Grade the agent's decisions in separate sessions. Give the reviewer the prompt, which includes PM Hub's section rule. Keep reference routes and criteria with the grader.
+
+```sh
+python3 -m unittest discover -s tests -p test_pm.py -k test_real_world_context
+python3 tools/pm.py eval-red-team --suite context-sections list
+python3 tools/pm.py eval-red-team --suite context-sections fingerprint > .generated/context-sections-inputs.json
+python3 tools/pm.py eval-red-team --suite context-sections prompt shopify-annual-gmv
+python3 tools/pm.py eval-red-team --suite context-sections rubric shopify-annual-gmv
+python3 tools/pm.py eval-red-team --suite context-sections score .generated/context-sections-grades.json \
+  --fingerprint .generated/context-sections-inputs.json
+```
+
+Use candidate-only grades for this suite. Record the model and client for each decision review.

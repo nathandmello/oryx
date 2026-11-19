@@ -22,6 +22,34 @@ Choose the purpose first. File information used for reference in `context/`. Fil
 
 Route each mixed-source claim by purpose and accountable entity. Use the PM remit to determine relevance. A price announcement belongs in company context. An authorised rollout plan belongs in the workspace.
 
+## When a section earns its place
+
+1. Name the question a future PM would ask. Check the owning brief and its parent for an answer.
+2. Reuse the section that answers the question. Keep a single fact inline when readers would look for it there.
+3. Add a section for a distinct lookup that supports recurring work or a consequential dated decision.
+4. Name the subject in the heading. Name and date an event in the entry when the event defines its scope.
+5. Give each substantive section a short lead. Say what it covers and name a task or decision that calls for it.
+
+Consider template headings examples. A custom heading follows the same source rules. A lead guides retrieval. The entries carry the facts, scope, dates, and evidence. Update the lead when the section's coverage changes.
+
+For capture, use `topic` for a standard section or `heading` for a custom title. Supply `lead` for a new custom section. The preview shows the heading, lead, and whether capture creates or reuses the section. Standard topics have starter leads. Supply a lead tailored to the material when the starter is too broad.
+
+In Markdown, put the prose below the `<!-- pm: context-lead -->` marker. Start the section entries after a blank line. Add a lead when substantively revising a legacy section. Metadata sections use their existing tables.
+
+An unmarked legacy section can retain its original prose. Verify and label its claims when adopting a lead.
+Indent level-two headings inside examples so capture can identify section boundaries.
+
+Update older Hub clients before syncing briefs with section leads.
+
+```markdown
+## UK merchant adoption before rollout
+
+<!-- pm: context-lead -->
+Consult when comparing UK merchant adoption before and after rollout.
+
+- Fact: The 15 June rollout announcement reported 2,000 active UK merchants as of 31 May. [S1]
+```
+
 ## When a file earns its place
 
 Start with the entity overview. Keep it broad and put unknowns beside the affected claims. Update an existing entry that answers the reader's question.
