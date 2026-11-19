@@ -427,9 +427,6 @@ class HubTests(unittest.TestCase):
     def test_context_capture_flags_ambiguous_and_legacy_section_bodies_in_preview(self):
         target = self.context_record()
         original = target.read_text()
-        _, state = upgrades.read_state(self.work)
-        state.pop(upgrades.STRUCTURE_RULE)
-        (self.work / upgrades.LEDGER).write_text(upgrades.encode(state))
         destination = target.relative_to(self.work).as_posix()
         heading = "UK rollout history"
         section = f"## {heading}\n\nThe UK pilot ended in May.\n\n## Background\n\nThis is an example."
@@ -451,6 +448,9 @@ class HubTests(unittest.TestCase):
               for tag in ("pre", "script", "style", "textarea", "div", "custom-example")),
         ):
             with self.subTest(body=body):
+                _, state = upgrades.read_state(self.work)
+                state.pop(upgrades.STRUCTURE_RULE, None)
+                (self.work / upgrades.LEDGER).write_text(upgrades.encode(state))
                 text = original.replace("## Context controls", f"{body}\n\n## Context controls")
                 target.write_text(text)
                 self.assertEqual(pm.check(self.root), [])

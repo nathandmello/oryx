@@ -91,6 +91,7 @@ CONTEXT_LEADS = {
     "Ownership and constraints": "Consult before making commitments that depend on product ownership or limits.",
 }
 SOURCE_REFERENCE = re.compile(r"\[S[1-9]\d*\]")
+CONTEXT_ENTRY = re.compile(r"- (Fact|Rule|Example|Interpretation|Reported metric|Assumption|Unknown): (.+)")
 WORKING_SECTIONS = ("Scope", "Evidence", "Next action")
 HTML_BLOCK_TAGS = (
     "address|article|aside|base|basefont|blockquote|body|caption|center|col|colgroup|dd|details|dialog|dir|div|dl|dt|"
@@ -367,7 +368,7 @@ def context_entries(body):
     for line in body.splitlines():
         if not line.strip() or PLACEHOLDER.fullmatch(line.strip()):
             continue
-        entry = re.fullmatch(r"- (Fact|Rule|Example|Interpretation|Reported metric|Assumption|Unknown): (.+)", line)
+        entry = CONTEXT_ENTRY.fullmatch(line)
         if entry:
             current = [entry[1], entry[2]]
             entries.append(current)

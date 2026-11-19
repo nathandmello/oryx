@@ -117,7 +117,7 @@ def source_matches(scoped, prompt, terms):
     identifiers = set(IDENTIFIER.findall(prompt.casefold()))
     direct = False
     for doc in scoped:
-        direct |= bool(identifiers.intersection(IDENTIFIER.findall(doc["text"].casefold())))
+        direct |= bool(identifiers.intersection(IDENTIFIER.findall(records.visible_section_markup(doc["text"]).casefold())))
         for row in doc["sources"].values():
             reference = row["Source"]
             label, separator, target = reference.partition("](")
@@ -211,15 +211,21 @@ def as_of(prompt):
 
 def linked_entries(doc, areas, through):
     text = doc["text"]
-    content_sections = records.context_content(doc["kind"], text)
+    kind = doc["kind"]
+    standard = records.context_sections(kind)
+    content_sections = records.context_content(kind, text)
     for section, _, start, end in records.section_blocks(text):
         if section not in content_sections:
             continue
         lead, body = records.split_context_lead(text[start:end])
         if lead is not None and not records.valid_context_lead(lead):
             continue
-        for value in re.split(r"\n(?=- |\| )", body):
-            row = AREA.search(value)
+        visible = records.visible_section_markup(body)
+        table = section in records.CONTEXT_TABLES
+        pattern = r"^\| [^\n]*" if table else rf"^({records.CONTEXT_ENTRY.pattern})(?:\n {{2,}}\S[^\n]*)*"
+        for match in re.finditer(pattern, visible, re.M):
+            value = match[0]
+            row = AREA.search(body[match.start():match.start() + len(value.splitlines()[0])])
             if row and row[1] not in areas:
                 continue
             refs = records.SOURCE_REFERENCE.findall(SUPERSEDED.sub("", value))
@@ -235,9 +241,9 @@ def linked_entries(doc, areas, through):
                     continue
             if records.PLACEHOLDER.search(value) or not value.strip() or value.lstrip().startswith(("| ---", "| Term", "| Question")):
                 continue
-            content = SUPERSEDED.sub("", AREA.sub("", value)).strip()
+            content = SUPERSEDED.sub("", value).strip()
             binding = bool(sources) and (section == "Decisions already closed" or (
-                section in KEEP and value.lstrip().startswith("- Rule:")
+                (section in KEEP or (lead is not None and section not in standard)) and value.startswith("- Rule:")
             ))
             if section == "Decisions already closed":
                 decision_date = re.search(r", (\d{4}-\d{2}-\d{2})\s*\|", content)
