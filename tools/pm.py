@@ -20,6 +20,8 @@ import context_capture
 import conversation
 import task_context
 import metric_checks
+import decision_forecasts
+import decision_review
 import metric_registry
 import storage
 import snapshots
@@ -46,6 +48,7 @@ REQUIRED = (
     "tools/layout.py", "tools/layout_upgrade.py", "tools/pm_profile.py", "playbook/workspace-format.json", "tools/filing.py", "tools/conversion.py", "tools/snapshots.py", "playbook/filing.md", "playbook/writing.md",
     "tools/context_capture.py", "tools/task_context.py", "tools/metric_checks.py", "tools/storage.py", "tools/upgrades.py",
     "playbook/numbers.md", "playbook/metrics.md", "playbook/saas-metrics.json", "tools/metric_registry.py",
+    "tools/decision_authority.py", "tools/decision_review.py", "tools/decision_forecasts.py", "playbook/decision-review.md", "playbook/decision-forecasts.md",
     "tools/preferences.py", ".agents/skills/pm/SKILL.md", ".claude/skills/pm/SKILL.md",
     "tools/conversation.py", conversation.GUIDE,
     "tools/hub_commands.py", "playbook/commands.md", hub_commands.CATALOG,
@@ -313,6 +316,7 @@ def check_workspace(root: Path, system_texts: dict[str, str]) -> list[str]:
         preferences.load(private)
     except (OSError, ValueError) as exc:
         errors.append(f"{preferences.CHECK_PREFIX}{exc}")
+    errors.extend(decision_forecasts.check_workspace(private))
     files = inventory(private)
     initiative_work_homes = set()
     for path in files:
@@ -327,6 +331,8 @@ def check_workspace(root: Path, system_texts: dict[str, str]) -> list[str]:
         if not path.is_file():
             continue
         parts = path.relative_to(private).parts
+        if (len(parts) == 3 and parts[:2] == ("workspace", "forecasts") and path.suffix == ".json"):
+            continue  # The forecast checker validates every receipt in this directory.
         if rel == metric_registry.PRIVATE:
             continue
         if parts[0] in {"context", "products", "workspace"} and any(part.startswith(".") for part in parts[1:]):
@@ -718,6 +724,8 @@ def build_parser():
     new.add_argument("--trigger")
     initiatives_cli.add_commands(commands)
     initiative_work.add_commands(commands)
+    decision_review.add_commands(commands)
+    decision_forecasts.add_commands(commands)
     route = commands.add_parser("route-context", help="Route supplied context evidence from JSON on stdin")
     route.add_argument("--write", metavar="PATH", help="Apply entries to one authorised context record")
     area = commands.add_parser("area-context", help="Locate a product area's context and its source records")
@@ -765,6 +773,9 @@ def main() -> int:
         args = build_parser().parse_args(argv)
         if hasattr(args, "hub_action"):
             args.hub_action(ROOT, args, prepare_private_write)
+            return 0
+        if args.command == "forecast":
+            decision_forecasts.run(ROOT, args, prepare_private_write)
             return 0
         if args.command == "align":
             if args.preview_plan or args.apply_plan:

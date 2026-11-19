@@ -3,6 +3,7 @@
 from datetime import date, datetime
 from collections import Counter
 from hashlib import sha256
+from itertools import islice
 import json
 from pathlib import Path
 import re
@@ -261,7 +262,30 @@ def linked_entries(doc, areas, through):
                 if decision_date and decision_date[1] > through.isoformat():
                     continue
             yield {"record": doc["record"], "section": section, "text": content, "sources": sources,
-                   "binding": binding}
+                   "binding": binding, **({"area": row[1]} if row else {})}
+
+
+def decision_conflicts(entries, docs):
+    """Pair different next steps for the same sourced, active question and stated scope."""
+    by_question = {}
+    for row in entries:
+        if row["section"] != "Decisions already closed" or not row["binding"]:
+            continue
+        cells = [cell.strip() for cell in row["text"].strip("|").split("|")]
+        if len(cells) != 5:
+            continue
+        question, scope, _, _, step = cells
+        doc = docs[row["record"]]
+        domain = (doc["product"], row.get("area") or doc["area"], doc["initiative"])
+        key = question.casefold(), " ".join(scope.casefold().split())
+        for previous_domain, previous, previous_step in reversed(by_question.get(key, [])):
+            if previous_step.casefold() == step.casefold():
+                continue
+            if any(a and b and a != b for a, b in zip(domain, previous_domain)):
+                continue
+            yield {"question": question, "scope": scope, "entries": [previous, row]}
+            break
+        by_question.setdefault(key, []).append((domain, row, step))
 
 
 def resolve(private, prompt="", *, cwd=None, previous=None, explicit=None, documents=None):
@@ -307,6 +331,9 @@ def resolve(private, prompt="", *, cwd=None, previous=None, explicit=None, docum
         if re.fullmatch(r"\d{4}-\d{2}-\d{2}", due) and due < date.today().isoformat():
             result["warnings"].append(f"Review overdue for {name}. Confirm current authority before relying on it.")
         entries.extend(linked_entries(doc, areas, through))
+    conflicts = list(islice(decision_conflicts(entries, docs), 5))
+    if conflicts:
+        result["conflicts"] = conflicts
     decisions = Counter((row["record"], *row["text"].split("|")[1:3]) for row in entries
                         if row["section"] == "Decisions already closed" and row["binding"])
     for (record, *_), count in decisions.items():

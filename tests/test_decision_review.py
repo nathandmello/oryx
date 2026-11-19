@@ -1,0 +1,99 @@
+"""Weekly PM review through the published actions and real signed records."""
+
+from datetime import date, timedelta
+import json
+import re
+import unittest
+
+import test_opportunities
+
+
+class WeeklyReviewTests(unittest.TestCase):
+    def setUp(self):
+        self.hub = test_opportunities.InitiativeTests()
+        self.addCleanup(self.hub.doCleanups)
+        self.hub.setUp()
+
+    def scan(self, *arguments):
+        return json.loads(self.hub.cli("action", "portfolio", "decisions", "review", *arguments))
+
+    def test_signed_dates_cap_and_no_write(self):
+        h = self.hub
+        events = [h.setup_event(max_open=9)]
+        for number in range(6):
+            identifier = f"{h.product_id}/request-{number}"
+            events.extend([h.capture(identifier, f"Request number {number}", f"Support log {number}"),
+                           h.decision("defer", identifier, revisit=h.today)])
+        h.submit(*events)
+        before = h.ledger.read_bytes()
+        result = self.scan("--product", "example")
+        self.assertEqual(result, json.loads(h.cli("decision-review", "--product", "example")))
+        self.assertEqual(len(result["findings"]), 5)
+        self.assertIn(result["findings"][0]["subject"], result["next_check"])
+        for row in result["findings"]:
+            self.assertEqual(row["kind"], "decision-due")
+            self.assertIn(h.ledger.relative_to(h.work).as_posix(), row["sources"])
+        self.assertEqual(before, h.ledger.read_bytes())
+        h.cli("decision-review", "--product", "unknown", error="Unknown review product")
+        h.ledger.write_text(h.ledger.read_text().replace("Support log 0", "Changed locator"))
+        h.cli("decision-review", error="signature")
+
+    def test_new_observation_against_observable_trigger_and_hypothesis(self):
+        h = self.hub
+        h.submit(h.setup_event(), h.capture(), h.evidence()[0])
+        self.assertEqual(self.scan()["findings"][0]["kind"], "unassessed-hypothesis")
+        h.submit(h.decision("defer", revisit="Two enterprise accounts request renewal notices."))
+        self.assertEqual(self.scan()["findings"], [])
+        h.submit({"type": "signal", "initiative": h.i, "observed_on": h.today,
+                  "source": "Enterprise interviews, item two", "summary": "Two accounts requested renewal reminders."})
+        row = self.scan()["findings"][0]
+        self.assertEqual(row["kind"], "possible-trigger")
+        self.assertIn("Two enterprise accounts", row["finding"])
+        self.assertIn("Enterprise interviews, item two", row["sources"])
+        self.assertIn("Product review notes", row["sources"])
+        h.submit(h.decision("reopen"))
+        self.assertEqual([r["kind"] for r in self.scan()["findings"]], ["unassessed-hypothesis"])
+        h.submit(h.decision("decline"))
+        self.assertEqual(self.scan(), {"findings": [], "next_check": None})
+
+    def test_six_week_decision_and_forecast_checks_preserve_the_original(self):
+        h = self.hub
+        day = (date.today() - timedelta(weeks=6)).isoformat()
+        later = (date.today() + timedelta(days=3)).isoformat()
+        h.submit(h.setup_event(), {**h.capture(), "observed_on": day},
+                 h.decision("defer", on=day, revisit="Customer panel requests the feature."))
+        decision = json.loads(h.cli("action", "review", "decision", "show", "--product", "example"))[0]["decision"]
+        request = {"operation": "create", "decision": decision, "event": "Ten pilot customers renew",
+                   "probability": 70, "made_on": day, "resolve_on": later,
+                   "criterion": "Read the final total from the pilot renewal report."}
+        preview = json.loads(h.cli("action", "review", "forecast", "preview", value=request))
+        h.cli("action", "review", "forecast", "apply", value=preview)
+        before = h.cli("forecast", "list")
+        rows = self.scan("--product", "example")["findings"]
+        self.assertEqual({row["kind"] for row in rows}, {"decision-age", "forecast-review"})
+        self.assertEqual(h.cli("forecast", "list"), before)
+
+    def test_context_conflict_keeps_sources_and_ignores_sibling_product(self):
+        h = self.hub
+        other = "context/products/unrelated/overview.md"
+        h.cli("new", "product-context", other)
+        yesterday = (date.today() - timedelta(days=1)).isoformat()
+        for path, label, step in [(h.company, "Policy", "Obtain legal clearance."),
+                                  (h.product_context, "Launch notes", "Announce the launch today."),
+                                  (other, "Sibling notes", "Send a private beta invitation.")]:
+            target = h.work / path
+            content = re.sub(r"(?m)^\| \{\{Question resolved.*$",
+                             f"| Release gate? | EU export | PM, {yesterday} | [S1] | {step} |", target.read_text())
+            content = re.sub(r"(?m)^\| \{\{S1\}\}.*$", f"| S1 | {label} | {yesterday} | {yesterday} |", content)
+            if path == h.product_context:
+                content = content.replace("| Review by | event-driven |", f"| Review by | {yesterday} |")
+                content = content.replace("## Constraints\n", "## Constraints\n\n- Assumption: Legal can review the launch this week. [S1]\n")
+            target.write_text(content)
+        result = self.scan("--product", "example")
+        self.assertNotIn("Sibling notes", json.dumps(result))
+        kinds = {row["kind"]: row for row in result["findings"]}
+        self.assertEqual(set(kinds), {"possible-conflict", "stale-assumption", "context-decision-review"})
+        self.assertEqual(set(kinds["possible-conflict"]["sources"]),
+                         {h.company, h.product_context, "Policy", "Launch notes"})
+        context = json.loads(h.cli("task-context", "--product", "example"))
+        self.assertEqual({r["record"] for r in context["conflicts"][0]["entries"]}, {h.company, h.product_context})

@@ -44,6 +44,7 @@ Keep only `README.md`, `AGENTS.md`, `CLAUDE.md`, and `.gitignore` as root files.
 | `private/workspace/initiatives/<product>/<initiative>/` | Discovery Brief and Initiative Brief for the same initiative ID | Private |
 | `private/workspace/initiatives/<product>/<initiative>/{tasks,launch-checklist}.json` | PM tasks and launch checkpoints | Private |
 | `private/workspace/experiments/<product>/<initiative>/` | Editable metric-linked experiment drafts | Private |
+| `private/workspace/forecasts/<id>.json` | Confirmed forecasts linked to existing decisions | Private |
 | `private/workspace/roadmaps/<product>/<cycle>.md` | Comparison of candidates for the planning cycle | Private |
 | `private/settings.json` | Installation settings and expected remotes | Private |
 | `private/.hub-history/` | Recovery copies for reviewed filing conversions | Private |

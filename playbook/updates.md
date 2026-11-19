@@ -2,10 +2,11 @@
 
 Open the updated Hub to verify compatibility.
 
-Releases 0.3.1 through 0.5.0 use private format 2.
+This release uses private format 2.
 
 | Release | Change |
 | --- | --- |
+| 0.7.0 | Adds [decision coaching](conversation.md), [weekly review](decision-review.md), and optional [forecasts](decision-forecasts.md). |
 | 0.5.0 | Adds [Hub commands](commands.md) and optional [reply preferences](working.md#reply-preferences). Existing profiles use Hub defaults. |
 | 0.4.2 | Automates [publication](publication.md). |
 
