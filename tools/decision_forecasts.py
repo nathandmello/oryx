@@ -8,6 +8,7 @@ import re
 import sys
 
 import decision_authority
+import evidence_reviews
 import initiative_events
 import initiative_store
 import layout
@@ -111,7 +112,9 @@ def validate_record(private, data):
     if data["id"] != forecast_id(data):
         raise ValueError("Forecast identity differs from the decision, event or resolution window")
     ref, authority = data["decision"], data["authority"]
-    fields(authority, ("product", "areas", "initiative", "record", "artifact_id", "on", "entry", "sources", "owner_revision"))
+    base_fields = ("product", "areas", "initiative", "record", "artifact_id", "on", "entry", "sources", "owner_revision")
+    optional = ("advisories",) if isinstance(authority, dict) and "advisories" in authority else ()
+    fields(authority, (*base_fields, *optional))
     if (not isinstance(authority["owner_revision"], str) or not DIGEST.fullmatch(authority["owner_revision"])
             or day(authority["on"]) > made or not initiative_events.text(authority["artifact_id"])
             or not isinstance(authority["areas"], list) or not isinstance(authority["sources"], list)
@@ -120,6 +123,8 @@ def validate_record(private, data):
                    or area.split("/")[1] != authority["product"] for area in authority["areas"])):
         raise ValueError("Invalid archived decision scope, evidence or date")
     if ref.get("kind") == "registered":
+        if optional:
+            raise ValueError("Read signed decision evidence from its verified entry")
         fields(ref, ("kind", "product", "initiative", "ordinal", "digest"))
         entry = authority["entry"]
         if (type(ref["ordinal"]) is not int or ref["ordinal"] < 1 or not isinstance(entry, dict)
@@ -140,10 +145,20 @@ def validate_record(private, data):
                 or entry[2].rpartition(", ")[2] != authority["on"]):
             raise ValueError("Invalid archived closed decision row")
         for source in authority["sources"]:
-            if (not isinstance(source, dict) or set(source) - {"files"} != set(records.SOURCE_COLUMNS)
+            if (not isinstance(source, dict) or set(source) - {"files", "coverage"} != set(records.SOURCE_COLUMNS)
+                    or source.get("coverage", "unrecorded") not in ("unrecorded", "read", "partial")
                     or day(source["Source date"]) > made):
                 raise ValueError("A forecast needs decision evidence dated on or before its original estimate")
-        if (ref["digest"] != fingerprint({key: value for key, value in authority.items() if key != "owner_revision"})
+        advisories = authority.get("advisories", [])
+        if not isinstance(advisories, list):
+            raise ValueError("Expected a list of decision advisories")
+        for item in advisories:
+            fields(item, ("id", "record", "state", "reason"))
+            if (not isinstance(item["id"], str) or not re.fullmatch(r"risk-[a-f0-9]{20}", item["id"])
+                    or not all(initiative_events.text(item[key]) for key in ("reason", "record"))
+                    or not isinstance(item["state"], str) or item["state"] not in evidence_reviews.OPEN):
+                raise ValueError("Invalid archived evidence review")
+        if (ref["digest"] != decision_authority.context_digest(authority)
                 or ref["record"] != authority["record"]
                 or ref["artifact_id"] != authority["artifact_id"]):
             raise ValueError("Invalid archived context decision identity")

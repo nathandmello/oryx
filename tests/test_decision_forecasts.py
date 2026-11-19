@@ -149,6 +149,52 @@ class ForecastTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "redirected source"):
             self.authority()
 
+    def test_legacy_forecast_survives_new_source_coverage(self):
+        request = self.request()
+        preview = forecasts.preview(self.root, request)
+        archive = preview["forecast"]
+        source = archive["authority"]["sources"][0]
+        self.assertEqual(source.pop("coverage"), "unrecorded")
+        self.assertEqual(forecasts.fingerprint({k: v for k, v in archive["authority"].items() if k != "owner_revision"}),
+                         archive["decision"]["digest"])
+        # Write the earlier release's format, without coverage metadata.
+        old = forecasts.receipt(None, archive)
+        path = forecasts.target_for(self.private, archive["id"])
+        path.parent.mkdir(parents=True)
+        path.write_text(json.dumps({"forecast": archive, "revision": old["revision"]}))
+        before = path.read_bytes()
+        self.record.write_text(self.record.read_text().replace("## Work state",
+                               f"<!-- source-coverage:S1:partial:{self.today} -->\n\n## Work state"))
+        row, = decision_authority.context(self.private, self.name)
+        self.assertEqual(row["authority"]["sources"][0]["coverage"], "partial")
+        self.assertEqual(row["decision"], archive["decision"])
+        self.assertEqual(forecasts.preview(self.root, request), old)
+        self.assertEqual(forecasts.apply(self.root, old)["id"], archive["id"])
+        self.assertEqual(forecasts.list_records(self.private), [archive])
+        self.assertEqual(path.read_bytes(), before)
+
+    def test_cross_scope_conflict_is_visible_on_confirmation_and_preserved(self):
+        request = self.request()
+        before = forecasts.preview(self.root, request)
+        company = self.private / "context/company/overview.md"
+        header = self.record.read_text().split("## Decisions already closed")[1].split(self.row)[0]
+        conflict = self.row.replace("Mira,", "Legal,").replace("Keep manual reminders.", "Manual reminders require Legal permission.")
+        company.write_text(company.read_text().replace("## Context controls",
+                           "## Decisions already closed" + header + conflict + "\n\n## Context controls"))
+        updated = forecasts.preview(self.root, request)
+        self.assertEqual(before["forecast"]["decision"], updated["forecast"]["decision"])
+        advisory, = updated["forecast"]["authority"]["advisories"]
+        self.assertEqual((advisory["record"], advisory["state"]), (self.name, "open"))
+        with self.assertRaisesRegex(ValueError, "fresh preview"):
+            forecasts.apply(self.root, before)
+        forecasts.apply(self.root, updated)
+        company.write_text(company.read_text().replace("Manual reminders require Legal permission.", "Keep manual reminders."))
+        current, = decision_authority.context(self.private, self.name)
+        self.assertNotIn("advisories", current["authority"])
+        saved, = forecasts.list_records(self.private)
+        self.assertEqual(saved["authority"]["advisories"], [advisory])
+        self.assertEqual(saved["probability"], 75)
+
     def test_competing_reviews_and_invalid_dates(self):
         root = self.root
         proposal = forecasts.preview(root, self.request())

@@ -33,7 +33,7 @@ python3 tools/pm.py forecast decisions --product billing
 python3 tools/pm.py forecast decisions --context context/products/billing/overview.md
 ```
 
-For registered decisions, `--initiative` with the full registered ID narrows the first command. It verifies the register with the trusted PM signer. Closed context decisions require a reviewed overview, a named owner, a dated source and an active decision row. The selector binds to the original decision and source identity. Selecting a revised or superseded row requires reviewing the current reference.
+For registered decisions, `--initiative` with the full registered ID narrows the first command. It verifies the register with the trusted PM signer. Closed context decisions require a reviewed overview, a named owner, a dated source and an active decision row. The selector binds to the original decision and source identity. The preview includes source coverage and applicable open evidence reviews. Forecast confirmation records the prediction and preserves those advisories.
 
 Replace the example’s `decision` with the returned selector. Use the actual dates and a future resolution date. Probability is a number from 0 to 100, including fractional percentages.
 

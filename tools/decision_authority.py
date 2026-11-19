@@ -1,11 +1,13 @@
 """Identify one reviewed decision, preserving its owning scope and the cited evidence."""
 
 from datetime import date
+from html import unescape
 from os.path import normpath
 from pathlib import Path
 import re
 from urllib.parse import unquote, urlsplit
 
+import evidence_reviews
 import initiative_events
 import initiative_store
 import layout
@@ -63,10 +65,46 @@ def cited_archive(private, record, source):
     return archive
 
 
+def context_digest(authority):
+    """Identify the reviewed row and dated citations independently of later review metadata."""
+    identity = {key: value for key, value in authority.items() if key not in {"owner_revision", "advisories"}}
+    identity["sources"] = [{key: value for key, value in source.items() if key != "coverage"}
+                           for source in authority["sources"]]
+    return fingerprint(identity)
+
+
+def context_reviews(docs, doc, areas, through):
+    scope = evidence_reviews.scope_for(doc)
+    selected = [item for item in docs.values() if evidence_reviews.in_scope(item, scope, areas, True)]
+    saved = evidence_reviews.stored(docs.values(), through.isoformat())
+    return evidence_reviews.scoped_reviews(docs, selected, saved, scope, areas, through)
+
+
+def row_advisories(reviews, doc, visible_row, area):
+    result = []
+    for key, review in sorted(reviews.items()):
+        if review["state"] not in evidence_reviews.OPEN or review["scope"].get("area") not in (None, area):
+            continue
+        owner = review["owner"]
+        matches = review["classification"] == "unreadable history" and owner in {doc["record"], doc["parent"]}
+        for claim in review["claims"]:
+            if claim.get("record") != doc["record"] or claim.get("section") != "Decisions already closed":
+                continue
+            if (claim["text"] == visible_row or
+                    (claim.get("source") and claim["text"] and claim["text"] in unescape(visible_row.split("|")[4]))):
+                matches = True
+        if matches:
+            disposition = review.get("disposition", {})
+            result.append({"id": key, "record": owner, "state": review["state"],
+                           "reason": disposition.get("reason", review["reason"])})
+    return result
+
+
 def context(private, record):
     if not isinstance(record, str):
         raise ValueError("Choose a reviewed context record")
-    docs = task_context.context_documents(private)
+    through = date.today()
+    docs = task_context.context_documents(private, through=through)
     doc = docs.get(record)
     if not doc or layout.brief_kind(record) != doc["kind"] or doc["kind"] == "context-note":
         raise ValueError("Choose a context record in its authoritative scope")
@@ -92,15 +130,17 @@ def context(private, record):
     if errors:
         raise ValueError(f"{record}: " + "; ".join(errors))
     area_names = set(task_context.AREA.findall(text))
-    visible = {row["text"] for row in task_context.linked_entries(doc, area_names, date.today())
+    review_areas = area_names | {doc["area"]} if doc["area"] else area_names
+    reviews = context_reviews(docs, doc, review_areas, through)
+    visible = {row["text"] for row in task_context.linked_entries(doc, area_names, through)
                if row["section"] == heading and row["binding"]}
     reviewed = dict(records.table(text, "Context controls", ("Field", "Value"))[0])["Last reviewed"]
     decisions = []
     active_keys = set()
     for row in rows:
         formatted = "| " + " | ".join(row) + " |"
-        if (task_context.SUPERSEDED.search(formatted)
-                or records.visible_section_markup(formatted).strip() not in visible):
+        visible_row = records.visible_section_markup(formatted).strip()
+        if task_context.SUPERSEDED.search(formatted) or visible_row not in visible:
             continue
         key = tuple(cell.casefold() for cell in row[:2])
         if key in active_keys:
@@ -123,7 +163,10 @@ def context(private, record):
         authority = {"product": doc["product"], "areas": areas, "initiative": doc["initiative"],
                      "record": record, "artifact_id": identifier, "on": on, "entry": row,
                      "sources": [cited_archive(private, record, source) for source in sources]}
-        ref = {"kind": "context", "record": record, "artifact_id": identifier, "digest": fingerprint(authority)}
+        ref = {"kind": "context", "record": record, "artifact_id": identifier, "digest": context_digest(authority)}
+        advisories = row_advisories(reviews, doc, visible_row, area)
+        if advisories:
+            authority["advisories"] = advisories
         authority["owner_revision"] = fingerprint(text)
         decisions.append({"decision": ref, "authority": authority})
     return decisions
