@@ -8,6 +8,7 @@ from pathlib import Path
 from tempfile import NamedTemporaryFile
 
 import records
+import layout
 import storage
 
 LEDGER = ".hub-upgrades.json"
@@ -45,12 +46,12 @@ def fresh(private):
     storage.replace_text(scan_marker(private), None, RULE)
 
 
-def review_path(private, name):
+def review_path(private, name, *, markdown=True):
     if not isinstance(name, str):
         raise ValueError("Expected a private Markdown path")
     path = private / name
     if (not name or Path(name).is_absolute() or
-            Path(name).as_posix() != name or path.suffix.lower() != ".md" or
+            Path(name).as_posix() != name or (markdown and path.suffix.lower() != ".md") or
             any(p.startswith(".") or p == "secrets" for p in Path(name).parts) or
             path.resolve() != path or (path.exists() and not path.is_file())):
         raise ValueError("Review paths must identify regular Markdown files inside the private workspace")
@@ -60,11 +61,14 @@ def review_path(private, name):
 def installed_seed(private, name):
     seed = private.parent / "tools" / "workspace-seed"
     source = seed / name
+    if not source.is_file():
+        # This starter was retired when working artifacts moved under workspace/.
+        return ""
     copies = {path: private / path.relative_to(seed) for path in seed.rglob("*") if path.is_file()}
     return records.retarget_links(source.read_text(encoding="utf-8"), source, private / name, private.parent, copies)
 
 
-def candidates(private, inventory):
+def candidates(private, inventory, *, restored_layout=False):
     found = {}
     for path in inventory(private):
         name = path.relative_to(private).as_posix()
@@ -73,9 +77,13 @@ def candidates(private, inventory):
                 any(p.startswith(".") or p == "secrets" for p in parts) or not path.is_file()):
             continue
         text = path.read_text(encoding="utf-8", errors="replace")
-        if name in STARTERS and text == installed_seed(private, name):
+        if (name in STARTERS or name == "workspace/README.md") and text and text == installed_seed(private, name):
             continue
         marker = records.MARKER.match(text)
+        if restored_layout and (name == layout.PROFILE or "sources" in parts or layout.valid_work(name)
+                                or (parts[0] == "context" and marker and
+                                    not records.context_location(marker[1], name))):
+            continue
         if name in STARTERS:
             reason = "Inspect the installed guide and preserve local additions"
         elif marker and marker[1] in records.KINDS:
@@ -119,8 +127,10 @@ def read_state(private):
 
 
 def source_paths(private):
+    import layout_upgrade
     state = read_state(private)[1]
-    return {name for name, item in state.get(RULE, {}).items() if item.get("role") == "source"}
+    return ({name for name, item in state.get(RULE, {}).items() if item.get("role") == "source"}
+            | set(layout_upgrade.receipt(private, state).get("sources", [])))
 
 
 def run(private, inventory, *, prepare=False, record=None, outcome=None, digest=None, note=None):
@@ -130,7 +140,7 @@ def run(private, inventory, *, prepare=False, record=None, outcome=None, digest=
     marker = scan_marker(private)
     items = state.setdefault(RULE, {})
     if needs_setup or not marker.exists():
-        for name, candidate in candidates(private, inventory).items():
+        for name, candidate in candidates(private, inventory, restored_layout="purpose-layout-1" in state).items():
             items.setdefault(name, candidate)
     repaired = []
     if prepare and needs_setup:
@@ -152,14 +162,21 @@ def run(private, inventory, *, prepare=False, record=None, outcome=None, digest=
                     items[name] = {"status": "reviewed", "note": "Updated the exact 0.1 starter paragraph",
                                    "digest": fingerprint(target)}
     if any(value is not None for value in (record, outcome, digest, note)):
-        if (record not in items or outcome not in ("reviewed", "waiting", "source")
+        layout_state = state.get("purpose-layout-1", {})
+        retained = layout_state.get("retained", {})
+        if ((record not in items and record not in retained) or outcome not in ("reviewed", "waiting", "source")
                 or not isinstance(note, str) or not records.specific(note.strip()) or len(note.splitlines()) != 1):
             raise ValueError("Select a review item, outcome, current digest, and specific one-line evidence or blocker")
-        if fingerprint(review_path(private, record)) != digest:
+        if fingerprint(review_path(private, record, markdown=record not in retained)) != digest:
             raise ValueError("Record changed since review; inspect its current contents and digest")
-        items[record] = {"status": "reviewed" if outcome == "source" else outcome, "note": note, "digest": digest}
-        if outcome == "source":
-            items[record]["role"] = "source"
+        if record in items:
+            items[record] = {"status": "reviewed" if outcome == "source" else outcome, "note": note, "digest": digest}
+            if outcome == "source":
+                items[record]["role"] = "source"
+        if record in retained:
+            retained[record]["disposition"] = {"status": outcome, "digest": digest, "note": note}
+            if outcome == "source":
+                layout_state["sources"] = sorted(set(layout_state.get("sources", [])) | {record})
     if prepare and encode(state) != original:
         storage.replace_text(private / LEDGER, original, encode(state))
     if prepare and not marker.exists():

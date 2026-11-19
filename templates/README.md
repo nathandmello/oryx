@@ -6,37 +6,41 @@ Create only the artifact needed for the current work. Templates guide thought; t
 
 | Template | Purpose | Home |
 | --- | --- | --- |
-| [Company context](company-context.md) | Organisation, business model, direction, operations, and constraints | `context/` |
-| [Product context](product-context.md) | Product purpose, users, vocabulary, constraints, and accepted decisions | `products/<product>/` |
-| [Product area context](product-area-context.md) | Standing area boundaries, users, rules, goals, and decisions | `products/<product>/areas/<area>/context.md` |
-| [Initiative context](initiative-context.md) | Outcome, affected workflow, dependencies, and decisions for recurring initiative work | `products/<product>/initiatives/<initiative>/` |
-| [Context note](context-note.md) | Supporting detail that passes [the filing test](../playbook/filing.md) | The owning entity’s `records/` folder or its artifact subfolder |
-| [Goal](goal.md) | The five outcome components and their alignment | Its owning company, product, area, or initiative home |
-| [Problem](problem.md) | Customer problem, evidence, knowledge audit, and research | Its owning company, product, area, or initiative home |
-| [Strategy](strategy.md) | Why, Who, What, and How | Its owning company, product, area, or initiative home |
-| [Experiment](experiment.md) | Hypothesis, test, measure, criterion, and result | Its owning company, product, area, or initiative home |
-| [Roadmap](roadmap.md) | Ordered outcomes and their rationale | Its owning company, product, area, or initiative home |
+| [Company context](company-context.md) | Organisation, business model, direction, operations, and constraints | `context/company/overview.md` |
+| [Product context](product-context.md) | Product purpose, users, vocabulary, constraints, and accepted decisions | `context/products/<product>/overview.md` |
+| [Product area context](product-area-context.md) | Standing area boundaries, users, rules, goals, and decisions | `context/products/<product>/areas/<area>/overview.md` |
+| [Initiative context](initiative-context.md) | Outcome, affected workflow, dependencies, and decisions for recurring initiative work | `context/initiatives/<initiative>/overview.md` |
+| [Context note](context-note.md) | Supporting detail that passes [the filing test](../playbook/filing.md) | One topic level under the owning context entity, when the filing rule permits it |
+| [Goal](goal.md) | The five outcome components and their alignment | `workspace/goals/` |
+| [Problem](problem.md) | Customer problem, evidence, knowledge audit, and research | `workspace/problems/` |
+| [Strategy](strategy.md) | Why, Who, What, and How | `workspace/strategies/` |
+| [Experiment](experiment.md) | Hypothesis, test, measure, criterion, and result | `workspace/experiments/` |
+| [Roadmap](roadmap.md) | Ordered outcomes and their rationale | `workspace/roadmaps/` |
+
+Create a [PM profile](../playbook/context.md#pm-remit) with `new pm-context context/pm/context.md`. Add background and preferences directly in Markdown.
+
+Backlogs in `workspace/backlogs/<subject>.md` and plans in `workspace/initiatives/<initiative>/plan.md` use ordinary Markdown. Cite the applicable entity context.
 
 ## Create a draft
 
-Create an artifact from the system root. Destination paths are relative to `workspace/`:
+Create an artifact from the system root. Destination paths are relative to `private/`.
 
 ```sh
-python3 tools/pm.py new problem products/example/problem.md --title "Example problem"
+python3 tools/pm.py new problem workspace/problems/example-onboarding.md --title "Example problem"
 ```
 
 Use the context templates when the PM starts that work:
 
 ```sh
-python3 tools/pm.py new company-context context/company.md --title "Company context"
-python3 tools/pm.py new product-context products/example/context.md --title "Product context"
-python3 tools/pm.py new initiative-context products/example/initiatives/renewals/context.md --title "Renewals context"
+python3 tools/pm.py new company-context context/company/overview.md --title "Company context"
+python3 tools/pm.py new product-context context/products/example/overview.md --title "Product context"
+python3 tools/pm.py new initiative-context context/initiatives/renewals/overview.md --parent context/products/example/overview.md --title "Renewals context"
 ```
 
 For a separately maintained [product area](../playbook/filing.md#product-area-context), record the reader need and review trigger:
 
 ```sh
-python3 tools/pm.py new product-area-context products/example/areas/refunds/context.md \
+python3 tools/pm.py new product-area-context context/products/example/areas/refunds/overview.md \
   --title "Refunds context" --reason "Support uses refund eligibility rules each week." \
   --trigger "Finance changes the refund policy."
 ```

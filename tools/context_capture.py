@@ -2,19 +2,20 @@
 
 from datetime import date
 from html import escape
-import json
+import pm_profile
 from pathlib import Path
 import re
 from urllib.parse import unquote, urlsplit
 
+import layout
 import records
 import filing
 import storage
 import upgrades
 
-COMPANY_PATH = "context/company.md"
-REMIT_PATH = "context/pm-remit.json"
-TOPICS = records.CONTEXT_TOPICS
+COMPANY_PATH = layout.COMPANY
+REMIT_PATH = pm_profile.PATH
+TOPICS = dict(records.CONTEXT_TOPICS, pm=pm_profile.TOPICS)
 DEFERRED = {"delivery", "detail", "unclear"}
 SLUG = re.compile(r"[a-z0-9]+(?:-[a-z0-9]+)*")
 SUBJECT = re.compile(rf"(?:product/{SLUG.pattern}(?:/area/{SLUG.pattern})?|(?:area|topic)/{SLUG.pattern})")
@@ -142,23 +143,16 @@ def verify_excerpts(inputs, entries, private):
 
 
 def product_path(slug):
-    if not isinstance(slug, str) or not SLUG.fullmatch(slug):
-        raise ValueError("Use an established product slug or route this entry as unclear")
-    return f"products/{slug}/context.md"
+    return layout.product(slug)
 
 
 def initiative_path(product, initiative):
-    if not isinstance(initiative, str) or not SLUG.fullmatch(initiative):
-        raise ValueError("Use an established initiative slug")
-    return f"{Path(product_path(product)).parent.as_posix()}/initiatives/{initiative}/context.md"
+    layout.slug(product)
+    return layout.initiative(initiative)
 
 
 def brief_path(path):
-    parts = Path(path).parts
-    return path == COMPANY_PATH or (
-        bool(parts) and parts[0] == "products" and parts[-1] == "context.md"
-        and (len(parts) == 3 or (len(parts) == 5 and parts[2] in {"initiatives", "areas"}))
-    )
+    return layout.brief_kind(path) is not None
 
 
 def record_path(private, value, *, markdown=True):
@@ -167,8 +161,8 @@ def record_path(private, value, *, markdown=True):
     if (relative.is_absolute() or relative.as_posix() != value or (markdown and relative.suffix != ".md")
             or len(parts) < 2 or any(part.startswith(".") or part == "secrets" for part in parts)):
         raise ValueError("Use a direct workspace-relative record path")
-    if parts[0] != "context" and not (parts[0] == "products" and len(parts) >= 3 and SLUG.fullmatch(parts[1])):
-        raise ValueError("Use context/ or products/<product>/ for a record")
+    if parts[0] not in {"context", "workspace"}:
+        raise ValueError("Use context/ for reference or workspace/ for work")
     target = private / relative
     if target.resolve() != target or (target.exists() and not target.is_file()):
         raise ValueError("Select a regular workspace record")
@@ -191,7 +185,7 @@ def subject_list(value):
     return subjects
 
 
-def validate_remit(private, remit):
+def validate_remit(private, remit, *, legacy=False):
     fields(remit, ("responsibilities", "follow"), ("status",))
     if "status" in remit and remit["status"] not in ("draft", "confirmed"):
         raise ValueError("Remit status must be draft or confirmed")
@@ -212,46 +206,49 @@ def validate_remit(private, remit):
         if not isinstance(responsibility["goals"], list):
             raise ValueError("Use a list of existing goal or metric links")
         for goal in responsibility["goals"]:
-            parsed = urlsplit(line(goal, "Goal link"))
-            if parsed.scheme in ("https", "http") and parsed.hostname and not (
-                parsed.username or parsed.password
-            ):
-                continue
-            if parsed.scheme or parsed.netloc or parsed.query:
-                raise ValueError("Use a workspace path or an HTTP(S) goal link without credentials")
-            if not record_path(private, unquote(parsed.path), markdown=False).is_file():
-                raise ValueError(f"Goal link has no workspace record: {goal}")
+            pm_profile.checked_goal(private, goal, legacy=legacy)
     return remit
 
 
 def remit_path(private):
-    path = private / REMIT_PATH
-    if path.resolve() != path or (path.exists() and not path.is_file()):
-        raise ValueError("PM remit must be a regular file inside the workspace")
-    return path
+    return pm_profile.safe_path(private, REMIT_PATH)
 
 
 def read_remit(private):
     path = remit_path(private)
+    legacy = pm_profile.safe_path(private, pm_profile.LEGACY)
+    if legacy.exists():
+        if path.exists():
+            raise ValueError("Review the existing PM profile and legacy remit before choosing their contents")
+        return validate_remit(private, pm_profile.legacy_data(legacy.read_bytes()), legacy=True)
     if path.is_file():
-        return validate_remit(private, json.loads(path.read_text(encoding="utf-8")))
+        remit = pm_profile.parse(path.read_text(encoding="utf-8"))
+        if remit is not None:
+            return validate_remit(private, remit)
     return None
 
 
 def write_remit(private, remit):
     validate_remit(private, remit)
-    target = remit_path(private)
-    original = target.read_text(encoding="utf-8") if target.is_file() else None
-    candidate = json.dumps(remit, indent=2, ensure_ascii=False) + "\n"
-    if original != candidate:
-        with storage.writer_lock(private):
+    with storage.writer_lock(private):
+        storage.require_visible(private, pm_profile.PATH)
+        if REMIT_PATH in upgrades.source_paths(private):
+            raise ValueError("Preserve the original source at the PM profile path")
+        if pm_profile.safe_path(private, pm_profile.LEGACY).exists():
+            raise ValueError("Finish the legacy remit upgrade before editing the PM profile")
+        target = remit_path(private)
+        original = target.read_bytes().decode("utf-8") if target.is_file() else None
+        if original:
+            previous = pm_profile.parse(original)
+            if previous is not None:
+                validate_remit(private, previous)
+        candidate = pm_profile.render(remit, original)
+        if candidate != original:
             storage.replace_text(target, original, candidate)
 
 
 def remit_status(remit):
-    if remit is None:
-        return "missing"
-    return remit.get("status", "confirmed" if remit["responsibilities"] else "draft")
+    return "missing" if remit is None else pm_profile.effective_status(remit)
 
 
 def inspect_remit(private):
@@ -394,12 +391,25 @@ def area_context(private, product, area):
     matches = []
     originals = upgrades.source_paths(private)
     marker = f"<!-- product-area:{area} -->"
+    initiatives = {}
     for path in storage.inventory(private):
         rel = path.relative_to(private)
-        if (rel.parts[:2] != ("products", product) or rel.as_posix() in originals or path == area_path or path.suffix != ".md"
+        if (rel.parts[:3] != ("context", "products", product) and rel.parts[:2] != ("context", "initiatives")):
+            continue
+        if (rel.as_posix() in originals or path == area_path or path.suffix != ".md"
                 or any(p.startswith(".") or p in {"sources", "secrets"} for p in rel.parts)
                 or path.resolve() != path or not path.is_file()):
             continue
+        if rel.parts[:2] == ("context", "initiatives"):
+            if len(rel.parts) < 4 or not layout.SLUG.fullmatch(rel.parts[2]):
+                continue
+            owning = layout.initiative(rel.parts[2])
+            if owning not in initiatives:
+                candidate = record_path(private, owning)
+                initiatives[owning] = (candidate.is_file() and owning not in originals and
+                                       records.parent_reference(owning, candidate.read_text(encoding="utf-8")) in parents)
+            if not initiatives[owning]:
+                continue
         with path.open("rb") as stream:
             kind = records.MARKER.match(stream.readline(128).decode("utf-8", errors="replace"))
             if not kind or kind[1] not in {"product-context", "initiative-context", "context-note"}:
@@ -427,69 +437,83 @@ def area_context(private, product, area):
             "product_briefs": parents, "inline_entries": matches}
 
 
-def route_home(private, entry, scope, canonical, section, alternatives):
+def route_home(private, entry, scope, canonical, section):
+    if scope == "pm":
+        if "record" in entry:
+            record = entry["record"]
+            fields(record, ("path", "reason"))
+            if record["path"] != REMIT_PATH or not section or not records.specific(line(record["reason"], "Record reason")):
+                raise ValueError("PM background belongs in the PM profile with a supported topic")
+        if not section:
+            return None, None, "source"
+        if pm_profile.safe_path(private, pm_profile.LEGACY).exists():
+            raise ValueError("Finish the legacy remit upgrade before writing to the PM profile")
+        target = remit_path(private)
+        if target.is_file():
+            text = target.read_text(encoding="utf-8")
+            pm_profile.parse(text)
+            pm_profile.capture_block(text)
+            return REMIT_PATH, section, "existing"
+        return REMIT_PATH, section, "new-brief"
+    if scope == "initiative":
+        overview = record_path(private, canonical)
+        if overview.exists():
+            text = overview.read_text(encoding="utf-8")
+            if (not text.startswith("<!-- pm: initiative-context -->\n") or
+                    records.parent_reference(canonical, text) != product_path(entry["product"])):
+                raise ValueError("This initiative already has another or unresolved owning product")
     if "record" not in entry:
-        if section:
-            path = record_path(private, canonical)
-            product_brief = scope == "product" and canonical == product_path(entry["product"])
-            if private.is_dir() and (product_brief or not path.exists()):
-                if canonical not in alternatives:
-                    alternatives[canonical] = (records.product_briefs(private, entry["product"]) if product_brief
-                                               else records.existing_briefs(private, canonical, scope))
-                options = alternatives[canonical]
-                if len(options) > 1:
-                    return None, None, "ambiguous"
-                if options:
-                    canonical = options[0]
-                    path = record_path(private, canonical)
-                elif product_brief and path.exists():
-                    raise ValueError(f"Identify the owning product brief before capturing into {canonical}")
-            if path.is_file():
-                return canonical, target_section(path.read_text(encoding="utf-8"), entry, section), "existing"
+        if not section:
+            return None, None, "deferred" if scope in DEFERRED else "source"
+        path = record_path(private, canonical)
+        if not path.is_file():
             return canonical, section, "new-brief"
-        return None, None, "deferred" if scope in DEFERRED else "source"
+        text = path.read_text(encoding="utf-8")
+        marker = records.MARKER.match(text)
+        if not marker or marker[1] != layout.brief_kind(canonical):
+            raise ValueError(f"Identify the owning brief before capturing into {canonical}")
+        return canonical, target_section(text, entry, section), "existing"
     if scope in DEFERRED:
         raise ValueError("Delivery, detail, and unclear entries stay with their source or await review")
     record = entry["record"]
-    fields(record, ("path", "reason"), ("parent", "basis", "trigger"))
+    fields(record, ("path", "reason"), ("parent", "basis", "trigger", "topic_question", "topic_peer"))
     if not records.specific(line(record["reason"], "Record reason")):
         raise ValueError("Give a concrete reason to use this record")
     target = record_path(private, record["path"])
-    if scope in ("product", "initiative"):
-        product_dir = (private / product_path(entry["product"])).parent
-        if product_dir not in target.parents:
-            raise ValueError("A product record belongs under its own product")
-    elif target.relative_to(private).parts[0] != "context":
-        raise ValueError("Company, area, and reference records belong under context/")
+    if target.relative_to(private).parts[0] == "workspace":
+        if not target.is_file() or not layout.valid_work(record["path"]):
+            raise ValueError("Use the existing workspace artifact's workflow")
+        return record["path"], None, "existing"
+    owner = layout.entity(record["path"])
+    if scope in TOPICS:
+        homes = {layout.entity(canonical)}
+        if scope == "product" and "product_area" in entry:
+            homes.add(Path(layout.area(entry["product"], entry["product_area"])).parent)
+        if owner not in homes:
+            raise ValueError("Choose a record belonging to the declared context entity")
     if brief_path(record["path"]) and (record["path"] != canonical or not section):
         raise ValueError("Select a topic and scope matching the standard context path")
-    parts = target.relative_to(private).parts
-    if scope == "initiative" and len(parts) >= 4 and parts[2] == "initiatives" and parts[3] != entry["initiative"]:
-        raise ValueError("Choose a record belonging to the declared initiative")
-    if scope == "product" and len(filing.home(record["path"]).parts) != 2 and not (
-        "product_area" in entry and filing.home(record["path"]) == Path(records.area_brief_path(entry["product"], entry["product_area"])).parent
-    ):
-        raise ValueError("A product note belongs to the product, outside other areas and initiatives")
-    if scope == "initiative" and filing.home(record["path"]) != filing.home(canonical):
-        raise ValueError("Choose the declared initiative home")
     if target.is_file():
         text = target.read_text(encoding="utf-8")
         marker = records.MARKER.match(text)
         kind = marker[1] if marker else None
         if kind == "context-note":
+            filing.verify_note(private, record["path"], text)
             return record["path"], "Context", "existing"
-        if kind == "product-area-context" and scope == "product" and record["path"] == canonical and section:
+        if brief_path(record["path"]) and kind == layout.brief_kind(record["path"]):
             return canonical, target_section(text, entry, section), "existing"
-        if scope in TOPICS and kind == f"{scope}-context" and section:
-            if records.is_area_path(canonical or ""):
-                raise ValueError("Use the maintained area brief for this standing area entry")
-            return record["path"], target_section(text, entry, section), "existing"
-        return record["path"], None, "existing"
+        raise ValueError("Select a typed reference at its owning context path")
     if brief_path(record["path"]):
         return canonical, section, "new-brief"
-    filing.note_contract(private, record["path"], record.get("parent"), record.get("basis"), record["reason"], record.get("trigger"))
+    note_filing(private, record)
     filing.check_new(private, "context-note", record["path"], None)
     return record["path"], "Context", "new-note"
+
+
+def note_filing(private, record):
+    return filing.note_contract(private, record["path"], record.get("parent"), record.get("basis"),
+                                record["reason"], record.get("trigger"), record.get("topic_question"),
+                                record.get("topic_peer"))
 
 
 def validate_entry_shape(entry, section):
@@ -527,7 +551,9 @@ def route(payload, private, remit=None):
     if not isinstance(payload["entries"], list):
         raise ValueError("entries must be a list")
 
-    alternatives = {}
+    import layout_upgrade
+    blocked = {}
+    initiative_products = {}
     entries = []
     for entry in payload["entries"]:
         fields(entry, ("scope",), ("topic", "product", "product_area", "initiative", "subject", "record", "affects", "source",
@@ -546,9 +572,13 @@ def route(payload, private, remit=None):
             subject = f"product/{entry['product']}"
         elif scope == "initiative":
             canonical = initiative_path(entry.get("product"), entry.get("initiative"))
+            if initiative_products.setdefault(canonical, entry["product"]) != entry["product"]:
+                raise ValueError("Use one accountable product for an initiative in this capture")
             subject = f"product/{entry['product']}"
         elif scope == "company":
             canonical, subject = COMPANY_PATH, "company"
+        elif scope == "pm":
+            canonical, subject = REMIT_PATH, "pm"
         elif scope in ("area", "reference"):
             prefix = "area" if scope == "area" else "topic"
             subject = subject_key(entry.get("subject"), (prefix,))
@@ -567,10 +597,16 @@ def route(payload, private, remit=None):
                 raise ValueError(f"Use a supported brief topic for {scope} scope")
         if scope == "product" and "product_area" in entry and section:
             canonical = standing_area_home(private, entry, canonical, section, sources)
-        requested_section = section
-        destination, section, disposition = route_home(private, entry, scope, canonical, section, alternatives)
-        if disposition == "ambiguous":
-            section = requested_section
+        intended = entry["record"].get("path") if isinstance(entry.get("record"), dict) else canonical
+        if intended is not None and not isinstance(intended, str):
+            raise ValueError("Choose a record path as text")
+        if intended and private.is_dir() and intended not in blocked:
+            blocked[intended] = layout_upgrade.blocked(private, intended)
+        if blocked.get(intended):
+            destination, disposition = None, "ambiguous"
+            entry = dict(entry, candidates=blocked[intended])
+        else:
+            destination, section, disposition = route_home(private, entry, scope, canonical, section)
         validate_entry_shape(entry, section)
         affects = entry.get("affects", {})
         if not isinstance(affects, dict):
@@ -579,6 +615,8 @@ def route(payload, private, remit=None):
             subject_key(affected, ("product", "area"))
             line(reason, "Consequence")
         attention, responsibilities = relevance(remit, subject, affects)
+        if scope == "pm" and not responsibilities:
+            attention = "pm"
 
         if "question" in entry:
             if not section or entry.keys() & {"source", "location", "quote", "answers", "interpretation"}:
@@ -588,6 +626,9 @@ def route(payload, private, remit=None):
             source = entry.get("source")
             if type(source) is not int or not 1 <= source <= len(sources):
                 raise ValueError("Use the 1-based index of a supplied source")
+            if disposition == "new-note" and entry["record"].get("topic_peer"):
+                category = Path(entry["record"]["path"]).parent.name
+                filing.check_source_label(category, [sources[source - 1]["reference"]])
             if sources[source - 1]["coverage"] == "unavailable":
                 raise ValueError("An unavailable source cannot supply an excerpt")
             line(entry.get("location"), "Source location")
@@ -598,8 +639,6 @@ def route(payload, private, remit=None):
                 line(entry["answers"], "Answered question")
             if "interpretation" in entry:
                 line(entry["interpretation"], "Interpretation")
-        if disposition == "ambiguous":
-            entry = dict(entry, candidates=alternatives[canonical])
         entries.append(dict(entry, destination=destination, section=section, disposition=disposition,
                             relevance=attention, responsibilities=responsibilities))
     originals = upgrades.source_paths(private)
@@ -728,14 +767,55 @@ def insert_entries(text, selected, sources, private, target):
     return text
 
 
+def apply_profile(root, private, target, selected, sources, lint):
+    if any(row["scope"] != "pm" or row["section"] not in pm_profile.TOPICS.values() for row in selected):
+        raise ValueError("Choose a PM topic before writing to the PM profile")
+    original = target.read_bytes().decode("utf-8") if target.exists() else None
+    text = "# PM context\n" if original is None else original
+    previous_remit = pm_profile.parse(text)
+    prefix, old_block, suffix = pm_profile.capture_block(text)
+    newline = "\r\n" if "\r\n" in text else "\n"
+    block = (old_block or "").replace("\r\n", "\n")
+    headings = re.findall(r"^## (.+)$", block, re.M)
+    if len(headings) != len(set(headings)) or any(h not in {*pm_profile.TOPICS.values(), "Sources"} for h in headings):
+        raise ValueError("Repair duplicate or unexpected headings in the PM capture block")
+    if old_block is None:
+        columns = records.SOURCE_COLUMNS
+        block = "## Sources\n\n" + table_row(columns) + "\n" + table_row(["---"] * len(columns)) + "\n"
+    for heading in dict.fromkeys(row["section"] for row in selected):
+        if heading not in headings:
+            block = block.replace("## Sources\n", f"## {heading}\n\n## Sources\n", 1)
+    candidate = insert_entries(block, selected, sources, private, target)
+    if candidate == (old_block or "").replace("\r\n", "\n"):
+        return False
+    if old_block is None and prefix:
+        prefix += "" if prefix.endswith(newline * 2) else newline if prefix.endswith(newline) else newline * 2
+    after_end = newline if old_block is None or suffix or text.endswith(("\r", "\n")) else ""
+    block = candidate.rstrip("\n").replace("\n", newline) + newline
+    candidate = prefix + pm_profile.CAPTURE_START + newline + block + pm_profile.CAPTURE_END + after_end + suffix
+    if pm_profile.capture_block(candidate) != (prefix, block, suffix) or pm_profile.parse(candidate) != previous_remit:
+        raise ValueError("Cannot recover PM evidence and remit from Markdown. Check open fences before capture")
+    errors = lint(root, target, candidate)
+    if errors:
+        raise ValueError("PM context capture failed validation:\n" + "\n".join(errors))
+    with storage.writer_lock(private):
+        storage.require_visible(private, pm_profile.PATH)
+        if pm_profile.safe_path(private, pm_profile.LEGACY).exists() or REMIT_PATH in upgrades.source_paths(private):
+            raise ValueError("Preserve the original or legacy PM profile before capturing")
+        storage.replace_text(target, original, candidate)
+    return True
+
+
 def apply(root, destination, plan, owner, lint):
-    private = root / "workspace"
+    private = storage.private_root(root)
     target = record_path(private, destination)
     original = target.read_text(encoding="utf-8") if target.is_file() else None
     marker = records.MARKER.match(original or "")
     selected = [entry for entry in plan["entries"] if entry["destination"] == destination]
     if not selected:
         raise ValueError("Preview the proposed context record and select a destination from that preview")
+    if destination == REMIT_PATH:
+        return apply_profile(root, private, target, selected, plan["sources"], lint)
 
     if original is None:
         kind = "context-note"
@@ -749,12 +829,14 @@ def apply(root, destination, plan, owner, lint):
     if any(entry["section"] not in topics for entry in selected):
         raise ValueError("Use the existing record's workflow, or select a typed context section")
     if original is None:
-        text = records.draft_text(root, kind, target, owner=owner)
+        parent = product_path(selected[0]["product"]) if kind == "initiative-context" else None
+        text = records.draft_text(root, kind, target, owner=owner, product_parent=parent)
         if kind == "context-note":
             definitions = [entry["record"] for entry in selected]
             if any(value != definitions[0] for value in definitions):
                 raise ValueError("Use one filing purpose and parent for this record")
-            text = filing.add_contract(text, private, target, definitions[0])
+            contract = note_filing(private, definitions[0])
+            text = filing.add_contract(text, private, target, contract)
         unused = topics - {entry["section"] for entry in selected}
         for heading in sorted(unused):
             text = re.sub(rf"^## {re.escape(heading)}[ \t]*\n.*?(?=^## |\Z)",
@@ -780,9 +862,14 @@ def apply(root, destination, plan, owner, lint):
     if problems:
         raise ValueError("Context capture failed validation:\n" + "\n".join(problems))
     with storage.writer_lock(private):
+        storage.require_visible(private, destination)
         if "sources" in Path(destination).parts or destination in upgrades.source_paths(private):
             raise ValueError("Original source files cannot be context capture destinations")
         if original is None:
             filing.check_new(private, kind, destination, None)
+            if kind == "context-note" and note_filing(private, selected[0]["record"]) != contract:
+                raise ValueError("Topic or parent changed during capture. Preview the current filing decision")
+        if kind in {"context-note", "product-area-context"}:
+            filing.verify_note(private, destination, candidate)
         storage.replace_text(target, original, candidate)
     return True

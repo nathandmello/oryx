@@ -1,13 +1,9 @@
-# Private PM workspace
+# Private PM repository
 
-This directory has its own Git history and private remote. The containing system repository ignores it.
+This repository holds your reference material and working files. Open the containing Hub in Codex or Claude. Read its [constitution](../../AGENTS.md) and [Git rules](../../playbook/git.md).
 
-Open the containing PM Hub directory in Codex or Claude. Read its [constitution](../../AGENTS.md) and [Git rules](../../playbook/git.md).
+Use [context](context/README.md) to find what is known. Use [workspace](workspace/README.md) to find what is being done.
 
-Read `settings.json` for the owner, delivery system, release, format, and expected remotes. Personal settings stay here.
+Keep your background, preferences, and responsibilities together in `context/pm/context.md`. Keep installation settings and remote locations in `settings.json`.
 
-Keep the current session checkpoint and next action here. Use [the working practices](../../playbook/working.md) for work across sessions.
-
-For first-time setup, start with company context, then product context and strategy. Reuse existing records when new evidence arrives.
-
-Use [context](context/README.md) for the organisation and [products](products/README.md) for product work.
+Keep the current session checkpoint and next action here. Use [the working practices](../../playbook/working.md) across sessions.

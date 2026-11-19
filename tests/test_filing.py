@@ -32,12 +32,12 @@ class FilingTests(unittest.TestCase):
     def legacy(self):
         ledger = self.work / upgrades.LEDGER
         ledger.write_text('{"context-evidence-0.2": {}}')
-        source = self.work / "context/sources/board.md"
-        source.parent.mkdir()
+        source = self.work / "context/company/sources/board.md"
+        source.parent.mkdir(parents=True)
         exclusion = "We will not enter the data centre business or create or own LLM models."
         action = "We will rent capacity as required and use existing models."
         source.write_text(exclusion + "\n" + action + "\n")
-        main = records.create(self.root, "company-context", "context/company.md")
+        main = records.create(self.root, "company-context", "context/company/overview.md")
         old = "- Rule: We prefer existing models. [S1]"
         main.write_text(main.read_text().replace("## Constraints and open questions\n", "## Constraints and open questions\n\n" + old + "\n").replace("| {{S1}}", "| S1 | [Board minutes](sources/board.md) | undated | 2025-01-01 |\n| {{S1}}"))
         side = self.work / "product-scraps-from-meetings.md"
@@ -45,11 +45,11 @@ class FilingTests(unittest.TestCase):
         received = {p: p.read_bytes() for p in (main, side, source)}
         plan = {"id": "board-capacity", "reason": "Restored both exclusions and conditions from the approved board minutes.",
                 "changes": [
-                    {"path": "context/company.md", "before": upgrades.fingerprint(main),
+                    {"path": "context/company/overview.md", "before": upgrades.fingerprint(main),
                      "text": main.read_text().replace(old, "- Rule: " + exclusion + " [S1]\n- Rule: " + action + " [S1]"),
-                     "replacements": [{"line": main.read_text().splitlines().index(old) + 1, "source": "context/sources/board.md",
-                                       "digest": upgrades.fingerprint(source), "quote": exclusion, "destination": "context/company.md"}]},
-                    {"path": side.name, "before": upgrades.fingerprint(side), "into": "context/company.md"}]}
+                     "replacements": [{"line": main.read_text().splitlines().index(old) + 1, "source": "context/company/sources/board.md",
+                                       "digest": upgrades.fingerprint(source), "quote": exclusion, "destination": "context/company/overview.md"}]},
+                    {"path": side.name, "before": upgrades.fingerprint(side), "into": "context/company/overview.md"}]}
         return received, plan
 
     def test_open_finds_arbitrary_names_and_converts_with_verified_recovery(self):
@@ -102,7 +102,7 @@ class FilingTests(unittest.TestCase):
         ignore.write_text(ignore.read_text() + "\n*.zip\n")
         reject("Private Git must include")
         ignore.write_text(ignore.read_text().replace("*.zip", ""))
-        edits[1]["path"] = "context/sources/board.md"
+        edits[1]["path"] = "context/company/sources/board.md"
         reject("Keep original source")
         edits[1]["path"] = side.name
         side.write_text("A different draft.\n")
@@ -137,15 +137,13 @@ class FilingTests(unittest.TestCase):
         self.assertEqual(pm.check(self.root), [])
 
     def test_new_supporting_record_gate_applies_to_company_product_initiative_and_artifact(self):
-        company = records.create(self.root, "company-context", "context/company.md")
-        product = records.create(self.root, "product-context", "products/checkout/context.md")
-        initiative = records.create(self.root, "initiative-context", "products/checkout/initiatives/renewal/context.md")
-        goal = records.create(self.root, "goal", "products/checkout/adoption.md")
-        for parent, folder in ((company, company.parent), (product, product.parent), (initiative, initiative.parent), (goal, goal.parent)):
-            owned = folder / "records"
-            if parent == goal:
-                owned /= goal.stem
-            path = (owned / "supplier-pricing.md").relative_to(self.work).as_posix()
+        company = records.create(self.root, "company-context", "context/company/overview.md")
+        product = records.create(self.root, "product-context", "context/products/checkout/overview.md")
+        initiative = records.create(self.root, "initiative-context", "context/initiatives/renewal/overview.md",
+                                    product_parent=product.relative_to(self.work).as_posix())
+        goal = records.create(self.root, "goal", "workspace/goals/checkout-adoption.md")
+        for parent in (company, product, initiative):
+            path = (parent.parent / "supplier-pricing.md").relative_to(self.work).as_posix()
             incomplete = self.cli("new", "context-note", path)
             self.assertNotEqual(incomplete.returncode, 0)
             args = ("--parent", parent.relative_to(self.work).as_posix(), "--basis", "maintained-reference",
@@ -154,6 +152,10 @@ class FilingTests(unittest.TestCase):
             self.assertEqual(result.returncode, 0, result.stdout)
             self.assertIn("## Filing", (self.work / path).read_text())
             self.assertNotEqual(self.cli("new", "context-note", path, *args).returncode, 0)
+        rejected = self.cli("new", "context-note", "workspace/goals/supplier-pricing.md", "--parent", goal.relative_to(self.work).as_posix(),
+                            "--basis", "maintained-reference", "--reason", "Finance reviews supplier prices.",
+                            "--trigger", "Finance revises the contract.")
+        self.assertNotEqual(rejected.returncode, 0)
         bad = self.cli("new", "company-context", "context/other.md")
         self.assertNotEqual(bad.returncode, 0)
         self.assertEqual(pm.check(self.root), [])
@@ -175,7 +177,7 @@ class FilingTests(unittest.TestCase):
         reference = self.work / "context/review.md"
         reference.write_text(f"[Scope](../{side.name}#missing-section)\n")
         plan["changes"].append({"path": "context/review.md", "before": upgrades.fingerprint(reference),
-                                "text": "[Scope](company.md#missing-section)\n"})
+                                "text": "[Scope](company/overview.md#missing-section)\n"})
         self.assertIn("missing anchor", self.cli("align", "--preview-plan", data=plan).stdout)
         plan["changes"][0]["text"] += '\n<a id="missing-section"></a>\n'
         success = self.cli("align", "--apply-plan", data=plan)
@@ -242,14 +244,15 @@ class FilingTests(unittest.TestCase):
         register.write_text("## Sources\n\n[Minutes](decisions.md)\n")
         plan["changes"][1]["path"] = "context/decisions.md"
         plan["changes"][1]["before"] = upgrades.fingerprint(original)
-        self.assertIn("primary source", self.cli("align", "--apply-plan", data=plan).stdout)
+        self.assertIn("source", self.cli("align", "--apply-plan", data=plan).stdout.lower())
+        self.assertEqual(original.read_bytes(), source.read_bytes())
 
     def test_existing_supporting_record_must_belong_to_the_declared_scope(self):
-        records.create(self.root, "company-context", "context/company.md")
-        records.create(self.root, "product-context", "products/shop/context.md")
-        parent = "products/shop/initiatives/cart/context.md"
-        records.create(self.root, "initiative-context", parent)
-        note = "products/shop/initiatives/cart/records/terms.md"
+        records.create(self.root, "company-context", "context/company/overview.md")
+        records.create(self.root, "product-context", "context/products/shop/overview.md")
+        parent = "context/initiatives/cart/overview.md"
+        records.create(self.root, "initiative-context", parent, product_parent="context/products/shop/overview.md")
+        note = "context/initiatives/cart/terms.md"
         made = self.cli("new", "context-note", note, "--parent", parent, "--basis", "maintained-reference",
                         "--reason", "Operations looks up the latest rates.", "--trigger", "Finance revises rates.")
         self.assertEqual(made.returncode, 0, made.stdout)
@@ -261,20 +264,21 @@ class FilingTests(unittest.TestCase):
 
     def test_refile_a_purposeful_typed_record_to_a_new_home_keeps_its_id(self):
         import filing
-        parent = records.create(self.root, "company-context", "context/company.md")
-        original = records.create(self.root, "context-note", "context/project-friday.md", "Regional rate changes")
+        parent = records.create(self.root, "company-context", "context/company/overview.md")
+        original = self.work / "context/project-friday.md"
+        original.write_text(records.draft_text(self.root, "context-note", original, "Regional rate changes"))
         original.write_bytes(original.read_text().replace("\n", "\r\n").encode())
-        name = "context/records/regional-rates.md"
+        name = "context/company/regional-rates.md"
         destination = self.work / name
-        contract = filing.note_contract(self.work, name, "context/company.md", "maintained-reference",
+        contract = filing.note_contract(self.work, name, "context/company/overview.md", "maintained-reference",
                                         "Finance looks up rates for each market.", "Finance publishes the quarterly rates.")
         new = records.retarget_links(original.read_text(), original, destination, self.root, {})
         new = filing.add_contract(new, self.work, destination, contract)
         plan = {"id": "regional-rates", "reason": "Finance reuses this quarterly reference independently.",
                 "changes": [{"path": name, "before": "absent", "text": new},
                             {"path": "context/project-friday.md", "before": upgrades.fingerprint(original), "into": name},
-                            {"path": "context/company.md", "before": upgrades.fingerprint(parent),
-                             "text": parent.read_text() + "\n[Regional rates](records/regional-rates.md)\n"}]}
+                            {"path": "context/company/overview.md", "before": upgrades.fingerprint(parent),
+                             "text": parent.read_text() + "\n[Regional rates](regional-rates.md)\n"}]}
         expected = original.read_bytes()
         result = self.cli("align", "--apply-plan", data=plan)
         self.assertEqual(result.returncode, 0, result.stdout)

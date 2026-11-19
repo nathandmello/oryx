@@ -8,8 +8,16 @@ import subprocess
 from tempfile import NamedTemporaryFile
 
 
+def private_root(root):
+    """Choose one physical private checkout, including installations awaiting conversion."""
+    current, previous = root / "private", root / "workspace"
+    if os.path.lexists(current) and os.path.lexists(previous):
+        raise ValueError("Both private/ and workspace/ exist. Identify the private repository before alignment")
+    return previous if os.path.lexists(previous) else current
+
+
 @contextmanager
-def writer_lock(private):
+def repository_lock(private):
     # A stable inode in Git metadata survives replacement of the document being edited.
     lock = private / ".git" / "pm-hub-writer.lock"
     if lock.resolve() != lock or not lock.parent.is_dir():
@@ -26,6 +34,31 @@ def writer_lock(private):
             import fcntl
             fcntl.flock(stream, fcntl.LOCK_EX)
         yield  # Closing the descriptor also releases the lock after exceptions.
+
+
+@contextmanager
+def writer_lock(private):
+    root = private.parent
+    if private.name in {"private", "workspace"} and (root / "playbook/release.json").is_file():
+        # The outer inode remains in place when the private checkout changes its name.
+        with repository_lock(root):
+            if private_root(root) != private:
+                raise ValueError("The private repository moved. Retry with its current location")
+            with repository_lock(private):
+                yield
+    else:
+        with repository_lock(private):
+            yield
+
+
+def require_visible(private, relative):
+    """Prevent active writes that the private repository would omit from a save."""
+    check = subprocess.run(["git", "-C", str(private), "check-ignore", "--", str(relative)],
+                           capture_output=True, text=True)
+    if check.returncode == 0:
+        raise ValueError(f"The private repository ignores {relative}. Review its ignore rules before filing")
+    if check.returncode != 1:
+        raise ValueError(f"Cannot verify the private Git status of {relative}")
 
 
 def replace_text(target, original, candidate):
@@ -68,7 +101,7 @@ def inventory(root: Path) -> list[Path]:
             if path.is_symlink():
                 paths.append(path)
                 dirs.remove(name)
-            elif name in SKIP_DIRS or name == "secrets" or (path == root / "workspace"):
+            elif name in SKIP_DIRS or name == "secrets" or (path.parent == root and path.name in {"workspace", "private"} and (root / "tools/pm.py").is_file()):
                 dirs.remove(name)
         paths.extend(Path(directory) / name for name in names)
     return sorted(paths)

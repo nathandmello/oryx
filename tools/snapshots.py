@@ -56,7 +56,7 @@ def protect(path):
 
 
 def local_git(root):
-    for git in (root / ".git", root / "workspace" / ".git"):
+    for git in (root / ".git", storage.private_root(root) / ".git"):
         alternates = git / "objects/info/alternates"
         if ((alternates.exists() and alternates.read_bytes().strip()) or (git / "commondir").exists()
                 or (git / "objects").resolve() != git / "objects" or os.environ.get("GIT_ALTERNATE_OBJECT_DIRECTORIES")):
@@ -103,11 +103,12 @@ def create(root, store, archive):
         raise ValueError("The Hub changed during backup; retry after other writers finish")
 
 
-def ensure(root, version):
+def ensure(root, version, *, layout_change=False):
     """Caller holds the private writer lock. A receipt belongs to this checkout and release."""
     if not re.fullmatch(r"\d+\.\d+\.\d+", version):
         raise ValueError("Invalid snapshot release")
-    receipt = root / "workspace" / ".git" / f"pm-hub-backup-{version}.json"
+    label = f"{version}-layout-2" if layout_change else version
+    receipt = storage.private_root(root) / ".git" / f"pm-hub-backup-{label}.json"
     store = root / ".git" / "pm-hub-backups"
     if receipt.resolve() != receipt or store.resolve() != store:
         raise ValueError("Unsafe backup location")

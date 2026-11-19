@@ -18,8 +18,11 @@ class BackupTests(unittest.TestCase):
     setUp = test_pm.HubTests.setUp
 
     def old(self):
+        legacy = self.root / "workspace"
+        self.work.rename(legacy)
+        self.work = legacy
         settings = self.work / "settings.json"
-        old = json.dumps(dict(json.loads(settings.read_text()), system_version="0.1.0"), indent=2) + "\n"
+        old = json.dumps(dict(json.loads(settings.read_text()), system_version="0.1.0", workspace_format=1), indent=2) + "\n"
         settings.write_text(old)
         (self.work / upgrades.LEDGER).unlink()
         return settings, old
@@ -53,7 +56,7 @@ class BackupTests(unittest.TestCase):
         restored.mkdir(mode=0o700)
         subprocess.run(["tar", "-xpzf", str(archive), "-C", str(restored)], check=True)
         self.assertEqual((restored / "workspace/settings.json").read_text(), old)
-        self.assertEqual((restored / "workspace/.env.local").read_bytes(), binary.read_bytes())
+        self.assertEqual((restored / "workspace/.env.local").read_bytes(), bytes(range(256)))
         self.assertTrue((restored / ".state/empty").is_dir())
         self.assertEqual((restored / ".state/file").read_bytes(), b"local system bytes")
         self.assertFalse((restored / ".git/pm-hub-backups").exists())
@@ -63,7 +66,7 @@ class BackupTests(unittest.TestCase):
             copy = restored / repo.relative_to(self.root)
             subprocess.run(["git", "-C", str(copy), "fsck", "--full"], capture_output=True, check=True)
             self.assertEqual(subprocess.check_output(["git", "-C", str(copy), "status", "--porcelain"]), status)
-        self.assertEqual(json.loads(settings.read_text())["system_version"], pm.workspace.release(self.root)["system_version"])
+        self.assertEqual(json.loads((self.root / "private/settings.json").read_text())["system_version"], pm.workspace.release(self.root)["system_version"])
         pm.alignment(self.root, True)
         self.assertEqual(list(store.glob("*/hub.tar.gz")), [archive])
 
@@ -73,7 +76,7 @@ class BackupTests(unittest.TestCase):
             pm.alignment(self.root, True)
         self.assertEqual(settings.read_text(), original)
         self.assertFalse((self.work / upgrades.LEDGER).exists())
-        archive = snapshots.ensure(self.root, pm.workspace.release(self.root)["system_version"])
+        archive = snapshots.ensure(self.root, pm.workspace.release(self.root)["system_version"], layout_change=True)
         if os.name == "posix":
             archive.chmod(0o644)
             with self.assertRaisesRegex(ValueError, "Restrict"):

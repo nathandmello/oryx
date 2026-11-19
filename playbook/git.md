@@ -1,6 +1,6 @@
 # Git and GitHub operations
 
-The outer checkout is the shared system repository. `workspace/` is an independent private repository, ignored by the system.
+The outer checkout is the shared system repository. `private/` is an independent Git repository, ignored by the system.
 
 Keep each repository's history, branches, staging area, and remotes separate. Open the outer directory in Codex or Claude.
 
@@ -13,7 +13,9 @@ Keep each repository's history, branches, staging area, and remotes separate. Op
 | Contribute a shared system improvement | `system`, on a contribution branch |
 | Check for system updates | `system fetch`; review before a pull |
 
-Interpret an unqualified save, sync, or push as private workspace work. If only system changes exist, report that and clarify the target.
+The command name `workspace` selects the whole private repository, including context.
+
+Interpret an unqualified save, sync, or push as private repository work. If only system changes exist, report that and clarify the target.
 
 For mixed changes, keep commits separate. Authorisation for one target does not authorise the other.
 
@@ -21,9 +23,9 @@ For mixed changes, keep commits separate. Authorisation for one target does not 
 
 Run `python3 tools/pm.py git workspace status` and `python3 tools/pm.py git system status` before a save or synchronisation.
 
-Read `workspace/settings.json`. Verify the actual Git root, branch, changed files, staged changes, and fetch and push URLs.
+Read `private/settings.json`. Verify the actual Git root, branch, changed files, staged changes, and fetch and push URLs.
 
-Stage explicit paths with `git -C workspace add -- <paths>` for PM work. Use the outer root for system changes.
+Stage explicit paths with `git -C private add -- <paths>` for PM work. Use the outer root for system changes.
 
 Review the staged diff, then commit in that same repository. Preserve unrelated edits. Run the relevant checks before a commit.
 
@@ -51,13 +53,13 @@ Shared pull requests use system contribution branches. Private PM work remains i
 
 Use `python3 tools/pm.py git <system|workspace> <fetch|pull|push>` for normal network operations.
 
-The wrapper verifies the repository and origin. It stops for missing settings, mismatched destinations, ambiguous tracking, or dirty files before pull or push.
+The wrapper verifies the repository, settings, origin, and tracking branch. Preserve local changes before synchronising.
 
 Push sends the current branch to the same branch on the confirmed origin. It does not push tags or other branches.
 
-Pull fetches that branch and permits a fast-forward update. Divergent branches need a reviewed reconciliation; keep the existing history.
+Pull permits a fast-forward. Keep divergent histories for reconciliation. See [the two-machine upgrade procedure](updates.md#using-two-machines).
 
-A system pull checks format compatibility first, then updates the private version setting. Save that settings change in the workspace when requested.
+A system pull checks compatibility. The installed release handles the private data update. Save private changes in its repository when requested.
 
 A workspace pull stops if incoming settings change the required system version or expected destinations. Review the matching system release or remote change.
 
@@ -67,15 +69,15 @@ Never infer permission for force pushes, mirrors, bulk pushes, deletion, or hist
 
 ## Boundaries and recovery
 
-Keep PM data, personal settings, and real customer examples inside the private workspace. Shared tests use fictional data.
+Keep PM data, personal settings, and real customer examples inside the private repository. Shared tests use fictional data.
 
-The checker rejects tracked `workspace/` entries, including Git links, in the system index. Ignore rules alone do not remove tracked files.
+The checker rejects tracked `private/` entries and legacy `workspace/` entries in the system index. This includes Git links. Ignore rules alone do not remove tracked files.
 
 Use explicit private paths when the agent searches or checks PM work. Root Git commands omit ignored records.
 
 Record system and workspace format versions together. Structural changes need a tested migration and a recovery point in the private repository.
 
-Keep migrations small. Add one when an actual format change needs it. Hook checks never fetch, pull, push, or migrate.
+Keep migrations small. Session-start alignment applies local upgrades after backup. Network operations require an authorised Git action.
 
 ## Existing workspaces at release
 

@@ -11,3 +11,4 @@ secrets/
 .claude/worktrees/
 .codex/*.local.*
 /workspace/
+/private/

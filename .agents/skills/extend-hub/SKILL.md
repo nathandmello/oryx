@@ -42,4 +42,4 @@ The PM's request authorises work within its scope. Ask only for a missing decisi
 
 Use the placement map in `README.md`. Create templates only for requested artifact types; a future activity alone is insufficient.
 
-For repository operations, read [the Git rules](../../../playbook/git.md). Keep private settings and PM records inside `workspace/`.
+For repository operations, read [the Git rules](../../../playbook/git.md). Keep private settings and PM records inside `private/`.

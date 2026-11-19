@@ -18,6 +18,26 @@ import records
 import workspace
 
 
+def legacy_product(root, private, name):
+    path = private / name
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(records.draft_text(root, "product-context", path, "Earlier product brief"))
+    return path
+
+
+def use_previous_layout(private, version="0.2.0"):
+    import layout_upgrade
+    import upgrades
+    settings = private / "settings.json"
+    values = json.loads(settings.read_text())
+    values.update(system_version=version, workspace_format=1)
+    settings.write_text(json.dumps(values))
+    ledger, values = upgrades.read_state(private)
+    values.pop(layout_upgrade.RULE, None)
+    if ledger is not None:
+        (private / upgrades.LEDGER).write_text(upgrades.encode(values))
+
+
 class HubTests(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
@@ -55,10 +75,11 @@ class HubTests(unittest.TestCase):
         self.assertEqual(pm.check(self.root), [])
 
     def test_high_level_brief_passes_and_prd_copy_fails(self):
-        brief = self.work / "products/initiative.md"
+        brief = self.work / "workspace/initiatives/example/plan.md"
+        brief.parent.mkdir(parents=True)
         brief.write_text("# Initiative\n\nHelp administrators choose their next action.\n")
         self.assertEqual(pm.check(self.root), [])
-        (self.work / "products/PRD-security-hub.md").write_text("# Product specification\n")
+        (brief.parent / "PRD-security-hub.md").write_text("# Product specification\n")
         self.assertTrue(any("engineering artifacts" in error for error in pm.check(self.root)))
 
     def test_writing_limits(self):
@@ -129,7 +150,7 @@ class HubTests(unittest.TestCase):
         result = self.run_hook(json.dumps(payload))
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(json.loads(result.stdout), {})
-        (self.work / "products/prd.md").write_text("# PRD\n")
+        (self.work / "workspace/prd.md").write_text("# PRD\n")
         result = self.run_hook(json.dumps(payload))
         self.assertEqual(json.loads(result.stdout)["decision"], "block")
 
@@ -151,11 +172,12 @@ class HubTests(unittest.TestCase):
         self.assertIn("ingest-context/SKILL.md", guidance)
         for tool, inputs, denied in (
             ("apply_patch", {"command": "*** Begin Patch\n*** Add File: company-audit.md\n+x\n*** End Patch"}, True),
-            ("apply_patch", {"command": "*** Add File: ../products/example/context.md\n+x"}, True),
-            ("apply_patch", {"command": "*** Add File: ../products/example/initiatives/pilot/context.md\n+x"}, True),
+            ("apply_patch", {"command": "*** Add File: ../context/products/example/overview.md\n+x"}, True),
+            ("apply_patch", {"command": "*** Add File: ../context/initiatives/pilot/overview.md\n+x"}, True),
             ("Write", {"file_path": str(cwd / "company-research.md")}, True),
             ("Write", {"file_path": str(cwd / "README.md")}, False),
-            ("Write", {"file_path": str(self.work / "products/example/plan.md")}, True),
+            ("Write", {"file_path": str(self.work / "workspace/initiatives/example/plan.md")}, False),
+            ("Write", {"file_path": str(self.work / "workspace/roadmaps/example.md")}, True),
             ("apply_patch", {"command": "*** Add File: ../../templates/new.md\n+x"}, False),
         ):
             with self.subTest(tool=tool, inputs=inputs):
@@ -170,17 +192,25 @@ class HubTests(unittest.TestCase):
                     self.assertEqual(output, {})
 
     def test_each_template_creates_a_valid_unfinished_draft(self):
-        for kind in records.KINDS:
-            home = "context" if kind == "company-context" else "products/example"
+        import filing
+        paths = {"company-context": "context/company/overview.md", "product-context": "context/products/example/overview.md",
+                 "initiative-context": "context/initiatives/pilot/overview.md", "context-note": "context/company/rates.md",
+                 "product-area-context": "context/products/example/areas/refunds/overview.md",
+                 "goal": "workspace/goals/example.md", "problem": "workspace/problems/example.md",
+                 "strategy": "workspace/strategies/example.md", "experiment": "workspace/experiments/example.md",
+                 "roadmap": "workspace/roadmaps/example.md"}
+        self.assertEqual(set(paths), set(records.KINDS))
+        for kind, path in paths.items():
+            args = {}
             if kind == "product-area-context":
-                # The area template has a specific home and requires its product's filing decision.
-                area_path = "products/example/areas/refunds/context.md"
-                self.assertEqual(subprocess.run([sys.executable, str(self.root / "tools/pm.py"), "new", kind,
-                                 area_path, "--reason", "Support checks the refund rules weekly.",
-                                 "--trigger", "Finance updates the policy."], capture_output=True).returncode, 0)
-                target = self.work / area_path
-            else:
-                target = records.create(self.root, kind, f"{home}/{kind}.md", "A draft")
+                args["filing_contract"] = filing.area_contract(self.work, path, None, None,
+                                                               "Support checks refund rules weekly.", "Finance changes the policy.")
+            elif kind == "context-note":
+                args["filing_contract"] = filing.note_contract(self.work, path, paths["company-context"], "maintained-reference",
+                                                               "Finance reviews regional rates.", "New rates take effect.")
+            elif kind == "initiative-context":
+                args["product_parent"] = paths["product-context"]
+            target = records.create(self.root, kind, path, "A draft", **args)
             values, errors = records.work_state(target.read_text())
             self.assertEqual(errors, [])
             self.assertEqual(values["State"], "draft")
@@ -188,17 +218,17 @@ class HubTests(unittest.TestCase):
         self.assertEqual(pm.check(self.root), [])
 
     def test_creation_never_overwrites_or_escapes(self):
-        target = records.create(self.root, "problem", "context/example.md")
+        target = records.create(self.root, "problem", "workspace/problems/example.md")
         original = target.read_bytes()
         with self.assertRaises(FileExistsError):
-            records.create(self.root, "problem", "context/example.md")
+            records.create(self.root, "problem", "workspace/problems/example.md")
         self.assertEqual(target.read_bytes(), original)
         for destination in ("../outside.md", "context/../../outside.md", "/tmp/outside.md", "README.md"):
             with self.assertRaises(ValueError):
                 records.create(self.root, "problem", destination)
 
     def test_waiting_work_needs_a_concrete_dependency_and_resume_trigger(self):
-        target = records.create(self.root, "problem", "products/example/problem.md")
+        target = records.create(self.root, "problem", "workspace/problems/example.md")
         text = target.read_text().replace("| State | draft |", "| State | waiting |")
         target.write_text(text)
         self.assertTrue(any("Next action" in error for error in pm.check(self.root)))
@@ -211,7 +241,7 @@ class HubTests(unittest.TestCase):
         self.assertEqual(pm.check(self.root), [])
 
     def test_complete_artifacts_cannot_hide_placeholders(self):
-        target = records.create(self.root, "goal", "context/example.md")
+        target = records.create(self.root, "goal", "workspace/goals/example.md")
         text = target.read_text().replace("| State | draft |", "| State | complete |")
         target.write_text(text)
         self.assertTrue(any("resolve placeholders" in error for error in pm.check(self.root)))
@@ -220,7 +250,7 @@ class HubTests(unittest.TestCase):
         self.assertEqual(pm.check(self.root), [])
 
     def test_invalid_modes_and_checkpoints_fail_without_changing_draft_rules(self):
-        target = records.create(self.root, "problem", "context/example.md")
+        target = records.create(self.root, "problem", "workspace/problems/example.md")
         text = target.read_text().replace("| State | draft |", "| State | active |")
         text = text.replace("{{one concrete step}}", "Compare the interview findings.")
         text = text.replace("| Mode | thought-partner |", "| Mode | silent-forever |")
@@ -232,8 +262,8 @@ class HubTests(unittest.TestCase):
         self.assertTrue(any("valid ISO date" in error for error in pm.check(self.root)))
 
     def test_artifact_ids_are_unique_and_sections_are_present(self):
-        target = records.create(self.root, "goal", "context/example.md")
-        duplicate = self.work / "context/duplicate.md"
+        target = records.create(self.root, "goal", "workspace/goals/example.md")
+        duplicate = self.work / "workspace/goals/duplicate.md"
         duplicate.write_text(target.read_text().replace("## Outcome", "## Other"))
         errors = pm.check(self.root)
         self.assertTrue(any("duplicate ID" in error for error in errors))
@@ -242,8 +272,8 @@ class HubTests(unittest.TestCase):
     def test_nested_drafts_retarget_template_links(self):
         source = self.root / "templates/goal.md"
         source.write_text(source.read_text() + "\nRead [the framework](../playbook/framework.md).\n")
-        target = records.create(self.root, "goal", "products/example/goals/goal.md")
-        self.assertIn("../../../../playbook/framework.md", target.read_text())
+        target = records.create(self.root, "goal", "workspace/goals/example.md")
+        self.assertIn("../../../playbook/framework.md", target.read_text())
         self.assertEqual(pm.check(self.root), [])
 
     def test_guidance_cannot_accumulate_at_the_root(self):
@@ -259,7 +289,7 @@ class HubTests(unittest.TestCase):
         extra.write_text("# Persona\n")
         self.assertTrue(any("unregistered template" in error for error in pm.check(self.root)))
 
-    def context_record(self, kind="company-context", path="context/company.md", parent="none"):
+    def context_record(self, kind="company-context", path="context/company/overview.md", parent="none"):
         target = records.create(self.root, kind, path, owner="Fixture PM")
         text = target.read_text()
         for name in re.findall(r"^## (.+)$", text, re.M):
@@ -286,8 +316,8 @@ class HubTests(unittest.TestCase):
 
     def test_contexts_can_record_gaps_and_link_to_parent_without_copies(self):
         self.context_record()
-        product = self.context_record("product-context", "products/example/context.md",
-                                      "[Company](../../context/company.md)")
+        product = self.context_record("product-context", "context/products/example/overview.md",
+                                      "[Company](../../company/overview.md)")
         text = product.read_text().replace("- Unknown: Evidence has not arrived.",
                                            "- Fact: This is a fixture. [S1]", 1)
         text = text.replace("| State | active |", "| State | complete |")
@@ -350,18 +380,17 @@ class HubTests(unittest.TestCase):
 
     def test_context_parent_must_exist_have_right_type_and_avoid_cycles(self):
         company = self.context_record()
-        product = self.context_record("product-context", "products/example/context.md",
-                                      "[Company](../../context/company.md)")
+        product = self.context_record("product-context", "context/products/example/overview.md",
+                                      "[Company](../../company/overview.md)")
         original = product.read_text()
         for parent in ("none", "[Missing](../../context/missing.md)", "[Readme](../../context/README.md)",
                        "[Template](../../templates/company-context.md)",
                        "[External](https://example.com/company.md)"):
             with self.subTest(parent=parent):
-                product.write_text(original.replace("[Company](../../context/company.md)", parent))
+                product.write_text(original.replace("[Company](../../company/overview.md)", parent))
                 self.assertTrue(any("Parent context" in error for error in pm.check(self.root)))
         product.write_text(original)
-        self.context_record(path="context/unit.md", parent="[Company](company.md)")
-        company.write_text(company.read_text().replace("| Parent context | none |", "| Parent context | [Unit](unit.md) |"))
+        company.write_text(company.read_text().replace("| Parent context | none |", "| Parent context | [Self](overview.md) |"))
         self.assertTrue(any("forms a cycle" in error for error in pm.check(self.root)))
 
     def test_context_location_and_control_structure_are_enforced(self):
@@ -377,8 +406,8 @@ class HubTests(unittest.TestCase):
         target.write_text(original.replace("| Maintainer | Fixture PM |", "| Maintainer | Fixture PM |\n| Maintainer | Fixture PM |"))
         self.assertTrue(any("duplicate context control" in error for error in pm.check(self.root)))
         target.write_text(original)
-        target.rename(self.work / "products/company.md")
-        self.assertTrue(any("company context belongs" in error for error in pm.check(self.root)))
+        target.rename(self.work / "workspace/company.md")
+        self.assertTrue(any("canonical entity overview path" in error for error in pm.check(self.root)))
 
     def test_context_can_wait_across_sessions_with_explicit_gaps(self):
         target = self.context_record()
@@ -421,7 +450,7 @@ class HubTests(unittest.TestCase):
         self.assertEqual(preview.returncode, 0, preview.stdout + preview.stderr)
         plan = json.loads(preview.stdout)
         self.assertEqual([row["destination"] for row in plan["entries"]],
-                         ["context/company.md", "products/example/context.md", "context/company.md", None])
+                         ["context/company/overview.md", "context/products/example/overview.md", "context/company/overview.md", None])
         self.assertEqual([row["coverage"] for row in plan["sources"]], ["read", "unavailable"])
         self.assertEqual(set(pm.inventory(self.work)), before)
 
@@ -430,19 +459,19 @@ class HubTests(unittest.TestCase):
             self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
             return json.loads(result.stdout)["written"]
 
-        self.assertEqual(write("context/company.md"), "context/company.md")
-        company = self.work / "context/company.md"
+        self.assertEqual(write("context/company/overview.md"), "context/company/overview.md")
+        company = self.work / "context/company/overview.md"
         company_text = company.read_text()
         constraints = records.section(company_text, "Constraints and open questions")
         self.assertIn(exclusion, constraints)
         self.assertIn(rental, constraints)
         self.assertNotIn(product_detail, company_text)
         self.assertEqual(set(pm.inventory(self.work)) - before, {company})
-        self.assertIsNone(write("context/company.md"))
+        self.assertIsNone(write("context/company/overview.md"))
         self.assertEqual(company.read_text(), company_text)
 
-        self.assertEqual(write("products/example/context.md"), "products/example/context.md")
-        product = self.work / "products/example/context.md"
+        self.assertEqual(write("context/products/example/overview.md"), "context/products/example/overview.md")
+        product = self.work / "context/products/example/overview.md"
         self.assertIn(product_detail, records.section(product.read_text(), "The product"))
         self.assertNotIn(exclusion, product.read_text())
         self.assertEqual(company.read_text(), company_text)
@@ -458,7 +487,7 @@ class HubTests(unittest.TestCase):
             {"scope": "company", "topic": "operations", "question": item}
             for item in (question, other)
         ]}
-        result = self.context_capture(questions, "--write", "context/company.md")
+        result = self.context_capture(questions, "--write", "context/company/overview.md")
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         text = company.read_text()
         self.assertIn(f"- Unknown: {question}", text)
@@ -473,7 +502,7 @@ class HubTests(unittest.TestCase):
             "entries": [{"scope": "company", "topic": "operations", "source": 1,
                          "location": "Page 2", "quote": answer, "answers": question}],
         }
-        result = self.context_capture(resolved, "--write", "context/company.md")
+        result = self.context_capture(resolved, "--write", "context/company/overview.md")
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         text = company.read_text()
         self.assertIn(answer, text)
@@ -495,7 +524,7 @@ class HubTests(unittest.TestCase):
         payload["sources"] = [{"reference": "Unavailable source", "date": "unknown", "coverage": "unavailable"}]
         payload["entries"] = [{"scope": "company", "topic": "direction", "source": 1,
                                "location": "Page 1", "quote": "No source read."}]
-        result = self.context_capture(payload, "--write", "context/company.md")
+        result = self.context_capture(payload, "--write", "context/company/overview.md")
         self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
         self.assertIn("cannot supply an excerpt", result.stdout)
         self.assertEqual(set(pm.inventory(self.work)), before)
@@ -507,11 +536,11 @@ class HubTests(unittest.TestCase):
         )
 
     def test_pm_remit_changes_relevance_without_moving_records(self):
-        records.create(self.root, "goal", "products/checkout/goal.md")
-        records.create(self.root, "company-context", "context/company.md")
+        records.create(self.root, "goal", "workspace/goals/checkout.md")
+        records.create(self.root, "company-context", "context/company/overview.md")
         remit = {
             "responsibilities": [
-                {"subject": "product/checkout", "role": "owner", "goals": ["products/checkout/goal.md"],
+                {"subject": "product/checkout", "role": "owner", "goals": ["workspace/goals/checkout.md"],
                  "depends_on": ["product/billing"]},
                 {"subject": "area/pricing", "role": "shared", "goals": [], "depends_on": []},
             ],
@@ -527,7 +556,7 @@ class HubTests(unittest.TestCase):
             {"scope": "company", "topic": "direction", "quote": "The company will change its pricing.",
              "affects": {"product/checkout": "Checkout fees change."}},
             {"scope": "area", "subject": "area/pricing", "quote": "Pricing reviews occur quarterly.",
-             "record": {"path": "context/records/pricing-review.md", "parent": "context/company.md",
+             "record": {"path": "context/company/pricing-review.md", "parent": "context/company/overview.md",
                         "basis": "maintained-reference", "trigger": "Finance publishes a price change.",
                         "reason": "Track the recurring reviews."}},
             {"scope": "reference", "subject": "topic/benchmarks", "quote": "New benchmarks are available."},
@@ -543,7 +572,7 @@ class HubTests(unittest.TestCase):
         initial = preview()
         self.assertEqual([entry["relevance"] for entry in initial],
                          ["owned", "dependency", "affected", "shared", "following", "fyi"])
-        self.assertEqual(initial[1]["responsibilities"][0]["goals"], ["products/checkout/goal.md"])
+        self.assertEqual(initial[1]["responsibilities"][0]["goals"], ["workspace/goals/checkout.md"])
         self.assertEqual(initial[1]["disposition"], "source")
         self.assertEqual(initial[5]["disposition"], "source")
         remit["responsibilities"].pop(0)
@@ -557,15 +586,16 @@ class HubTests(unittest.TestCase):
         self.assertEqual(pm.check(self.root), [])
 
     def test_context_capture_reuses_records_and_creates_only_an_authorised_note(self):
-        goal = records.create(self.root, "goal", "context/renewal-goal.md")
+        goal = records.create(self.root, "goal", "workspace/goals/renewal.md")
         original = goal.read_text()
         source = {"reference": "Fixture supplier memo", "date": "undated", "coverage": "read",
                   "checked_on": date.today().isoformat()}
         entry = {"scope": "area", "subject": "area/vendor-risk", "source": 1, "location": "Section 2",
                  "quote": "We will review contracts every quarter."}
-        paths = "context/records/renewal-goal/vendor-reviews.md", "context/renewal-goal.md"
+        records.create(self.root, "company-context", "context/company/overview.md")
+        paths = "context/company/vendor-reviews.md", "workspace/goals/renewal.md"
         payload = {"sources": [source], "entries": [
-            dict(entry, record={"path": path, "reason": "Track review obligations.", "parent": paths[1],
+            dict(entry, record={"path": path, "reason": "Track review obligations.", "parent": "context/company/overview.md",
                                 "basis": "maintained-reference", "trigger": "The vendor renews a contract."}) for path in paths
         ]}
         before = set(pm.inventory(self.work))
@@ -598,14 +628,14 @@ class HubTests(unittest.TestCase):
             {"scope": "product", "product": "checkout", "topic": "ownership", "source": 1,
              "location": "Announcement", "quote": quote, "interpretation": effect},
         ]}
-        result = self.context_capture(payload, "--write", "products/checkout/context.md")
+        result = self.context_capture(payload, "--write", "context/products/checkout/overview.md")
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
-        context = self.work / "products/checkout/context.md"
+        context = self.work / "context/products/checkout/overview.md"
         text = context.read_text()
         self.assertIn(f"- Interpretation: {effect} [S1] (Announcement)", text)
         self.assertIn(f"  > {quote}", text)
         self.assertIn(cite["reference"], text)
-        self.assertFalse((self.work / "products/billing").exists())
+        self.assertFalse((self.work / "context/products/billing").exists())
         self.assertEqual(pm.check(self.root), [])
 
     def test_lean_context_keeps_optional_sections_out_and_accepts_event_review(self):
@@ -619,7 +649,7 @@ class HubTests(unittest.TestCase):
         payload = {"sources": [], "entries": [
             {"scope": "company", "topic": "constraints", "question": "Who owns the pricing exception?"}
         ]}
-        result = self.context_capture(payload, "--write", "context/company.md")
+        result = self.context_capture(payload, "--write", "context/company/overview.md")
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertIn("Who owns the pricing exception?", company.read_text())
         self.assertEqual(set(re.findall(r"^## (.+)$", company.read_text(), re.M)),
@@ -629,7 +659,7 @@ class HubTests(unittest.TestCase):
         self.assertTrue(any("complete context needs" in error for error in pm.check(self.root)))
 
     def test_capture_keeps_legacy_product_routes_without_adding_duplicate_sections(self):
-        target = records.create(self.root, "product-context", "products/example/context.md")
+        target = records.create(self.root, "product-context", "context/products/example/overview.md")
         target.write_text(target.read_text().replace("## The product", "## Current offer"))
         stamp = date.today().isoformat()
         payload = {
@@ -638,7 +668,7 @@ class HubTests(unittest.TestCase):
             "entries": [{"scope": "product", "product": "example", "topic": "offer",
                          "source": 1, "location": "Page 1", "quote": "It supports branch reporting."}],
         }
-        result = self.context_capture(payload, "--write", "products/example/context.md")
+        result = self.context_capture(payload, "--write", "context/products/example/overview.md")
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         text = target.read_text()
         self.assertIn("It supports branch reporting.", records.section(text, "Current offer"))
@@ -647,8 +677,8 @@ class HubTests(unittest.TestCase):
 
     def test_capture_routes_structured_context_across_company_product_and_initiative(self):
         stamp = date.today().isoformat()
-        paths = ("context/company.md", "products/example/context.md",
-                 "products/example/initiatives/renewals/context.md")
+        paths = ("context/company/overview.md", "context/products/example/overview.md",
+                 "context/initiatives/renewals/overview.md")
         person = "Fixture PM"
         payload = {
             "sources": [{"reference": "Fixture approved decisions", "date": stamp,
@@ -677,7 +707,7 @@ class HubTests(unittest.TestCase):
         self.assertIn("- Rule: Use approved usage summaries.", company.read_text())
         self.assertIn("| workspace | A workspace is the access boundary.", product.read_text())
         self.assertIsNone(records.section(product.read_text(), "The users"))
-        self.assertIn("[Product context](../../context.md)", initiative.read_text())
+        self.assertIn("[Product context](../../products/example/overview.md)", initiative.read_text())
         decisions = records.section(initiative.read_text(), "Decisions already closed")
         self.assertIn(f"| How do users authenticate? | Renewal pilot | {person}, {stamp} |", decisions)
         self.assertIn("Use existing sessions because renewal needs no new login. [S1]", decisions)
@@ -689,7 +719,7 @@ class HubTests(unittest.TestCase):
         invalid = original.replace("| Brief the pilot team. |", "|  |")
         initiative.write_text(invalid)
         self.assertTrue(any("need every field" in error for error in pm.check(self.root)))
-        initiative.write_text(original.replace("[Product context](../../context.md)", "[Company](../../../../context/company.md)"))
+        initiative.write_text(original.replace("[Product context](../../products/example/overview.md)", "[Company](../../company/overview.md)"))
         self.assertTrue(any("same product" in error for error in pm.check(self.root)))
         initiative.write_text(original)
         payload["entries"][2]["decision"].pop("next_step")
@@ -701,14 +731,15 @@ class HubTests(unittest.TestCase):
         blank = {"responsibilities": [], "follow": []}
         result = self.save_remit(blank)
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
-        target = self.work / "context/pm-remit.json"
+        target = self.work / "context/pm/context.md"
+        before = target.read_bytes()
         blank["responsibilities"] = [
             {"subject": "area/pricing", "role": "owner", "goals": ["context/missing.md"], "depends_on": []}
         ]
         result = self.save_remit(blank)
         self.assertEqual(result.returncode, 1)
-        self.assertIn("has no workspace record", result.stdout)
-        self.assertEqual(json.loads(target.read_text())["responsibilities"], [])
+        self.assertIn("has no private record", result.stdout)
+        self.assertEqual(target.read_bytes(), before)
 
     def run_hook(self, payload):
         return subprocess.run(

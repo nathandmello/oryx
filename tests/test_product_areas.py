@@ -54,7 +54,7 @@ class ProductAreaTests(unittest.TestCase):
         got = json.loads(preview.stdout)["entries"]
         self.assertEqual([r["relevance"] for r in got], [want for _, _, want in routes] + ["affected", "affected", "company"])
         self.assertEqual([r["destination"] for r in got[:len(routes)]],
-                         [f"products/{product}/context.md" for product, _, _ in routes])
+                         [f"context/products/{product}/overview.md" for product, _, _ in routes])
         self.assertEqual(got[-3]["responsibilities"], [remit["responsibilities"][0]])
 
     def test_exact_area_role_wins_regardless_of_order(self):
@@ -72,14 +72,14 @@ class ProductAreaTests(unittest.TestCase):
             self.assertEqual(both, ("affected", responsibilities))
 
     def test_area_scope_survives_capture_answers_and_structured_rows(self):
-        records.create(self.root, "company-context", "context/company.md")
+        records.create(self.root, "company-context", "context/company/overview.md")
         fact = {"scope": "product", "product": "shop", "product_area": "refunds", "topic": "constraints",
                 "source": 1, "location": "Policy", "quote": "We will reimburse fees."}
         source = {"reference": "Fixture policy", "coverage": "read", "date": "undated", "checked_on": "2025-01-01"}
         question = {"scope": "product", "product": "shop", "topic": "constraints", "question": "Which fees?"}
         rows = [dict(question, product_area=area) for area in ("refunds", "receipts")]
         rows.extend([question, dict(question, question="Product area refunds — Which fees?")])
-        name = "products/shop/context.md"
+        name = "context/products/shop/overview.md"
         def write(entries, dest=name):
             run = self.capture({"sources": [source], "entries": entries}, "--write", dest)
             self.assertEqual(run.returncode, 0, run.stdout)
@@ -101,11 +101,11 @@ class ProductAreaTests(unittest.TestCase):
         self.assertIn("| Fee | Product area refunds — We will reimburse fees.", text)
         self.assertIn("| Refund the fee? | Product area refunds — Pilot <!-- product-area:refunds --> |", text)
         initiative = dict(fact, scope="initiative", initiative="returns", topic="constraints")
-        dest = "products/shop/initiatives/returns/context.md"
+        dest = "context/initiatives/returns/overview.md"
         write([initiative], dest)
         self.assertIn("> We will reimburse fees.", (self.work / dest).read_text())
-        self.assertEqual(sorted(p.relative_to(self.work).as_posix() for p in (self.work / "products/shop").rglob("*.md")),
-                         [name, dest])
+        self.assertEqual({p.relative_to(self.work).as_posix() for directory in ("context/products", "context/initiatives")
+                          for p in (self.work / directory).rglob("*.md")}, {name, dest})
         self.assertEqual(pm.check(self.root), [])
 
     def test_invalid_areas_do_not_rewrite_existing_remits_or_create_records(self):
@@ -124,7 +124,7 @@ class ProductAreaTests(unittest.TestCase):
             if scope == "product":
                 row["product"] = "checkout"
             self.assertNotEqual(self.capture({"sources": [], "entries": [row]}).returncode, 0)
-        self.assertFalse((self.work / "products/checkout").exists())
+        self.assertFalse((self.work / "context/products/checkout").exists())
 
     def test_new_and_existing_workspace_prompts(self):
         empty = {"responsibilities": [], "follow": []}
@@ -156,41 +156,48 @@ class ProductAreaTests(unittest.TestCase):
 
     def test_damaged_remit_is_reported_and_capture_preserves_it(self):
         path = self.work / context_capture.REMIT_PATH
-        path.write_text('{"responsibilities":')
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("# PM context\n\n## PM remit\n\nStatus: broken\n")
         original = path.read_bytes()
         self.assertIn("repairing", self.startup())
         question = {"scope": "product", "product": "shop", "product_area": "returns", "topic": "constraints",
                     "question": "What returns window applies?"}
-        result = self.capture({"sources": [], "entries": [question]}, "--write", "products/shop/context.md")
+        result = self.capture({"sources": [], "entries": [question]}, "--write", "context/products/shop/overview.md")
         self.assertEqual(result.returncode, 0, result.stdout)
         plan = json.loads(result.stdout)
         self.assertEqual(plan["remit_status"], "invalid")
         self.assertTrue(plan["remit_error"])
         self.assertEqual(plan["entries"][0]["relevance"], "unknown")
         self.assertEqual(path.read_bytes(), original)
-        self.assertTrue(any("pm-remit.json" in e for e in pm.check(self.root)))
+        self.assertTrue(any("pm/context.md" in e for e in pm.check(self.root)))
 
     def test_old_install_preserves_remit_and_legacy_areas(self):
-        path = self.work / context_capture.REMIT_PATH
+        import tarfile
+        old = self.work / "context/pm-remit.json"
         remit = {"responsibilities": [self.responsibility("area/checkout")], "follow": ["product/checkout"]}
-        path.write_text(json.dumps(remit))
+        original = (json.dumps(remit, indent=2) + "\r\n").encode()
+        old.write_bytes(original)
         settings = self.work / "settings.json"
         data = json.loads(settings.read_text())
-        data["system_version"] = "0.2.0"
+        data.update(system_version="0.2.0", workspace_format=1)
         settings.write_text(json.dumps(data))
-        before = path.read_bytes()
         report = json.loads(self.cli("align"))
-        self.assertTrue(Path(report["installation_backup"]).is_file())
         self.assertNotIn("remit_prompt", report)
-        self.assertEqual(path.read_bytes(), before)
-        self.assertEqual(json.loads(settings.read_text())["system_version"], "0.3.0")
+        with tarfile.open(report["installation_backup"]) as archive:
+            self.assertEqual(archive.extractfile(f"{self.work.name}/context/pm-remit.json").read(), original)
+        profile = context_capture.read_remit(self.work)
+        self.assertEqual(profile["responsibilities"], remit["responsibilities"])
+        self.assertEqual(profile["follow"], remit["follow"])
+        self.assertTrue((self.work / "context/pm/context.md").is_file())
+        self.assertFalse(old.exists())
+        self.assertEqual(json.loads(settings.read_text())["workspace_format"], 2)
         self.assertEqual(context_capture.relevance(remit, "product/checkout/area/checkout", {}), ("following", []))
 
     def test_independent_area_brief_preserves_inline_evidence_and_answer_home(self):
-        product = "products/shop/context.md"
-        area = "products/shop/areas/refunds/context.md"
-        initiative = "products/shop/initiatives/pilot/context.md"
-        records.create(self.root, "company-context", "context/company.md")
+        product = "context/products/shop/overview.md"
+        area = "context/products/shop/areas/refunds/overview.md"
+        initiative = "context/initiatives/pilot/overview.md"
+        records.create(self.root, "company-context", "context/company/overview.md")
         source = {"reference": "Finance minutes", "date": "undated", "checked_on": "2025-01-01", "coverage": "read"}
         question = {"scope": "product", "product": "shop", "product_area": "refunds", "topic": "constraints",
                     "question": "Who approves a refund?"}
@@ -205,7 +212,7 @@ class ProductAreaTests(unittest.TestCase):
 
         capture([question, fact, dict(question, product_area="invoices")], "--write", product)
         capture([dict(fact, scope="initiative", initiative="pilot")], "--write", initiative)
-        capture([dict(question, product="other")], "--write", "products/other/context.md")
+        capture([dict(question, product="other")], "--write", "context/products/other/overview.md")
         original = (self.work / product).read_bytes()
         self.assertIsNone(view()["area_brief"])
         self.assertFalse((self.work / area).exists())
@@ -231,7 +238,7 @@ class ProductAreaTests(unittest.TestCase):
         self.assertEqual([row["destination"] for row in batch["entries"]], [area, product, initiative, product])
         capture([fresh], "--write", area)
         self.assertIn("Area scope and ownership", (self.work / area).read_text())
-        self.assertIn("[Product context](../../context.md)", (self.work / area).read_text())
+        self.assertIn("[Product context](../../overview.md)", (self.work / area).read_text())
         self.assertIsNone(capture([fact], "--write", product)["written"])
         answer = dict(fact, quote="The Finance Director approves refunds.", answers=question["question"])
         capture([answer], "--write", product)
@@ -247,15 +254,21 @@ class ProductAreaTests(unittest.TestCase):
         self.assertEqual(pm.check(self.root), [])
 
     def test_area_brief_uses_legacy_parent_and_refuses_path_conflicts(self):
-        product = "products/shop/history/overview.md"
-        area = "products/shop/areas/refunds/context.md"
-        records.create(self.root, "product-context", product)
-        (self.work / "products/shop/context.md").write_text("# Product navigation\n")
+        product = "context/products/shop/overview.md"
+        area = "context/products/shop/areas/refunds/overview.md"
+        old = test_pm.legacy_product(self.root, self.work, "products/shop/history/overview.md")
+        previous_id = records.work_state(old.read_text())[0]["ID"]
+        navigation = self.work / "products/shop/context.md"
+        navigation.write_text("# Product navigation\n")
+        test_pm.use_previous_layout(self.work)
+        self.cli("align")
+        self.assertEqual(records.work_state((self.work / product).read_text())[0]["ID"], previous_id)
+        self.assertEqual(navigation.read_text(), "# Product navigation\n")
         self.cli("new", "product-area-context", area, "--reason", "Finance checks this policy monthly.",
                  "--trigger", "Policy owner issues a revision.")
-        self.assertIn("[Product context](../../history/overview.md)", (self.work / area).read_text())
+        self.assertIn("[Product context](../../overview.md)", (self.work / area).read_text())
         self.assertEqual(json.loads(self.cli("area-context", "shop", "refunds"))["product_briefs"], [product])
-        existing = "products/shop/areas/invoices/context.md"
+        existing = "context/products/shop/areas/invoices/overview.md"
         path = self.work / existing
         path.parent.mkdir(parents=True)
         path.write_text("# A private customer record\n")
@@ -267,12 +280,12 @@ class ProductAreaTests(unittest.TestCase):
         self.assertNotEqual(self.capture({"sources": [], "entries": [foreign]}, "--write", area).returncode, 0)
 
     def test_area_filing_guard_protects_contract_sources_and_reserved_home(self):
-        product = "products/shop/context.md"
-        area = "products/shop/areas/refunds/context.md"
-        candidate = "products/shop/sources/approved.md"
-        other = "products/shop/original.md"
-        records.create(self.root, "product-context", candidate)
-        records.create(self.root, "product-context", other)
+        product = "context/products/shop/overview.md"
+        area = "context/products/shop/areas/refunds/overview.md"
+        candidate = "context/products/shop/sources/approved.md"
+        other = "context/products/shop/original.md"
+        for name in (candidate, other):
+            test_pm.legacy_product(self.root, self.work, name)
         import upgrades
         ledger = self.work / upgrades.LEDGER
         state = json.loads(ledger.read_text())

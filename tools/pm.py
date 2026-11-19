@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+from html import unescape
 from pathlib import Path
 import re
 import subprocess
@@ -20,12 +21,15 @@ from storage import inventory
 import upgrades
 import filing
 import conversion
+import layout
+import layout_upgrade
+import pm_profile
 
 ROOT = Path(__file__).resolve().parents[1]
 REQUIRED = (
     "AGENTS.md", "CLAUDE.md", "README.md", ".gitignore",
     "tools/pm.py", "tools/hook.py", "tools/workspace.py", "tools/git_ops.py",
-    "tools/filing.py", "tools/conversion.py", "tools/snapshots.py", "playbook/filing.md", "playbook/writing.md",
+    "tools/layout.py", "tools/layout_upgrade.py", "tools/pm_profile.py", "playbook/workspace-format.json", "tools/filing.py", "tools/conversion.py", "tools/snapshots.py", "playbook/filing.md", "playbook/writing.md",
     "tools/context_capture.py", "tools/storage.py", "tools/upgrades.py",
     ".agents/skills/extend-hub/SKILL.md", ".claude/skills/extend-hub/SKILL.md",
     ".agents/skills/ingest-context/SKILL.md", ".claude/skills/ingest-context/SKILL.md",
@@ -34,7 +38,7 @@ REQUIRED = (
     "playbook/framework.md", "playbook/working.md", "playbook/context.md", "templates/README.md", "tools/records.py",
     ".agents/skills/red-team/SKILL.md", ".claude/skills/red-team/SKILL.md",
     "playbook/git.md", "playbook/updates.md", "playbook/release.json", "tools/workspace-seed/README.md",
-    "tools/workspace-seed/context/README.md", "tools/workspace-seed/products/README.md",
+    "tools/workspace-seed/context/README.md", "tools/workspace-seed/workspace/README.md",
     "tools/workspace-seed/.gitignore",
 )
 ROOT_FILES = {"README.md", "AGENTS.md", "CLAUDE.md", ".gitignore"}
@@ -148,7 +152,7 @@ def link_errors(root: Path, path: Path, text: str, planned=()) -> list[str]:
             continue
         unit = re.sub(r"`[^`]+`", "", unit)
         for match in LINK.finditer(unit):
-            target = urlsplit(match[2].strip("<>"))
+            target = urlsplit(unescape(match[2].strip("<>")))
             if target.scheme or target.netloc:
                 continue
             destination = (path.parent / unquote(target.path)).resolve() if target.path else path.resolve()
@@ -204,7 +208,7 @@ def guidance_errors(root: Path, texts: dict[str, str]) -> list[str]:
             errors.append(f"{guide}: unsupported brief scope: {label}")
         documented.setdefault(scope, set()).update(re.findall(r"`([^`]+)`", topics))
     for scope, topics in context_capture.TOPICS.items():
-        listed = documented.get(scope, set()) | documented.get("shared", set())
+        listed = documented.get(scope, set()) | (set() if scope == "pm" else documented.get("shared", set()))
         for topic in sorted(topics.keys() - listed):
             errors.append(f"{guide}: missing {scope} routing topic: {topic}")
         for topic in sorted(listed - topics.keys()):
@@ -241,32 +245,37 @@ def hook_errors(texts: dict[str, str]) -> list[str]:
 
 def check_workspace(root: Path, system_texts: dict[str, str]) -> list[str]:
     errors, texts = [], {}
-    private = root / "workspace"
     try:
-        workspace.repo(root, "workspace")
+        private = workspace.repo(root, "workspace")
         workspace.settings(root)
     except (OSError, ValueError) as exc:
-        return [f"workspace/: {exc}"]
+        return [f"private/: {exc}"]
     legacy = {}
+    retained, original_paths = {}, set()
     try:
         state = upgrades.read_state(private)[1]
+        layout_state = layout_upgrade.receipt(private, state)
+        retained = layout_state.get("retained", {})
+        original_paths = set(layout_state.get("sources", []))
         legacy = state.get(upgrades.RULE)
         if legacy is None:
             legacy = upgrades.candidates(private, inventory)
         for identifier, digest in state.get(upgrades.TRANSACTIONS, {}).items():
             if upgrades.fingerprint(conversion.archive_path(private, identifier)) != digest:
-                errors.append(f"workspace/: missing or changed recovery archive for {identifier}")
+                errors.append(f"private/: missing or changed recovery archive for {identifier}")
+        if layout_upgrade.pending(private):
+            errors.append("private/: finish the interrupted layout upgrade before sharing changes")
         if conversion.pointer(private).exists():
-            errors.append("workspace/: finish the pending recoverable filing plan before sharing changes")
+            errors.append("private/: finish the pending recoverable filing plan before sharing changes")
     except (OSError, ValueError) as exc:
-        errors.append(f"workspace/{upgrades.LEDGER}: {exc}")
+        errors.append(f"private/{upgrades.LEDGER}: {exc}")
     try:
         context_capture.read_remit(private)
     except (OSError, ValueError) as exc:
-        errors.append(f"workspace/{context_capture.REMIT_PATH}: {exc}")
+        errors.append(f"private/{context_capture.REMIT_PATH}: {exc}")
     for path in inventory(private):
         rel = path.relative_to(private).as_posix()
-        label = f"workspace/{rel}"
+        label = f"private/{rel}"
         if path.is_symlink() or any(p.is_symlink() for p in path.parents if p != root):
             errors.append(f"{label}: use regular files inside PM Hub")
             continue
@@ -276,34 +285,55 @@ def check_workspace(root: Path, system_texts: dict[str, str]) -> list[str]:
         if not path.is_file():
             continue
         parts = path.relative_to(private).parts
+        if parts[0] in {"context", "products", "workspace"} and any(part.startswith(".") for part in parts[1:]):
+            continue  # Editor metadata and private local files are outside the artifact inventory.
         if len(parts) == 2 and parts[0] == conversion.HISTORY and path.suffix == ".zip" and conversion.IDENTIFIER.fullmatch(path.stem):
             continue
         item = (legacy or {}).get(rel, {})
-        is_source = item.get("role") == "source" or "sources" in parts
+        is_source = item.get("role") == "source" or "sources" in parts or rel in original_paths
         old_record = item.get("status") in ("pending", "waiting") and item.get("digest") == upgrades.fingerprint(path)
+        if rel in retained and retained[rel]["digest"] == upgrades.fingerprint(path):
+            old_record = True
         if not old_record and not is_source and ((len(parts) == 1 and rel not in {"README.md", ".gitignore", "settings.json", upgrades.LEDGER, conversion.PENDING})
-                or (len(parts) > 1 and parts[0] not in {"context", "products"})):
+                or (len(parts) > 1 and parts[0] not in {"context", "workspace"})):
             errors.append(f"{label}: use a home from the README placement map")
-        if any(ARTIFACT.search(Path(part).stem) for part in parts):
+        if not is_source and not old_record and len(parts) > 1 and parts[0] in {"context", "workspace"} and path.suffix.lower() != ".md":
+            errors.append(f"{label}: file original evidence under sources/ and use Markdown for active artifacts")
+        if not is_source and not old_record and any(ARTIFACT.search(Path(part).stem) for part in parts):
             errors.append(f"{label}: engineering artifacts belong in the delivery system")
         if path.suffix == ".md":
             try:
-                texts[rel] = path.read_text(encoding="utf-8")
+                if is_source:
+                    continue  # Original evidence can use its own schema, IDs and links.
+                content = path.read_text(encoding="utf-8")
+                marker = records.MARKER.match(content)
+                if not old_record or (marker and marker[1] in records.KINDS and not records.context_location(marker[1], rel)):
+                    texts[rel] = content
                 try:
-                    if not old_record and not is_source:
+                    if not old_record:
+                        if rel not in {"README.md", "context/README.md", "workspace/README.md", pm_profile.PATH}:
+                            marker = records.MARKER.match(texts[rel])
+                            if parts[0] == "context" and not marker:
+                                raise ValueError("Use a typed reference in its context entity or retain an original source")
+                            if parts[0] == "workspace":
+                                if not layout.valid_work(rel):
+                                    raise ValueError("Use a work type and subject from the workspace filing rules")
+                                if parts[1] in layout.WORK_FOLDERS.values() and (not marker or layout.WORK_FOLDERS.get(marker[1]) != parts[1]):
+                                    raise ValueError("Use the matching typed artifact for this working folder")
                         filing.verify_note(private, rel, texts[rel])
                 except ValueError as exc:
                     errors.append(f"{label}: {exc}")
-                if not is_source:
-                    errors.extend(f"{label}:{e}" for e in writing_errors(texts[rel]))
-                errors.extend(f"{label}:{e}" for e in link_errors(root, path, texts[rel]))
+                if not old_record:
+                    errors.extend(f"{label}:{e}" for e in writing_errors(content))
+                    errors.extend(f"{label}:{e}" for e in link_errors(root, path, content))
             except (OSError, UnicodeError) as exc:
                 errors.append(f"{label}: cannot read text: {exc}")
-    for required in ("README.md", ".gitignore", "settings.json", "context/README.md", "products/README.md"):
+    errors.extend(f"private/{error}" for error in filing.topic_structure_errors(private))
+    for required in ("README.md", ".gitignore", "settings.json", "context/README.md", "workspace/README.md"):
         if not (private / required).is_file():
-            errors.append(f"workspace/{required}: required file is missing")
+            errors.append(f"private/{required}: required file is missing")
     templates = {p: t for p, t in system_texts.items() if p.startswith("templates/")}
-    errors.extend(f"workspace/{e}" for e in records.validate(dict(templates, **texts)))
+    errors.extend(f"private/{e}" for e in records.validate(dict(templates, **texts)))
     return errors
 
 
@@ -312,8 +342,8 @@ def check(root: Path = ROOT, include_workspace=True) -> list[str]:
     errors, texts, safe = [], {}, set()
     for path in inventory(root):
         rel = path.relative_to(root).as_posix()
-        if rel == "workspace" or rel.startswith("workspace/"):
-            errors.append("workspace/: PM data must never be tracked by the system repository")
+        if Path(rel).parts[0] in {"workspace", "private"}:
+            errors.append("private/: PM data must never be tracked by the system repository")
             continue  # do not read data exposed by an incorrect system index
         if path.is_symlink() or any(parent.is_symlink() for parent in path.parents if parent != root):
             errors.append(f"{rel}: use regular files inside PM Hub")
@@ -341,7 +371,7 @@ def check(root: Path = ROOT, include_workspace=True) -> list[str]:
                 errors.extend(f"{rel}:{error}" for error in writing_errors(texts[rel]))
             errors.extend(f"{rel}:{error}" for error in link_errors(root, path, texts[rel]))
             if records.MARKER.match(texts[rel]) and not rel.startswith("templates/"):
-                errors.append(f"{rel}: PM records belong inside workspace/")
+                errors.append(f"{rel}: PM records belong inside private/")
     for rel in REQUIRED:
         if root / rel not in safe:
             errors.append(f"{rel}: required file is missing or unsafe")
@@ -351,8 +381,8 @@ def check(root: Path = ROOT, include_workspace=True) -> list[str]:
     errors.extend(guidance_errors(root, texts))
     errors.extend(hook_errors(texts))
     errors.extend(records.validate(texts))
-    if "/workspace/" not in texts.get(".gitignore", "").splitlines():
-        errors.append(".gitignore: exclude /workspace/ from the system repository")
+    if not {"/workspace/", "/private/"} <= set(texts.get(".gitignore", "").splitlines()):
+        errors.append(".gitignore: exclude /workspace/ and /private/ from the system repository")
     try:
         workspace.release(root)
     except (OSError, ValueError) as exc:
@@ -384,8 +414,8 @@ def sync_skills(root: Path = ROOT) -> int:
     return changed
 
 
-def filing_validator(root):
-    private = root / "workspace"
+def filing_validator(root, *, legacy_replay=False):
+    private = workspace.private_root(root)
     def validate(edits, folds, archive, originals):
         texts = {f"templates/{kind}.md": (root / f"templates/{kind}.md").read_text() for kind in records.KINDS}
         for path in inventory(private):
@@ -414,12 +444,14 @@ def filing_validator(root):
                 new_kind = records.MARKER.match(text)
                 if not new_kind:
                     raise ValueError("New filing destinations must use an appropriate record template")
-                filing.check_new(private, new_kind[1], name, None, retiring=folds)
-            filing.verify_note(private, name, text)
+                if not legacy_replay:
+                    filing.check_new(private, new_kind[1], name, None, retiring=folds)
+            if not legacy_replay:
+                filing.verify_note(private, name, text)
             texts[name] = text
             problems.extend(writing_errors(text) + link_errors(root, private / name, text, planned={archive, *(private / target for target in edits)}))
         conversion.verify_fragments(private, texts, edits, LINK)
-        for error in records.validate(texts):
+        for error in ([] if legacy_replay else records.validate(texts)):
             if error not in previous or error.partition(":")[0] in edits:
                 problems.append(error)
         if problems:
@@ -428,52 +460,86 @@ def filing_validator(root):
 
 
 def alignment(root, prepare=False, record=None, outcome=None, digest=None, note=None, backup=None, for_conversion=False):
-    private = workspace.repo(root, "workspace")
-    def inspect():
+    def inspect(private):
         settings_file = private / "settings.json"
-        original = settings_file.read_text(encoding="utf-8") if settings_file.resolve() == settings_file else None
+        original = settings_file.read_text(encoding="utf-8")
         settings = workspace.settings(root, compatible=False)
         release = workspace.release(root)
-        changing = settings["system_version"] != release["system_version"]
-        if settings["workspace_format"] != release["workspace_format"] or (changing and not (
-            settings["system_version"] in {"0.1.0", "0.2.0"} and release == {"system_version": "0.3.0", "workspace_format": 1}
-        )):
+        old_layout = settings["workspace_format"] == 1
+        changing = any(settings[key] != value for key, value in release.items())
+        if changing and not (old_layout and settings["system_version"] in {"0.1.0", "0.2.0", "0.3.0"}
+                             and release == {"system_version": "0.3.0", "workspace_format": 2}):
             raise ValueError("Unsupported workspace version; inspect release compatibility before updating")
+        moving = private.name == "workspace"
+        if moving:
+            workspace.check_relocation(root, private)
+        review_pending = conversion.pointer(private).exists()
+        state = upgrades.read_state(private)[1]
+        layout_upgrade.receipt(private, state)
         recovery = None
-        if prepare:
-            state = upgrades.read_state(private)[1]
-            if (changing or upgrades.RULE not in state or not upgrades.scan_marker(private).exists()
-                    or conversion.pointer(private).exists() or record or for_conversion):
-                recovery = snapshots.ensure(root, release["system_version"])
-            conversion.resume(private, filing_validator(root), LINK)
+        # Old filing transactions must finish with their accepted paths before layout planning.
+        if prepare and (old_layout or moving or review_pending or record or for_conversion
+                        or upgrades.RULE not in state or not upgrades.scan_marker(private).exists()):
+            recovery = snapshots.ensure(root, release["system_version"], layout_change=old_layout or moving)
+        if prepare and review_pending:
+            conversion.resume(private, filing_validator(root, legacy_replay=old_layout), LINK, legacy=old_layout)
         result = upgrades.run(private, inventory, prepare=prepare, record=record, outcome=outcome, digest=digest, note=note)
-        if changing and prepare:
-            settings["system_version"] = release["system_version"]
-            storage.replace_text(settings_file, original, json.dumps(settings, indent=2) + "\n")
-        result["needs_setup"] |= (changing or conversion.pointer(private).exists()) and not prepare
+        if review_pending and not prepare:
+            layout_plan = {"moves": {}, "outstanding": [], "changed": False, "awaiting_filing_recovery": True}
+        else:
+            layout_plan = layout_upgrade.run(private, apply=False)
+        if prepare:
+            if layout_plan["changed"] or layout_upgrade.pending(private):
+                if not recovery:
+                    recovery = snapshots.ensure(root, release["system_version"], layout_change=True)
+                layout_plan = layout_upgrade.run(private, apply=True)
+            if layout_plan.get("moves"):
+                # The earlier review ledger may contain paths rewritten by the layout migration.
+                result["outstanding"] = upgrades.run(private, inventory)["outstanding"]
+            if changing:
+                settings.update(release)
+                storage.replace_text(settings_file, original, json.dumps(settings, indent=2) + "\n")
+        result["layout"] = layout_plan
+        pending = {item["path"]: item for item in result["outstanding"]}
+        for item in layout_plan["outstanding"]:
+            pending.setdefault(item["path"], item)
+        result["outstanding"] = list(pending.values())
+        result["needs_setup"] |= (changing or moving or layout_plan["changed"] or review_pending) and not prepare
         if recovery:
             result["installation_backup"] = str(recovery)
         if backup:
             result["backups"] = upgrades.backup(private, backup)
+        if moving:
+            result["private_root_move"] = {"from": "workspace", "to": "private"}
         return result
-    if prepare:
-        with storage.writer_lock(private):
-            return inspect()
-    return inspect()
+
+    if not prepare:
+        return inspect(workspace.repo(root, "workspace"))
+    # Resolve the private path after locking the outer checkout. A second client can
+    # enter during the directory rename and must pick up the same private Git history.
+    with storage.repository_lock(root):
+        private = workspace.repo(root, "workspace")
+        with storage.repository_lock(private):
+            result = inspect(private)
+        if private.name == "workspace":
+            workspace.relocate_private(root, private)
+        return result
 
 
 def prepare_private_write(root):
     private = workspace.repo(root, "workspace")
     settings = workspace.settings(root, compatible=False)
-    if settings["system_version"] != workspace.release(root)["system_version"] or upgrades.RULE not in upgrades.read_state(private)[1] or conversion.pointer(private).exists():
+    if (private.name == "workspace" or any(settings[key] != value for key, value in workspace.release(root).items())
+            or not layout_upgrade.complete(private) or layout_upgrade.pending(private)
+            or upgrades.RULE not in upgrades.read_state(private)[1] or conversion.pointer(private).exists()):
         alignment(root, prepare=True)
     return workspace.settings(root)
 
 
 def alignment_notice(root):
-    if not (root / "workspace").exists():
-        return ""
     try:
+        if not workspace.private_root(root).exists():
+            return ""
         result = alignment(root)
     except (OSError, ValueError, subprocess.SubprocessError) as exc:
         return f"Workspace alignment unavailable: {exc}"
@@ -487,7 +553,7 @@ def alignment_notice(root):
 
 
 def capture_errors(root, target, text):
-    private = root / "workspace"
+    private = workspace.private_root(root)
     rel = target.relative_to(private).as_posix()
     texts = {f"templates/{kind}.md": (root / "templates" / f"{kind}.md").read_text(encoding="utf-8")
              for kind in records.KINDS}
@@ -523,11 +589,13 @@ def main() -> int:
     align.add_argument("--backup", nargs="+", metavar="PATH")
     commands.add_parser("sync-skills")
     new = commands.add_parser("new")
-    new.add_argument("kind", choices=records.KINDS)
-    new.add_argument("path", help="Path under workspace/, starting with context/ or products/")
+    new.add_argument("kind", choices=(*records.KINDS, "pm-context"))
+    new.add_argument("path", help="Path inside private/, starting with context/ or workspace/")
     new.add_argument("--title")
     new.add_argument("--parent")
     new.add_argument("--basis", choices=filing.BASES)
+    new.add_argument("--topic-question")
+    new.add_argument("--topic-peer")
     new.add_argument("--reason")
     new.add_argument("--trigger")
     route = commands.add_parser("route-context", help="Route supplied context evidence from JSON on stdin")
@@ -553,6 +621,8 @@ def main() -> int:
                 validator = filing_validator(ROOT)
                 if args.apply_plan:
                     alignment(ROOT, prepare=True, for_conversion=True)
+                    private = workspace.repo(ROOT, "workspace")
+                    validator = filing_validator(ROOT)
                     with storage.writer_lock(private):
                         report = conversion.apply(private, plan, validator, LINK)
                 else:
@@ -564,14 +634,14 @@ def main() -> int:
                 raise ValueError("Use --status alone for a read-only preview")
             report = alignment(ROOT, not args.status, args.record, args.outcome, args.digest, args.note, args.backup)
             if args.record is None and not args.backup:
-                prompt = context_capture.remit_prompt(ROOT / "workspace")
+                prompt = context_capture.remit_prompt(workspace.private_root(ROOT))
                 if prompt:
                     report["remit_prompt"] = prompt
             print(json.dumps(report, indent=2, ensure_ascii=False))
             return 0
         if args.command == "init-workspace":
             workspace.initialise(ROOT, args.owner, args.delivery_system)
-            print("Initialised workspace/ as a separate Git repository. No remote, commit, or push was created.")
+            print("Initialised private/ as a separate Git repository. No remote, commit, or push was created.")
             print(context_capture.REMIT_PROMPT)
             return 0
         if args.command == "git":
@@ -592,17 +662,29 @@ def main() -> int:
             settings = prepare_private_write(ROOT)
             if any(ARTIFACT.search(Path(part).stem) for part in Path(args.path).parts):
                 raise ValueError("Engineering artifacts belong in the delivery system")
-            private = ROOT / "workspace"
+            private = workspace.private_root(ROOT)
+            if args.kind == "pm-context":
+                if args.path != context_capture.REMIT_PATH or any((args.parent, args.basis, args.reason, args.trigger, args.topic_question, args.topic_peer)):
+                    raise ValueError("Create the PM profile at context/pm/context.md")
+                created = pm_profile.create(private, args.title)
+                print(f"Created {created.relative_to(ROOT)}.")
+                return 0
             with storage.writer_lock(private):
                 filing.check_new(private, args.kind, args.path, args.title)
                 contract = None
+                parent = None
+                if args.kind != "context-note" and (args.topic_question or args.topic_peer):
+                    raise ValueError("Topic fields apply to supporting context notes")
                 if args.kind == "product-area-context":
                     contract = filing.area_contract(private, args.path, args.parent, args.basis, args.reason, args.trigger)
                 elif args.kind == "context-note":
-                    contract = filing.note_contract(private, args.path, args.parent, args.basis, args.reason, args.trigger)
+                    contract = filing.note_contract(private, args.path, args.parent, args.basis, args.reason, args.trigger,
+                                                    topic_question=args.topic_question, topic_peer=args.topic_peer)
+                elif args.kind == "initiative-context" and args.parent and not any((args.basis, args.reason, args.trigger)):
+                    parent = args.parent
                 elif any((args.parent, args.basis, args.reason, args.trigger)):
                     raise ValueError("Filing details apply to supporting context notes")
-                created = records.create(ROOT, args.kind, args.path, args.title, owner=settings["owner"], filing_contract=contract)
+                created = records.create(ROOT, args.kind, args.path, args.title, owner=settings["owner"], filing_contract=contract, product_parent=parent)
             print(f"Created {created.relative_to(ROOT)} as a draft.")
             return 0
         if args.command == "area-context":
@@ -610,13 +692,15 @@ def main() -> int:
             print(json.dumps(context_capture.area_context(private, args.product, args.area), indent=2))
             return 0
         if args.command == "set-remit":
-            private = workspace.repo(ROOT, "workspace")
             prepare_private_write(ROOT)
+            private = workspace.repo(ROOT, "workspace")
             context_capture.write_remit(private, json.load(os.sys.stdin))
-            print(f"Saved workspace/{context_capture.REMIT_PATH}.")
+            print(f"Saved private/{context_capture.REMIT_PATH}.")
             return 0
         if args.command == "route-context":
-            private = ROOT / "workspace"
+            if args.write is not None:
+                settings = prepare_private_write(ROOT)
+            private = workspace.private_root(ROOT)
             if private.exists() or private.is_symlink() or args.write is not None:
                 workspace.repo(ROOT, "workspace")
             remit, error = context_capture.inspect_remit(private)
@@ -625,7 +709,6 @@ def main() -> int:
                 plan.update(remit_status="invalid", remit_error=error)
             plan["written"] = None
             if args.write is not None:
-                settings = prepare_private_write(ROOT)
                 if any(ARTIFACT.search(Path(part).stem) for part in Path(args.write).parts):
                     raise ValueError("Engineering artifacts belong in the delivery system")
                 if context_capture.apply(ROOT, args.write, plan, settings["owner"], capture_errors):
@@ -635,6 +718,12 @@ def main() -> int:
         if args.command == "sync-skills":
             print(f"Updated {sync_skills()} Claude skill file(s).")
             return 0
+        if not args.system_only and workspace.private_root(ROOT).is_dir() and workspace.settings(ROOT, compatible=False)["workspace_format"] == 1:
+            report = alignment(ROOT)
+            system_errors = check(include_workspace=False)
+            if not system_errors and report["needs_setup"]:
+                print("Shared Hub checks passed. Private format 1 checks await session alignment.")
+                return 0
         errors = check(include_workspace=not args.system_only)
         if not args.system_only:
             notice = alignment_notice(ROOT)

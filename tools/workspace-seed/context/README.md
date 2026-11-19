@@ -1,5 +1,5 @@
-# Shared company context
+# Reference context
 
-Capture the organisation, its business model, goals, and constraints here when the PM starts that work.
+Keep reusable information under its entity. Start company context in `company/overview.md`, product context in `products/<product>/overview.md`, and your profile in `pm/context.md`.
 
-Start with `company.md`. Use [the context ingestion rules](../../../playbook/context.md) to route supplied evidence and open questions.
+Add only the sections and files that current evidence supports. Use [the filing rules](../../../playbook/filing.md) before naming a new topic folder. Use [the context rules](../../../playbook/context.md) for source coverage, decisions, and unknowns.

@@ -27,7 +27,7 @@ class AlignmentTests(unittest.TestCase):
         ledger.unlink()
         settings = self.work / "settings.json"
         previous = json.loads(settings.read_text())
-        previous["system_version"] = "0.1.0"
+        previous.update(system_version="0.1.0", workspace_format=1)
         settings.write_text(json.dumps(previous))
         guide = self.work / "README.md"
         old, new = upgrades.STARTERS["README.md"]
@@ -71,50 +71,54 @@ class AlignmentTests(unittest.TestCase):
         self.assertTrue(sidecar.exists())
 
     def test_same_preview_destination_required_including_sibling_initiatives(self):
-        doc = records.create(self.root, "company-context", "context/company.md")
-        other = records.create(self.root, "company-context", "context/unit-europe.md")
+        doc = records.create(self.root, "company-context", "context/company/overview.md")
+        other = self.work / "context/company/unit-europe.md"
+        other.write_text("# Older unit notes\n")
         question = {"scope": "company", "topic": "direction", "question": "What is the target?"}
         data = {"sources": [], "entries": [question]}
         before = other.read_bytes()
-        self.assertEqual(json.loads(self.capture(data).stdout)["entries"][0]["destination"], "context/company.md")
-        self.assertNotEqual(self.capture(data, "--write", "context/unit-europe.md").returncode, 0)
+        self.assertEqual(json.loads(self.capture(data).stdout)["entries"][0]["destination"], "context/company/overview.md")
+        self.assertNotEqual(self.capture(data, "--write", "context/company/unit-europe.md").returncode, 0)
         self.assertEqual(other.read_bytes(), before)
         self.assertTrue(doc.exists())
-        foreign = "products/shop/initiatives/returns/context.md"
-        records.create(self.root, "initiative-context", foreign)
+        foreign = "context/initiatives/returns/overview.md"
+        parent = "context/products/shop/overview.md"
+        records.create(self.root, "product-context", parent)
+        records.create(self.root, "initiative-context", foreign, product_parent=parent)
         data["entries"] = [dict(question, scope="initiative", product="shop", initiative="orders", topic="outcome",
                                 record={"path": foreign, "reason": "Record the initiative outcome."})]
         self.assertNotEqual(self.capture(data).returncode, 0)
 
     def test_mixed_evidence_keeps_exclusions_dates_and_relative_links(self):
-        path = self.work / "context/meeting notes.md"
+        path = self.work / "context/company/sources/meeting notes.md"
+        path.parent.mkdir(parents=True)
         exclusion = "We will not enter the data centre business or create or own LLM models."
         positive = "We will rent capacity as required and use existing models."
         product = "Customers use invoices."
         path.write_text(exclusion + " " + positive + "\n\n" + product)
-        source = {"reference": "[Minutes](context/meeting%20notes.md)", "date": "undated",
+        source = {"reference": "[Minutes](context/company/sources/meeting%20notes.md)", "date": "undated",
                   "coverage": "read", "checked_on": "2025-01-01"}
         row = {"scope": "company", "topic": "constraints", "source": 1, "location": "Minutes", "quote": positive}
         data = {"sources": [source], "entries": [row]}
         self.assertIn("entire commitment", self.capture(data).stdout)
         data["entries"].extend([dict(row, quote=exclusion),
                                 dict(row, scope="product", product="shop", topic="customers", quote=product)])
-        for name, relative in [("context/company.md", "meeting%20notes.md"),
-                               ("products/shop/context.md", "../../context/meeting%20notes.md")]:
+        for name, relative in [("context/company/overview.md", "sources/meeting%20notes.md"),
+                               ("context/products/shop/overview.md", "../../company/sources/meeting%20notes.md")]:
             result = self.capture(data, "--write", name)
             self.assertEqual(result.returncode, 0, result.stdout)
             self.assertIn(f"[Minutes]({relative})", (self.work / name).read_text())
-        company = self.work / "context/company.md"
+        company = self.work / "context/company/overview.md"
         self.assertIn(exclusion, company.read_text())
         source["checked_on"] = "2025-03-01"
-        self.assertIsNone(json.loads(self.capture(data, "--write", "context/company.md").stdout)["written"])
+        self.assertIsNone(json.loads(self.capture(data, "--write", "context/company/overview.md").stdout)["written"])
         extra = "Procurement reviews the invoice."
         path.write_text(path.read_text() + "\n\n" + extra)
         data["entries"].append(dict(row, quote=extra))
-        self.assertEqual(self.capture(data, "--write", "context/company.md").returncode, 0)
+        self.assertEqual(self.capture(data, "--write", "context/company/overview.md").returncode, 0)
         self.assertTrue(all(day in company.read_text() for day in ("2025-01-01", "2025-03-01")))
         source.update(reference="Meeting minutes [S8]", text=path.read_text())
-        self.assertEqual(self.capture(data, "--write", "context/company.md").returncode, 0)
+        self.assertEqual(self.capture(data, "--write", "context/company/overview.md").returncode, 0)
         data["entries"][0]["quote"] = "Rewritten without source support."
         self.assertIn("differs from", self.capture(data).stdout)
         self.assertEqual(pm.check(self.root), [])
@@ -138,7 +142,13 @@ class AlignmentTests(unittest.TestCase):
         self.assertNotEqual(self.capture(data).returncode, 0)
 
     def test_legacy_brief_and_compact_state_rows(self):
-        path = records.create(self.root, "product-context", "products/ledger/introduction.md")
+        old = test_pm.legacy_product(self.root, self.work, "products/ledger/introduction.md")
+        previous_id = records.work_state(old.read_text())[0]["ID"]
+        test_pm.use_previous_layout(self.work)
+        pm.alignment(self.root, True)
+        path = self.work / "context/products/ledger/overview.md"
+        self.assertFalse(old.exists())
+        self.assertEqual(records.work_state(path.read_text())[0]["ID"], previous_id)
         row = {"scope": "product", "product": "ledger", "topic": "offer", "source": 1, "location": "Page 1",
                "quote": "The ledger lists transfers."}
         data = {"sources": [{"reference": "Fictional ledger minutes", "date": "undated", "checked_on": "2025-01-01",
@@ -153,9 +163,26 @@ class AlignmentTests(unittest.TestCase):
         state = records.work_state(path.read_text())[0]
         self.assertEqual(state["State"], "draft")
         self.assertIn(date.today().isoformat(), state["Last checkpoint"])
-        self.assertFalse((path.parent / "context.md").exists())
-        records.create(self.root, "product-context", "products/ledger/another.md")
-        self.assertEqual(json.loads(self.capture(data).stdout)["entries"][0]["disposition"], "ambiguous")
+        self.assertFalse(old.exists())
+
+    def test_ambiguous_legacy_product_briefs_remain_intact(self):
+        old = [test_pm.legacy_product(self.root, self.work, f"products/ledger/{stem}.md")
+               for stem in ("introduction", "another")]
+        originals = [path.read_bytes() for path in old]
+        test_pm.use_previous_layout(self.work)
+        report = pm.alignment(self.root, True)
+        outstanding = {item["path"] for item in report["outstanding"]}
+        self.assertTrue(all(path.relative_to(self.work).as_posix() in outstanding for path in old))
+        self.assertFalse((self.work / "context/products/ledger/overview.md").exists())
+        data = {"sources": [], "entries": [{"scope": "product", "product": "ledger", "topic": "customers",
+                                            "question": "Who uses the ledger?"}]}
+        result = self.capture(data)
+        self.assertEqual(result.returncode, 0, result.stdout)
+        entry = json.loads(result.stdout)["entries"][0]
+        self.assertEqual(entry["disposition"], "ambiguous")
+        self.assertCountEqual(entry["candidates"], [path.relative_to(self.work).as_posix() for path in old])
+        self.assertNotEqual(self.capture(data, "--write", "context/products/ledger/overview.md").returncode, 0)
+        self.assertEqual([path.read_bytes() for path in old], originals)
 
     def test_concurrent_hub_writers_reject_stale_input(self):
         path = self.work / "context/fixture.md"
@@ -189,7 +216,7 @@ class AlignmentTests(unittest.TestCase):
                                               "| Seat | Active user | Product | Account |\n", "Vocabulary", False)
         self.assertTrue(any("source reference in Meaning" in error for error in errors))
         settings = self.work / "settings.json"
-        settings.write_text(settings.read_text().replace('"workspace_format": 1', '"workspace_format": 2'))
+        settings.write_text(settings.read_text().replace('"workspace_format": 2', '"workspace_format": 99'))
         result = test_pm.HubTests.save_remit(self, {"responsibilities": [], "follow": []})
         self.assertNotEqual(result.returncode, 0)
         self.assertFalse((self.work / context_capture.REMIT_PATH).exists())

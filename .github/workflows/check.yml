@@ -25,6 +25,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+          fetch-depth: 0
       - name: Check Hub structure, skills, templates, hooks and dependencies
         run: python3 tools/pm.py check --system-only
       - name: Test PM workflows, consumer upgrades and recovery
@@ -37,3 +38,18 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ github.token }}
         run: python3 tools/release_review.py
+
+  private-layout:
+    name: Private layout on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Exercise private repository relocation and PM filing boundaries
+        run: python -m unittest discover -s tests -p test_layout_entrypoints.py -v
