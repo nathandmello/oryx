@@ -436,7 +436,7 @@ def alignment(root, prepare=False, record=None, outcome=None, digest=None, note=
         release = workspace.release(root)
         changing = settings["system_version"] != release["system_version"]
         if settings["workspace_format"] != release["workspace_format"] or (changing and not (
-            settings["system_version"] == "0.1.0" and release == {"system_version": "0.2.0", "workspace_format": 1}
+            settings["system_version"] in {"0.1.0", "0.2.0"} and release == {"system_version": "0.3.0", "workspace_format": 1}
         )):
             raise ValueError("Unsupported workspace version; inspect release compatibility before updating")
         recovery = None
@@ -558,11 +558,16 @@ def main() -> int:
             if args.status and any((args.record, args.outcome, args.note, args.digest, args.backup)):
                 raise ValueError("Use --status alone for a read-only preview")
             report = alignment(ROOT, not args.status, args.record, args.outcome, args.digest, args.note, args.backup)
+            if args.record is None and not args.backup:
+                prompt = context_capture.remit_prompt(ROOT / "workspace")
+                if prompt:
+                    report["remit_prompt"] = prompt
             print(json.dumps(report, indent=2, ensure_ascii=False))
             return 0
         if args.command == "init-workspace":
             workspace.initialise(ROOT, args.owner, args.delivery_system)
             print("Initialised workspace/ as a separate Git repository. No remote, commit, or push was created.")
+            print(context_capture.REMIT_PROMPT)
             return 0
         if args.command == "git":
             if args.operation == "push":
@@ -603,7 +608,10 @@ def main() -> int:
             private = ROOT / "workspace"
             if private.exists() or private.is_symlink() or args.write is not None:
                 workspace.repo(ROOT, "workspace")
-            plan = context_capture.route(json.load(os.sys.stdin), private, context_capture.read_remit(private))
+            remit, error = context_capture.inspect_remit(private)
+            plan = context_capture.route(json.load(os.sys.stdin), private, remit)
+            if error:
+                plan.update(remit_status="invalid", remit_error=error)
             plan["written"] = None
             if args.write is not None:
                 settings = prepare_private_write(ROOT)

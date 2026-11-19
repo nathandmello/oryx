@@ -27,7 +27,7 @@ Use [the context rules](../playbook/context.md). Keep sections that guide recurr
 
 ## Constraints
 
-{{Capture binding technical, commercial, contractual, and regulatory rules. Name owners, exceptions, and dependencies.}}
+{{Capture binding technical, commercial, contractual, and regulatory rules. Name owners, applicable product areas, exceptions, and dependencies.}}
 
 ## Decisions already closed
 

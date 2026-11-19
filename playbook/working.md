@@ -20,6 +20,8 @@ Both modes retain source checks, ownership boundaries, and existing permissions.
 
 Read the work record, its checkpoint, linked sources, and accepted decisions. Report only changes or gaps that matter now.
 
+At session start, act on any `remit_prompt` from `pm.py align`. Ask once when questions are welcome. Respect quiet mode and deferrals.
+
 Take the recorded next action or follow the PM's current request. Recheck a source when it changed or its age affects the decision.
 
 Keep observations, assumptions, and unknowns distinct. Preserve earlier evidence and its date when a conclusion changes.

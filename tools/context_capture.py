@@ -16,7 +16,9 @@ REMIT_PATH = "context/pm-remit.json"
 TOPICS = records.CONTEXT_TOPICS
 DEFERRED = {"delivery", "detail", "unclear"}
 SLUG = re.compile(r"[a-z0-9]+(?:-[a-z0-9]+)*")
-SUBJECT = re.compile(r"(product|area|topic)/[a-z0-9]+(?:-[a-z0-9]+)*")
+SUBJECT = re.compile(rf"(?:product/{SLUG.pattern}(?:/area/{SLUG.pattern})?|(?:area|topic)/{SLUG.pattern})")
+REMIT_PROMPT = "Which products or product areas do you own or share? For each area, name its product."
+DRAFT_REMIT_PROMPT = "Is your saved PM remit complete, or are there products or product areas to add?"
 
 
 def fields(value, required, optional=()):
@@ -174,8 +176,7 @@ def record_path(private, value, *, markdown=True):
 
 def subject_key(value, prefixes=("product", "area", "topic")):
     key = line(value, "Subject")
-    match = SUBJECT.fullmatch(key)
-    if not match or match[1] not in prefixes:
+    if not SUBJECT.fullmatch(key) or key.partition("/")[0] not in prefixes:
         raise ValueError(f"Use a subject such as {prefixes[0]}/example")
     return key
 
@@ -190,7 +191,9 @@ def subject_list(value):
 
 
 def validate_remit(private, remit):
-    fields(remit, ("responsibilities", "follow"))
+    fields(remit, ("responsibilities", "follow"), ("status",))
+    if "status" in remit and remit["status"] not in ("draft", "confirmed"):
+        raise ValueError("Remit status must be draft or confirmed")
     subject_list(remit["follow"])
     if not isinstance(remit["responsibilities"], list):
         raise ValueError("Expected a list of responsibilities")
@@ -244,27 +247,64 @@ def write_remit(private, remit):
             storage.replace_text(target, original, candidate)
 
 
+def remit_status(remit):
+    if remit is None:
+        return "missing"
+    return remit.get("status", "confirmed" if remit["responsibilities"] else "draft")
+
+
+def inspect_remit(private):
+    try:
+        return read_remit(private), None
+    except (OSError, ValueError) as exc:
+        return None, str(exc)
+
+
+def remit_prompt(private):
+    remit, error = inspect_remit(private)
+    if error:
+        return "Review the existing PM remit with the PM before repairing it."
+    status = remit_status(remit)
+    if status == "confirmed":
+        return None
+    if remit and (remit["responsibilities"] or remit["follow"]):
+        return DRAFT_REMIT_PROMPT
+    return REMIT_PROMPT
+
+
+def subject_family(subject):
+    """An area's parent covers the area. Broader news alone has no confirmed area impact."""
+    if not subject:
+        return ()
+    parent, separator, _ = subject.rpartition("/area/")
+    return (subject, parent) if separator else (subject,)
+
+
 def relevance(remit, subject, affects):
     if remit is None:
         return ("company" if subject == "company" else "unknown"), []
-    direct, affected, dependencies = [], [], []
-    for responsibility in remit["responsibilities"]:
-        key = responsibility["subject"]
-        if key == subject:
-            direct.append(responsibility)
-        elif key in affects:
-            affected.append(responsibility)
-        elif subject in responsibility["depends_on"]:
-            dependencies.append(responsibility)
+    responsibilities = remit["responsibilities"]
+    family = subject_family(subject)
+    by_subject = {r["subject"]: r for r in responsibilities}
+
+    def most_specific(keys):
+        return next((key for key in keys if key in by_subject), None)
+
+    direct = by_subject.get(most_specific(family))
+    affected_keys = {most_specific(subject_family(named)) for named in affects}
+    affected = [r for r in responsibilities if r["subject"] in affected_keys and r is not direct]
     if direct:
-        return ("owned" if direct[0]["role"] == "owner" else "shared"), direct + affected
+        return ("owned" if direct["role"] == "owner" else "shared"), [direct, *affected]
     if affected:
         return "affected", affected
+    dependencies = [r for r in responsibilities if any(key in r["depends_on"] for key in family)]
     if dependencies:
         return "dependency", dependencies
     if subject == "company":
         return "company", []
-    return ("following" if subject in remit["follow"] else "fyi"), []
+    if any(key in remit["follow"] for key in family):
+        return "following", []
+    return ("fyi" if remit_status(remit) == "confirmed" else "unknown"), []
 
 
 def target_section(text, entry, section):
@@ -368,7 +408,7 @@ def route(payload, private, remit=None):
     alternatives = {}
     entries = []
     for entry in payload["entries"]:
-        fields(entry, ("scope",), ("topic", "product", "initiative", "subject", "record", "affects", "source",
+        fields(entry, ("scope",), ("topic", "product", "product_area", "initiative", "subject", "record", "affects", "source",
                                     "location", "quote", "question", "answers", "interpretation",
                                     "rule", "term", "decision"))
         scope = line(entry["scope"], "Scope")
@@ -390,6 +430,11 @@ def route(payload, private, remit=None):
         elif scope in ("area", "reference"):
             prefix = "area" if scope == "area" else "topic"
             subject = subject_key(entry.get("subject"), (prefix,))
+        if "product_area" in entry:
+            area = entry["product_area"]
+            if scope not in ("product", "initiative") or not isinstance(area, str) or not SLUG.fullmatch(area):
+                raise ValueError("Use a product_area slug with a named product or initiative")
+            subject = f"{subject}/area/{area}"
         if "subject" in entry and scope not in ("area", "reference"):
             raise ValueError("Use subject only for area or reference scope")
         section = None
@@ -434,7 +479,8 @@ def route(payload, private, remit=None):
         entries.append(dict(entry, destination=destination, section=section, disposition=disposition,
                             relevance=attention, responsibilities=responsibilities))
     verification = verify_excerpts(payload["sources"], entries, private)
-    return {"sources": sources, "entries": entries, "source_checks": verification, "remit_configured": remit is not None}
+    return {"sources": sources, "entries": entries, "source_checks": verification, "remit_configured": remit is not None,
+            "remit_status": remit_status(remit)}
 
 
 def literal(value):
@@ -467,16 +513,24 @@ def section_body(text, heading):
     return re.sub(r"^\| *(?:\{\{[^{}]+\}\} *\| *)+\n?", "", body, flags=re.M)
 
 
+def scoped_text(entry, value):
+    # User text is escaped. The marker distinguishes scoped entries from identical visible wording.
+    if "product_area" in entry:
+        area = entry["product_area"]
+        return f"Product area {area} — {value} <!-- product-area:{area} -->"
+    return value
+
+
 def render_entry(entry, identifier):
     cite = f"[{identifier}] ({literal(entry['location'])})"
     quote = literal(entry["quote"])
     if "term" in entry:
         term = entry["term"]
-        return table_row([literal(term["name"]), f"{quote} {cite}", literal(term["owner"]), literal(term["avoid"])])
+        return table_row([literal(term["name"]), f"{scoped_text(entry, quote)} {cite}", literal(term["owner"]), literal(term["avoid"])])
     if "decision" in entry:
         decision = entry["decision"]
         return table_row([
-            literal(decision["question"]), literal(decision["scope"]), f"{literal(decision['person'])}, {decision['date']}",
+            literal(decision["question"]), scoped_text(entry, literal(decision["scope"])), f"{literal(decision['person'])}, {decision['date']}",
             f"{quote} {cite}", literal(decision["next_step"]),
         ])
     if "rule" in entry:
@@ -486,7 +540,7 @@ def render_entry(entry, identifier):
     else:
         label = "Example" if entry.get("topic") == "examples" else "Fact"
         statement = "Source excerpt"
-    return f"- {label}: {statement} {cite}\n  > {quote}"
+    return f"- {label}: {scoped_text(entry, statement)} {cite}\n  > {quote}"
 
 
 def insert_entries(text, selected, sources, private, target):
@@ -503,7 +557,7 @@ def insert_entries(text, selected, sources, private, target):
         if heading not in updates:
             updates[heading] = section_body(text, heading)
         if "question" in entry:
-            bullet = f"- Unknown: {literal(entry['question'])}"
+            bullet = f"- Unknown: {scoped_text(entry, literal(entry['question']))}"
         else:
             source = sources[entry["source"] - 1]
             reference = records.retarget_links(source["reference"], private / "README.md", target, private)
@@ -530,7 +584,7 @@ def insert_entries(text, selected, sources, private, target):
     for entry in selected:
         if "answers" in entry:
             heading = entry["section"]
-            question = f"- Unknown: {literal(entry['answers'])}"
+            question = f"- Unknown: {scoped_text(entry, literal(entry['answers']))}"
             # A question with continuation lines needs a separate review of the whole entry.
             pattern = rf"^{re.escape(question)}(?:\n(?!\n*  )|\Z)"
             updates[heading] = re.sub(pattern, "", updates[heading], flags=re.M).strip()

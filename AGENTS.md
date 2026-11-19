@@ -4,7 +4,7 @@ PM Hub supports personal product management. The PM makes product decisions.
 
 ## Start and scope
 
-Open the outer Hub. Read [README.md](README.md). For an installed workspace, run `python3 tools/pm.py align` and follow [upgrade guidance](playbook/updates.md). Read relevant records and settings.
+Open the outer Hub. Read [README.md](README.md). For installed workspaces, run `python3 tools/pm.py align` and follow [upgrade guidance](playbook/updates.md). Read relevant records and settings. If prompted, ask once about remit.
 
 The system and `workspace/` are independent Git repositories. The system ignores `workspace/`. Read private records explicitly; root Git searches omit them.
 

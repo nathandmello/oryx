@@ -6,6 +6,7 @@ Start with the question a reader will return to answer. Find the subject, accoun
 | --- | --- |
 | A standing company fact, commitment, or exclusion | A short section in `context/company.md` |
 | A product rule, buyer need, or approved product decision | The owning `products/<product>/context.md` |
+| A rule for one area of a product | Label the area in its product brief. Initiative-specific details stay in the initiative brief. |
 | A recurring initiative's outcome, scope, or workflow | `products/<product>/initiatives/<initiative>/context.md` |
 | Evidence, an unknown, or a decision for existing PM work | Its section in the existing goal, problem, strategy, experiment, or roadmap |
 | An original report, announcement, or external deliverable | Its source of record. Cite the location and date beside the relevant claim. |

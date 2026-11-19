@@ -48,7 +48,7 @@ class AlignmentTests(unittest.TestCase):
         self.assertTrue(guide.read_bytes().endswith(b"PM checkpoint: interview on Friday.\r\n"))
         self.assertTrue(any(old.encode() in path.read_bytes()
                             for path in (self.work / ".git/pm-hub-recovery").rglob("README.md")))
-        self.assertEqual(json.loads(settings.read_text())["system_version"], "0.2.0")
+        self.assertEqual(json.loads(settings.read_text())["system_version"], pm.workspace.release(self.root)["system_version"])
         self.assertEqual(pm.alignment(self.root)["outstanding"], first["outstanding"])
         digest = sha256(doc.read_bytes()).hexdigest()
         backed = pm.alignment(self.root, prepare=True, backup=["context/company.md"])

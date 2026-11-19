@@ -2,7 +2,11 @@
 
 Pull the shared Hub and open it as usual. The agent updates private records during the session.
 
-Release 0.2.0 accepts private layout 1 from 0.1.0. Update the shared Hub on each machine before sharing migrated private work. Fresh installations start aligned.
+Release 0.3.0 accepts private layout 1 from 0.1.0 and 0.2.0. Fresh installations start aligned.
+
+Legacy responsibilities count as confirmed. Empty or follow-only remits prompt for ownership. Original subjects stay intact.
+
+Use 0.3.0 on each machine before sharing product-area keys or an explicit remit status. See [PM remit](context.md#pm-remit).
 
 ## What runs
 

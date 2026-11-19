@@ -24,7 +24,7 @@ For first-time setup, start with company context, then product context and strat
 
 Link a recurring initiative to its product context when the work warrants a separate brief.
 
-Agents automatically use [ingest-context](.agents/skills/ingest-context/SKILL.md) for context capture. Set the PM remit when responsibilities are known.
+Agents automatically use [ingest-context](.agents/skills/ingest-context/SKILL.md) for context capture. The agent prompts for a missing or unfinished [PM remit](playbook/context.md#pm-remit). A remit can cover whole products or several areas within them.
 
 ## Placement
 

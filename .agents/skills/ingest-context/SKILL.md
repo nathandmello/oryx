@@ -12,7 +12,7 @@ When a release flags older records, follow [the context cleanup procedure](../..
 ## Inspect
 
 - Read `workspace/context/pm-remit.json` when present. Use PM-confirmed responsibilities, goal links, dependencies, and interests.
-- When the PM defines or changes their remit, use `pm.py set-remit` to save the agreed scope.
+- Replace superseded roles when the PM confirms a change. Preserve unrelated entries and save the agreed scope with `pm.py set-remit`.
 - Find the existing record and accountable owner. Compare new evidence with accepted decisions.
 - Read applicable data boundaries before opening, transferring, or quoting sensitive source material.
 - Read parent briefs for inherited rules. Resolve conflicting authority before applying an exception.
@@ -27,7 +27,8 @@ When a release flags older records, follow [the context cleanup procedure](../..
 
 - Use the subject and accountable owner to choose a home. Use the remit to explain why the item matters.
 - Keep `company.md` focused on standing company facts and commitments. Link to ongoing developments and detailed records.
-- Keep product information with its product. Use area for a shared responsibility and reference for any other topic the PM values.
+- Keep product information with its product. Set `product_area` for area-specific product or initiative claims, questions, and answers.
+- Use `area` for cross-product responsibilities and `reference` for other topics the PM values.
 - Route initiative decisions and workflow details to its linked initiative brief when the work recurs.
 - Surface a sibling product update as an FYI when relevant. Flag its concrete effect on an owned product.
 - Keep the original source with its owner. Save a product-specific implication separately with its citation when requested.

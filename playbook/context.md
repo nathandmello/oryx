@@ -32,19 +32,30 @@ For company work, emphasise binding policies, exclusions, and shared terminology
 
 ## PM remit
 
-Save PM-confirmed responsibilities in `workspace/context/pm-remit.json` using `python3 tools/pm.py set-remit` with JSON on standard input. Link goals and metrics.
+Ask once about missing or unfinished ownership when questions are welcome. Accept deferral. Save PM-confirmed scope with `python3 tools/pm.py set-remit` using JSON on standard input.
 
 ```json
 {
+  "status": "confirmed",
   "responsibilities": [
-    {"subject": "product/checkout", "role": "owner", "goals": ["products/checkout/goal.md"], "depends_on": ["product/billing"]},
-    {"subject": "area/pricing", "role": "shared", "goals": [], "depends_on": []}
+    {"subject": "product/checkout/area/refunds", "role": "owner", "goals": [], "depends_on": ["product/billing"]},
+    {"subject": "product/checkout/area/receipts", "role": "shared", "goals": [], "depends_on": []},
+    {"subject": "product/catalogue", "role": "owner", "goals": [], "depends_on": []}
   ],
-  "follow": ["product/search", "topic/industry-benchmarks"]
+  "follow": ["topic/industry-benchmarks"]
 }
 ```
 
-An upstream dependency signals interest. Mark the PM’s work affected only for a confirmed consequence. The remit guides relevance. The subject and accountable owner determine the record's home. With no remit, report unknown PM relevance outside company scope.
+| Remit case | Agent action |
+| --- | --- |
+| New or changed responsibilities | Ask which products or named areas the PM owns or shares. Confirm each area's parent. Retain existing goals, dependencies, and interests. |
+| Invalid saved remit | Report the validation error; keep the file for repair. Continue capture with unknown PM responsibilities. |
+| More scope to add | Save `draft`; ask what is missing. |
+| PM confirms scope, including no current responsibilities | Save `confirmed`. |
+| Whole product | Apply the role to its areas. An explicit area role takes precedence there. |
+| Narrowed ownership | Replace the former whole-product entry with the confirmed areas. Preserve unrelated roles. |
+| One area | Use that area's role. Parent and sibling news needs a confirmed consequence for the area to count as affected. |
+| Follow or dependency | A whole product includes its areas. Use `affects` for a confirmed consequence. |
 
 ## Route supplied evidence
 
@@ -74,7 +85,7 @@ New captures start with the sections they use. Add sections as new evidence warr
 | Initiative | `outcome`, `workflow`, `constraints` |
 | Shared | `vocabulary`, `decisions`, `examples`, `data-boundaries`, `reviews` |
 
-For an area, use `area` with `subject: area/<slug>`. For another reference topic, use `reference` with `subject: topic/<slug>`.
+For product or initiative context, add `product_area` when the evidence identifies an area of its product. Use `scope: area` and `subject: area/<slug>` for an unqualified responsibility. Ask before assigning an existing unqualified area to a product. For another reference topic, use `reference` with `subject: topic/<slug>`.
 
 Deferred scopes are `delivery`, `detail`, and `unclear`.
 

@@ -180,7 +180,7 @@ class RepositoryTests(unittest.TestCase):
         note = (self.work / "context/notes.md").read_bytes()
         source = self.contributor("system")
         metadata = workspace.release(source)
-        metadata["system_version"] = "0.2.1"
+        metadata["system_version"] = "0.3.1"
         (source / "playbook/release.json").write_text(json.dumps(metadata) + "\n")
         self.commit(source, "Release a compatible system update")
         self.git(source, "push", "origin", "main")
@@ -188,7 +188,7 @@ class RepositoryTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertEqual(self.git(self.work, "rev-parse", "HEAD"), private_head)
         self.assertEqual((self.work / "context/notes.md").read_bytes(), note)
-        self.assertEqual(workspace.settings(self.root)["system_version"], "0.2.1")
+        self.assertEqual(workspace.settings(self.root)["system_version"], "0.3.1")
 
     def test_incompatible_system_update_stops_before_any_workspace_change(self):
         self.connect()

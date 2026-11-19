@@ -101,7 +101,7 @@ Preview affected paths and reasons. Preserve local edits and untracked records i
 
 Verify links, stable IDs, citations, and the intended outcome. Keep missing evidence or deferred work visible at the affected record.
 
-Follow [the 0.2.0 upgrade procedure](updates.md) for all existing private records, regardless of filename.
+Follow [the installed-workspace upgrade procedure](updates.md) for all existing private records, regardless of filename.
 
 ## Engineering and quality review before publication
 

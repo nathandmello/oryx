@@ -96,6 +96,13 @@ def main():
                     errors.append("Finish the pending filing review in playbook/updates.md. Record genuine evidence gaps as waiting.")
             result = response(event, errors + pm.check(root), retry)
             if event == "SessionStart":
+                if private.is_dir():
+                    prompt = pm.context_capture.remit_prompt(private)
+                    if prompt:
+                        result["hookSpecificOutput"]["additionalContext"] += (
+                            "\nAsk the PM once this session when questions are welcome: " + prompt
+                            + " Accept deferral and continue the requested work. Save only PM-confirmed answers with set-remit."
+                        )
                 notice = pm.alignment_notice(root)
                 if notice:
                     result["hookSpecificOutput"]["additionalContext"] += "\n" + notice

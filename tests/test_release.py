@@ -1,5 +1,6 @@
 """Exercise the standing review gates and whole-installation recovery contract."""
 
+import json
 import os
 from pathlib import Path
 import subprocess
@@ -18,7 +19,7 @@ class BackupTests(unittest.TestCase):
 
     def old(self):
         settings = self.work / "settings.json"
-        old = settings.read_text().replace("0.2.0", "0.1.0")
+        old = json.dumps(dict(json.loads(settings.read_text()), system_version="0.1.0"), indent=2) + "\n"
         settings.write_text(old)
         (self.work / upgrades.LEDGER).unlink()
         return settings, old
@@ -62,7 +63,7 @@ class BackupTests(unittest.TestCase):
             copy = restored / repo.relative_to(self.root)
             subprocess.run(["git", "-C", str(copy), "fsck", "--full"], capture_output=True, check=True)
             self.assertEqual(subprocess.check_output(["git", "-C", str(copy), "status", "--porcelain"]), status)
-        self.assertIn("0.2.0", settings.read_text())
+        self.assertEqual(json.loads(settings.read_text())["system_version"], pm.workspace.release(self.root)["system_version"])
         pm.alignment(self.root, True)
         self.assertEqual(list(store.glob("*/hub.tar.gz")), [archive])
 
@@ -72,7 +73,7 @@ class BackupTests(unittest.TestCase):
             pm.alignment(self.root, True)
         self.assertEqual(settings.read_text(), original)
         self.assertFalse((self.work / upgrades.LEDGER).exists())
-        archive = snapshots.ensure(self.root, "0.2.0")
+        archive = snapshots.ensure(self.root, pm.workspace.release(self.root)["system_version"])
         if os.name == "posix":
             archive.chmod(0o644)
             with self.assertRaisesRegex(ValueError, "Restrict"):
