@@ -29,6 +29,9 @@ Share the browser tab for a meeting. Keep the launch URL private.
 ## Roadmap
 
 Choose a product and planning cycle. Filter by area or select **Present** to enlarge the roadmap.
+
+Each affected card shows the same [evidence reviews](evidence-reviews.md) as the terminal roadmap.
+
 Use **Edit priorities** on an open cycle. Drag a card or use **Move** to change its position or horizon.
 Return a planned card to the candidates to release its capacity. Cards stay fixed after delivery starts.
 

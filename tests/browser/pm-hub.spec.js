@@ -123,11 +123,28 @@ test("compare and sign a cycle, filter the board, and approve a drag change", as
   await expect(lane(page, "now").getByRole("heading", { name: "Renewal delays" })).toBeVisible();
   await expect(lane(page, "later").getByRole("heading", { name: "Export turnaround" })).toBeVisible();
 
+  const renewalID = hub.cli(["roadmap", "--product", "example"]).find(row => row.title === "Renewal delays").id;
+  const reason = "Legal clearance is pending for the renewal audience.";
+  hub.cli(["route-context", "--write", "context/products/example/overview.md"], {
+    sources: [{ reference: "Fixture legal review, item 12", date: hub.today, checked_on: hub.today,
+      coverage: "read", text: "Confirm clearance for the renewal pilot." }],
+    entries: [{ scope: "product", product: "example", topic: "constraints", source: 1, location: "Item 12",
+      quote: "Confirm clearance for the renewal pilot.", risk: { reason, targets: [renewalID] } }],
+  });
+  const published = hub.cli(["roadmap", "--product", "example"]);
+  const [warning] = published.find(row => row.id === renewalID).evidence_reviews;
+  expect(warning).toContain(reason);
+  await button(page, "Refresh").click();
+  await expect(card(page, "Renewal delays").getByText(warning, { exact: true })).toBeVisible();
+  await expect(card(page, "Export turnaround").getByRole("list", { name: "Evidence to review" })).toHaveCount(0);
+
   await select(page, "Product area").selectOption("product/example/area/renewals");
   await expect(card(page, "Renewal delays")).toBeVisible();
   await expect(card(page, "Export turnaround")).toHaveCount(0);
   await button(page, "Present").click();
   await expect(page.locator("body")).toHaveClass(/presenting/);
+  await expect(card(page, "Renewal delays").getByText(warning, { exact: true })).toBeVisible();
+  expect(hub.cli(["roadmap", "--product", "example"])).toEqual(published);
   await button(page, "Exit presentation").click();
 
   await button(page, "Edit priorities").click();

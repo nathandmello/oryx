@@ -223,6 +223,10 @@ function roadmapCard(row, horizon) {
   const movable = row.phase === "planned" || row.phase === "candidate";
   const card = node("article", { class: "card", draggable: !!state.edit && movable ? "true" : null },
     node("h3", {}, row.title), row.outcome && node("p", { class: "muted" }, row.outcome));
+  if (row.evidence_reviews?.length) {
+    card.append(node("h4", {}, "Evidence to review"),
+      node("ul", { "aria-label": "Evidence to review" }, row.evidence_reviews.map(review => node("li", {}, review))));
+  }
   if (state.edit) {
     connectDrop(card, horizon, row.id);
     if (movable) {
