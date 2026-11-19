@@ -6,6 +6,7 @@ from pathlib import Path
 import shutil
 import subprocess
 import sys
+import tarfile
 import unittest
 import zipfile
 from unittest.mock import patch
@@ -17,6 +18,11 @@ import git_ops
 import pm
 import records
 import workspace
+
+
+def next_patch(version):
+    major, minor, patch_version = map(int, version.split("."))
+    return f"{major}.{minor}.{patch_version + 1}"
 
 
 class RepositoryTests(unittest.TestCase):
@@ -195,16 +201,65 @@ class RepositoryTests(unittest.TestCase):
         private_head = self.git(self.work, "rev-parse", "HEAD")
         note = (self.work / "workspace/backlogs/compare-offers.md").read_bytes()
         source = self.contributor("system")
-        metadata = json.loads((source / "playbook/release.json").read_text())
-        metadata["system_version"] = "0.3.1"
-        (source / "playbook/release.json").write_text(json.dumps(metadata) + "\n")
+        wire_file = source / "playbook/release.json"
+        metadata = json.loads(wire_file.read_text())
+        metadata["system_version"] = next_patch(metadata["system_version"])
+        wire_file.write_text(json.dumps(metadata) + "\n")
         self.commit(source, "Release a compatible system update")
         self.git(source, "push", "origin", "main")
         result = self.cli("git", "system", "pull", cwd=self.work)
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertEqual(self.git(self.work, "rev-parse", "HEAD"), private_head)
         self.assertEqual((self.work / "workspace/backlogs/compare-offers.md").read_bytes(), note)
-        self.assertEqual(workspace.settings(self.root)["system_version"], "0.3.1")
+        self.assertEqual(workspace.settings(self.root)["system_version"], metadata["system_version"])
+
+    def test_ordinary_shared_pull_aligns_forward_same_format_with_a_backup(self):
+        self.connect()
+        source = self.contributor("system")
+        path = source / "playbook/release.json"
+        release = json.loads(path.read_text())
+        previous = release["system_version"]
+        release["system_version"] = next_patch(previous)
+        path.write_text(json.dumps(release) + "\n")
+        self.commit(source, "Release a same-format patch")
+        self.git(source, "push", "origin", "main")
+        self.git(self.root, "pull", "--ff-only", "origin", "main")
+        settings = self.work / "settings.json"
+        original = settings.read_bytes()
+        self.assertTrue(pm.alignment(self.root)["needs_setup"])
+        self.assertEqual(settings.read_bytes(), original)
+        report = pm.alignment(self.root, prepare=True)
+        with tarfile.open(report["installation_backup"]) as backup:
+            self.assertEqual(backup.extractfile("private/settings.json").read(), original)
+        self.assertEqual(workspace.settings(self.root)["system_version"], release["system_version"])
+        (self.root / "playbook/release.json").write_text(json.dumps(dict(release, system_version=previous)))
+        with self.assertRaisesRegex(ValueError, "Unsupported workspace version"):
+            pm.alignment(self.root, prepare=True)
+        self.assertEqual(workspace.settings(self.root, compatible=False)["system_version"], release["system_version"])
+
+    def test_system_pull_merges_the_commit_it_inspected_after_another_fetch(self):
+        self.connect()
+        source = self.contributor("system")
+        wire_file = source / "playbook/release.json"
+        release = json.loads(wire_file.read_text())
+        release["system_version"] = next_patch(release["system_version"])
+        wire_file.write_text(json.dumps(release))
+        self.commit(source, "Release the checked patch")
+        self.git(source, "push", "origin", "main")
+        expected = self.git(source, "rev-parse", "HEAD")
+        previous = self.git(self.root, "rev-parse", "HEAD")
+
+        git = workspace.git
+        def another_fetch(path, *args):
+            result = git(path, *args)
+            if args == ("rev-parse", "FETCH_HEAD^{commit}"):
+                (path / ".git/FETCH_HEAD").write_text(previous + "\n")
+            return result
+
+        with patch.object(workspace, "git", side_effect=another_fetch):
+            git_ops.run(self.root, "system", "pull")
+        self.assertEqual(self.git(self.root, "rev-parse", "HEAD"), expected)
+        self.assertEqual(workspace.settings(self.root)["system_version"], release["system_version"])
 
     def test_incompatible_system_update_stops_before_any_workspace_change(self):
         self.connect()
@@ -442,10 +497,12 @@ with storage.writer_lock(private), patch.object(storage, 'replace_text', side_ef
                 self.fail("Full published Git history is required for consumer update checks")
             self.skipTest("Historical updater verification requires the published Git history")
 
-        for version, interrupted in (("0.1.0", False), ("0.2.0", False), ("0.2.0", True)):
-            with self.subTest(version=version, interrupted=interrupted):
+        current = workspace.release(pm.ROOT)["system_version"]
+        for version, interrupted, target_version in (("0.1.0", False, current), ("0.2.0", False, current),
+                                                     ("0.2.0", True, current), ("0.2.0", False, next_patch(current))):
+            with self.subTest(version=version, interrupted=interrupted, target_version=target_version):
                 sha = revisions[version]
-                fixture = version + ("-interrupted" if interrupted else "")
+                fixture = f"{version}-to-{target_version}" + ("-interrupted" if interrupted else "")
                 outer = self.root.parent / f"consumer-{fixture}"
                 self.git(self.root.parent, "clone", "--quiet", "--no-checkout", "--no-local", str(pm.ROOT), str(outer))
                 self.git(outer, "checkout", "--quiet", "-B", "main", sha)
@@ -474,7 +531,7 @@ with storage.writer_lock(private), patch.object(storage, 'replace_text', side_ef
                 evidence.write_text(text.replace("## Sources", "## Earlier evidence\n\nA signed policy is available.\n\n## Sources", 1))
                 self.commit(legacy, "Initial private records")
                 private_head = self.git(legacy, "rev-parse", "HEAD")
-                local_data = b"Untracked local evidence.\r\n"
+                local_data = "Untracked field evidence – São Paulo.\r\n".encode("utf-8")
                 (legacy / "context/sources").mkdir(exist_ok=True)
                 (legacy / "context/sources/field.txt").write_bytes(local_data)
 
@@ -489,6 +546,9 @@ with storage.writer_lock(private), patch.object(storage, 'replace_text', side_ef
                         target = publisher / path.relative_to(pm.ROOT)
                         target.parent.mkdir(parents=True, exist_ok=True)
                         shutil.copyfile(path, target)
+                if target_version != current:
+                    wire = publisher / "playbook/release.json"
+                    wire.write_text(json.dumps(dict(json.loads(wire.read_text()), system_version=target_version)) + "\n")
                 self.commit(publisher, "Current release fixture")
                 self.git(publisher, "push", "origin", "main")
                 command("git", "system", "pull")
@@ -497,7 +557,8 @@ with storage.writer_lock(private), patch.object(storage, 'replace_text', side_ef
                 private = outer / "private"
                 self.assertFalse(legacy.exists())
                 self.assertEqual(self.git(private, "rev-parse", "HEAD"), private_head)
-                self.assertEqual(json.loads((private / "settings.json").read_text())["workspace_format"], 2)
+                installed = json.loads((private / "settings.json").read_text())
+                self.assertEqual((installed["workspace_format"], installed["system_version"]), (2, target_version))
                 brief = (private / "context/company/overview.md").read_text()
                 self.assertEqual(records.work_state(brief)[0]["ID"], before_id)
                 self.assertIn("A signed policy is available.", brief)
@@ -507,7 +568,14 @@ with storage.writer_lock(private), patch.object(storage, 'replace_text', side_ef
                     with zipfile.ZipFile(private / ".hub-history/recover-access.zip") as saved:
                         self.assertEqual(saved.read("original/" + loose), original)
                 self.assertEqual((private / "context/sources/field.txt").read_bytes(), local_data)
-                self.assertTrue(list((outer / ".git/pm-hub-backups").glob("*/hub.tar.gz")))
+                # The layout snapshot contains the installed migrator and the old private work.
+                receipt = json.loads((private / f".git/pm-hub-backup-{target_version}-layout-2.json").read_text())
+                archive = outer / ".git/pm-hub-backups" / receipt["id"] / "hub.tar.gz"
+                with tarfile.open(archive) as backup:
+                    before = json.load(backup.extractfile("workspace/settings.json"))
+                    self.assertEqual((before["workspace_format"], before["system_version"]), (1, target_version))
+                    self.assertIn(workspace.FORMAT_FILE, backup.getnames())
+                    self.assertEqual(backup.extractfile("workspace/context/sources/field.txt").read(), local_data)
                 before = {p.relative_to(private): p.read_bytes() for p in pm.inventory(private) if p.is_file()}
                 command("align")
                 self.assertEqual(before, {p.relative_to(private): p.read_bytes() for p in pm.inventory(private) if p.is_file()})

@@ -89,7 +89,7 @@ For each shipped change, state which existing records it affects and how a consu
 | Existing records need review | Define how to find candidates, inspect original evidence, resolve each finding, and verify the affected records. |
 | Stored format changes | Supply a tested migration, compatibility requirements, a read-only preview, and a recovery procedure. |
 
-Test with a populated workspace from the previous supported release. Exercise the consumer update path. Include skipped releases when supported.
+Test direct shared Git pulls and released updaters on populated installations. Include supported skipped releases and same-format updates.
 
 Check whether older supported clients can read newly written records. For incompatible changes, document how the previous updater reaches the migration.
 

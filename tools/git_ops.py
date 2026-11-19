@@ -181,20 +181,20 @@ def run(root, role, operation):
     metadata_path = "playbook/release.json" if role == "system" else "settings.json"
     incoming = json.loads(workspace.git(path, "show", f"{fetched}:{metadata_path}"))
     if role == "system":
-        for revision in ("HEAD", "FETCH_HEAD"):
+        for revision in ("HEAD", fetched):
             if workspace.git(path, "ls-tree", revision, "--", "workspace", "private"):
                 raise ValueError("Shared Git history tracks the private workspace; stopped before merging")
-        descriptor = None
-        if workspace.git(path, "ls-tree", "FETCH_HEAD", "--", workspace.FORMAT_FILE):
-            descriptor = json.loads(workspace.git(path, "show", "FETCH_HEAD:" + workspace.FORMAT_FILE))
+        if not workspace.git(path, "ls-tree", fetched, "--", workspace.FORMAT_FILE):
+            raise ValueError("Incoming Hub predates the release descriptor. Preserve this installation before restoring an older release")
+        descriptor = json.loads(workspace.git(path, "show", f"{fetched}:{workspace.FORMAT_FILE}"))
         incoming = workspace.installed_release(incoming, descriptor)
-        if tuple(map(int, incoming["system_version"].split("."))) < tuple(map(int, settings["system_version"].split("."))):
+        if workspace.version(incoming) < max(workspace.version(settings), workspace.version(workspace.release(root))):
             raise ValueError("Incoming Hub predates this private workspace; use the documented recovery procedure")
+        if not workspace.supports_update(settings, incoming):
+            raise ValueError("Incoming workspace format differs; review a migration before updating")
     if not isinstance(incoming, dict):
         raise ValueError("Incoming workspace settings must be a JSON object")
-    supported_upgrade = (role == "system" and settings["workspace_format"] == 1
-                         and incoming.get("workspace_format") == 2 and incoming["system_version"] == "0.3.0")
-    if incoming.get("workspace_format") != settings["workspace_format"] and not supported_upgrade:
+    if role == "workspace" and incoming.get("workspace_format") != settings["workspace_format"]:
         raise ValueError("Incoming workspace format differs; review a migration before updating")
     if role == "workspace" and (incoming.get("system_version") != settings["system_version"]
                                 or incoming.get("remotes") != settings["remotes"]):
@@ -211,8 +211,8 @@ def run(root, role, operation):
                 raise ValueError("Workspace version changed during the update; recheck alignment")
             if latest["system_version"] != incoming["system_version"]:
                 snapshots.ensure(root, incoming["system_version"])
-            workspace.git(path, "merge", "--ff-only", "--no-overwrite-ignore", "FETCH_HEAD")
-            if not supported_upgrade and latest["system_version"] != incoming["system_version"]:
+            workspace.git(path, "merge", "--ff-only", "--no-overwrite-ignore", fetched)
+            if latest["workspace_format"] == incoming["workspace_format"] and latest["system_version"] != incoming["system_version"]:
                 latest["system_version"] = incoming["system_version"]
                 storage.replace_text(target, original, json.dumps(latest, indent=2) + "\n")
     else:

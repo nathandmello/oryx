@@ -36,6 +36,8 @@ Test existing installations with arbitrary filenames, untracked records, missing
 
 For each change, record its effect on installed workspaces in the release or pull request description. Follow [the release process](../../../playbook/git.md#existing-workspaces-at-release).
 
+Verify direct shared Git pulls and released wrappers against the actual release version and private format.
+
 Follow [the prepublication gates](../../../playbook/git.md#engineering-and-quality-review-before-publication). Record independent engineering and quality reviews for the current pull request commit. Retest fixes and state verification limits.
 
 The PM's request authorises work within its scope. Ask only for a missing decision or an action outside that authority.

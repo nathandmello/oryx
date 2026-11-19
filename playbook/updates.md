@@ -2,9 +2,7 @@
 
 Pull and open the shared Hub. The agent handles private updates.
 
-Release 0.3.0 uses private format 2.
-
-The previous updater reads `playbook/release.json` to fetch the migrator. The new Hub reads `playbook/workspace-format.json`.
+Release 0.3.0 uses private format 2. Both updaters read the release version in `playbook/release.json`. Its format 1 value lets older clients fetch the migration code. The new Hub reads the installed private format from `playbook/workspace-format.json`.
 
 ## What runs
 
@@ -59,7 +57,7 @@ For redundant navigation, supply its `line` and `disposition: navigation`. The t
 
 For a verbatim line routed elsewhere, give its `line` and retained `destination`. Preserve the meaning of headings and verify changed links and anchors.
 
-Use `waiting` for a specific blocker. Read-only `align --status` shows outstanding items and digests. Revisit them when evidence arrives.
+Use `waiting` for specific blockers. Recheck them with `align --status`.
 
 Run `python3 tools/pm.py check` after conversion. Compare the result with the original sources. Report completed changes, retained records, and unresolved evidence separately.
 
@@ -69,13 +67,13 @@ Before the first migration write, the Hub snapshots the entire local installatio
 
 Links are stored as links. The archive omits its own backup directory. Special files, external Git object stores, or verification failures stop migration.
 
-The archive records POSIX modes and extended attributes exposed by Python. Platform-specific metadata outside those APIs needs a native backup when required.
+The archive records POSIX modes and extended attributes exposed by Python. On macOS, use a native backup for Finder tags, resource forks, or ACLs.
 
-The current updater snapshots before merging a version change.
-
-A plain shared Git pull updates the toolkit first. Session startup then captures the untouched private workspace.
-
-The old 0.1.0 updater can update private version metadata before the new code runs. Its snapshot reflects that setting and the updated shared checkout.
+| Update path | Backup timing |
+| --- | --- |
+| Current wrapper or the released 0.2.0 wrapper | A version-changing system pull verifies a backup before merging the shared update. Startup verifies the layout backup before private conversion. |
+| Direct shared Git pull | Startup backs up the updated toolkit and the original private layout. |
+| Released 0.1.0 wrapper | The wrapper can set the private version to 0.3.0 first. The layout backup includes that setting. |
 
 The receipt identifies `.git/pm-hub-backups/<id>/hub.tar.gz` and its SHA-256.
 
@@ -87,17 +85,19 @@ Use the reported `installation_backup` path. For this layout migration, the priv
 
 Verify `SHA256SUMS` in the archive directory. Extract into a new empty private directory with a tool that preserves permissions and extended attributes.
 
-On Linux, extract from the backup directory. Set the recovered private path to the name present in that archive.
+On macOS, run these commands from the archive directory. Use the private directory name recorded in the archive.
 
 ```sh
-sha256sum -c SHA256SUMS
+shasum -a 256 -c SHA256SUMS
 mkdir -m 700 /path/to/new-recovery-directory
-tar --xattrs --xattrs-include='*' -xpzf hub.tar.gz -C /path/to/new-recovery-directory
+tar -xpzf hub.tar.gz -C /path/to/new-recovery-directory
 git -C /path/to/new-recovery-directory fsck --full
 # Use workspace for an archive of the older layout.
 private_name=private
 git -C "/path/to/new-recovery-directory/$private_name" fsck --full
 ```
+
+For GNU tar on Linux, use `--xattrs --xattrs-include='*'` when restoring extended attributes.
 
 Compare the recovered working files before switching installations.
 

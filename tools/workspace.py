@@ -57,6 +57,20 @@ def installed_release(wire, descriptor):
     return dict(wire, workspace_format=descriptor["workspace_format"])
 
 
+def version(release):
+    return tuple(map(int, release["system_version"].split(".")))
+
+
+def supports_update(settings, incoming):
+    previous = version(settings)
+    if incoming["workspace_format"] != 2 or version(incoming) < max((0, 3, 0), previous):
+        return False
+    if settings["workspace_format"] == 2:
+        return previous >= (0, 3, 0)
+    # The two released wrappers stamp the fetched 0.3.x version before the new migrator runs.
+    return settings["workspace_format"] == 1 and (previous in {(0, 1, 0), (0, 2, 0)} or previous[:2] == (0, 3))
+
+
 def check_relocation(root, previous):
     """Check fixed worktree bindings and the outer Git boundary before any conversion."""
     if previous != root / "workspace" or private_root(root) != previous or previous.resolve() != previous:

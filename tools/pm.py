@@ -467,8 +467,7 @@ def alignment(root, prepare=False, record=None, outcome=None, digest=None, note=
         release = workspace.release(root)
         old_layout = settings["workspace_format"] == 1
         changing = any(settings[key] != value for key, value in release.items())
-        if changing and not (old_layout and settings["system_version"] in {"0.1.0", "0.2.0", "0.3.0"}
-                             and release == {"system_version": "0.3.0", "workspace_format": 2}):
+        if not workspace.supports_update(settings, release):
             raise ValueError("Unsupported workspace version; inspect release compatibility before updating")
         moving = private.name == "workspace"
         if moving:
@@ -478,7 +477,7 @@ def alignment(root, prepare=False, record=None, outcome=None, digest=None, note=
         layout_upgrade.receipt(private, state)
         recovery = None
         # Old filing transactions must finish with their accepted paths before layout planning.
-        if prepare and (old_layout or moving or review_pending or record or for_conversion
+        if prepare and (changing or old_layout or moving or review_pending or record or for_conversion
                         or upgrades.RULE not in state or not upgrades.scan_marker(private).exists()):
             recovery = snapshots.ensure(root, release["system_version"], layout_change=old_layout or moving)
         if prepare and review_pending:
