@@ -9,6 +9,11 @@ The default backlog shows inbox, under consideration, in discovery, defining, an
 Use `--due` for dated reviews across phases. Release measurements leave the reminder active until the PM signs an outcome review.
 A dated follow-up sets the next reminder. Closure clears it. Review event-triggered deferrals when their named event occurs.
 
+The due list keeps signed reminders visible when an approval needs review.
+The command reports review issues on standard error for the selected product or area.
+Check these notices even when no rows are due. Use `initiative show PRODUCT ID` to inspect the affected approval.
+Advancing the initiative still requires current evidence and PM approval.
+
 After closure, the first newly recorded measurement makes the review due on its observation date.
 Corrections, guardrail breaches and material changes to measured outcomes bring review forward, including during a scheduled follow-up.
 The next closure cites the measurements that reopened the review.

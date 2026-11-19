@@ -69,18 +69,19 @@ class InitiativeTests(unittest.TestCase):
         self.assertEqual(self.ledger.read_bytes(), original)
         self.assertIn("PASS", self.cli("check"))
 
-    def cli(self, *args, value=None, error=None):
+    def cli(self, *args, value=None, error=None, capture_result=False):
         result = subprocess.run(
             [sys.executable, str(self.root / "tools/pm.py"), *args], env=self.env,
             cwd=self.work if self.work.exists() else self.root, capture_output=True, text=True,
             input=json.dumps(value) if value is not None else "",
         )
+
         if error is None:
             self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         else:
             self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)
             self.assertIn(error, result.stdout)
-        return result.stdout
+        return result if capture_result else result.stdout
 
     def preview(self, *events, error=None):
         output = self.cli("initiative", "propose", "example", value=events, error=error)
@@ -584,6 +585,67 @@ class InitiativeTests(unittest.TestCase):
         self.cli("check", error="signature does not match")
         self.ledger.write_text(signed_text)
         self.cli("check")
+
+    def test_due_backlog_reports_stale_approval_and_keeps_unrelated_reminder(self):
+        renewals = "product/example/area/renewals"
+        imports = "product/example/area/imports"
+        incident = f"{self.product_id}/incident-retry"
+        self.cli("set-remit", value={"status": "confirmed", "responsibilities": [], "follow": [renewals, imports]})
+        self.submit(self.setup_event(), {**self.capture(), "areas": [renewals]}, self.describe(),
+                    self.decision("evaluate"), self.decision("prepare-brief"))
+        self.brief_ready()
+        self.submit(self.metric(), self.target(), self.decision("approve-initiative"))
+        self.submit(self.cycle(), self.plan())
+        self.submit({**self.capture(incident, "Restore import retries", "Incident bridge log, entry 7"),
+                     "summary": "New uploads stalled after a vendor outage.", "areas": [imports]},
+                    self.decision("expedite", incident, delivery="https://example.com/delivery/42",
+                                  owner="Support lead", obligation="Restore account imports", deadline=self.today,
+                                  scope="Restore stalled vendor retries", review_on=self.today),
+                    {"type": "signal", "initiative": incident, "source": "Incident bridge log, entry 8",
+                     "observed_on": self.today, "summary": "Upload retries still fail for accounts in one region."})
+
+        due = ("--product", "example", "--due")
+        outputs = {}
+        for style in ("json", "csv", "markdown"):
+            clean = self.cli("backlog", *due, "--format", style, capture_result=True)
+            self.assertIn(incident, clean.stdout)
+            self.assertIn("needs-triage: Incident bridge log, entry 8", clean.stdout)
+            self.assertEqual(clean.stderr, "")
+            outputs[style] = clean.stdout
+        self.assertEqual([row["id"] for row in json.loads(outputs["json"])], [incident])
+
+        advance = self.decision("start-delivery", delivery="https://example.com/delivery/43")
+        proposal = self.preview(advance)
+        signed = self.ledger.read_bytes()
+        path = self.work / self.brief
+        original = path.read_text()
+        path.write_text(original.replace("account reminders", "billing reminders"))
+        stale = "differs from the reviewed revision"
+        issue = f"Review issue: {self.i}: {self.brief} {stale}\n"
+
+        for command in (("backlog",), ("action", "portfolio", "backlog", "show")):
+            for style, expected in outputs.items():
+                with self.subTest(command=command, style=style):
+                    result = self.cli(*command, *due, "--format", style, capture_result=True)
+                    self.assertEqual(result.stdout, expected)
+                    self.assertEqual(result.stderr, issue)
+
+        other_area = self.cli("backlog", *due, "--area", "imports", capture_result=True)
+        self.assertEqual((other_area.stdout, other_area.stderr), (outputs["json"], ""))
+        affected_area = self.cli("backlog", "--due", "--area", renewals, capture_result=True)
+        self.assertEqual((json.loads(affected_area.stdout), affected_area.stderr), ([], issue))
+        self.cli("action", "portfolio", "roadmap", "show", "--product", "example", error=stale)
+        self.cli("backlog", "--product", "example", error=stale)
+        self.cli("check", error=stale)
+        self.preview(advance, error=stale)
+        self.apply(proposal, error=stale)
+        self.assertEqual(self.ledger.read_bytes(), signed)
+
+        path.write_text(original)
+        restored = self.cli("backlog", *due, capture_result=True)
+        self.assertEqual((restored.stdout, restored.stderr), (outputs["json"], ""))
+        self.ledger.write_bytes(signed.replace(b"Renewal delays", b"Direct write attempt"))
+        self.cli("backlog", *due, error="signature does not match")
 
     def test_duplicates_backlog_limits_and_review_triggers(self):
         self.new("discovery-brief", self.discovery, error="Register the initiative")
