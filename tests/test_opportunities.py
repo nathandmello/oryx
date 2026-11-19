@@ -2,6 +2,7 @@
 
 import csv
 from datetime import date, timedelta
+import errno
 from io import StringIO
 import json
 import os
@@ -326,16 +327,47 @@ class InitiativeTests(unittest.TestCase):
         self.submit(result)
 
     @unittest.skipUnless(os.name == "posix", "POSIX group permissions")
+    def test_shared_writes_reject_directories_without_setgid(self):
+        import grp
+        self.submit(self.setup_event(), self.capture(), self.metric())
+        self.assertEqual(stat.S_IMODE(self.ledger.stat().st_mode), 0o600)
+        self.env["PM_HUB_SHARED_GROUP"] = grp.getgrgid(self.ledger.parent.stat().st_gid).gr_name
+        self.ledger.parent.chmod(0o750)
+        self.apply(self.preview(self.describe()), error="mode 2750")
+
+        home = self.work / "workspace/experiments/example/renewal"
+        home.mkdir(parents=True)
+        home.chmod(0o770)
+        self.cli("initiative", "draft-experiment", "example", self.i, "renewal-rate", error="mode 2770")
+        self.assertEqual(list(home.iterdir()), [])
+
+    @unittest.skipUnless(os.name == "posix", "POSIX group permissions")
     def test_opt_in_group_access_for_register_and_drafts(self):
         import grp
+
+        def provision(directory, mode):
+            ordinary_mode = mode & ~stat.S_ISGID
+            try:
+                directory.chmod(mode)
+            except OSError as exc:
+                if exc.errno not in {errno.EPERM, errno.EACCES, errno.ENOTSUP}:
+                    raise
+                directory.chmod(ordinary_mode)
+                self.assertEqual(stat.S_IMODE(directory.stat().st_mode), ordinary_mode)
+                self.skipTest(f"Optional two-account sharing: test directory rejects setgid ({exc.strerror})")
+            actual = stat.S_IMODE(directory.stat().st_mode)
+            if actual == ordinary_mode:
+                self.skipTest("Optional two-account sharing: test directory strips setgid")
+            self.assertEqual(actual, mode)
+
         self.ledger.parent.mkdir(parents=True, exist_ok=True)
         self.env["PM_HUB_SHARED_GROUP"] = grp.getgrgid(self.ledger.parent.stat().st_gid).gr_name
         lock = self.work / ".git" / "pm-hub-writer.lock"
         lock.chmod(0o440)
-        self.ledger.parent.chmod(0o2770)
+        provision(self.ledger.parent, 0o2770)
         proposal = self.preview(self.setup_event(), self.capture(), self.metric())
         self.apply(proposal, error="mode 2750")
-        self.ledger.parent.chmod(0o2750)
+        provision(self.ledger.parent, 0o2750)
         self.apply(proposal)
         self.assertEqual(stat.S_IMODE(self.ledger.stat().st_mode), 0o640)
         before = self.ledger.read_bytes()
@@ -343,7 +375,7 @@ class InitiativeTests(unittest.TestCase):
         self.assertEqual(self.ledger.read_bytes(), before)
         home = self.work / "workspace/experiments/example/renewal"
         home.mkdir(parents=True)
-        home.chmod(0o2770)
+        provision(home, 0o2770)
         self.submit(self.target())
         path = self.work / self.trace()["initiative"]["experiment_drafts"]["renewal-rate"]["path"]
         self.assertEqual(stat.S_IMODE(path.stat().st_mode), 0o660)
