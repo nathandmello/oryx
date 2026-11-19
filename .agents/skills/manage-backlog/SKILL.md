@@ -41,6 +41,10 @@ Read deferred items separately for event triggers. A dated review cannot detect 
 Review active discovery weekly against its learning goals. At the open-item limit, review existing work with the PM before adding another initiative.
 Use `signal` for new evidence and `reopen` for a decision to reconsider an existing initiative.
 
+Review `signal_reviews` when previewing new evidence against an approved plan.
+Show the affected claim, source, and remaining risk. Let the PM sign the review or keep it due.
+Use [the signal review procedure](../../../playbook/initiative-views.md#review-new-evidence) for dispositions.
+
 ## Deliver and learn
 
 1. Confirm delivery scope and the tracker URL with the owner. Include the initiative ID in the handoff.

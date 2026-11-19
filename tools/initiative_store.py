@@ -16,6 +16,7 @@ import initiative_areas
 import initiative_intake
 import initiative_work
 import launch_readiness
+import initiative_views
 import layout
 import layout_upgrade
 import metric_registry
@@ -180,6 +181,18 @@ def capture_references(root, product, event, register):
             if item is None or item["phase"] != "candidate":
                 raise ValueError(f"Cycle option {identifier} must be an approved candidate in this product")
         return doc_reference(root, layout.prioritization(product, event["cycle"]), "prioritization", options=event["options"])
+    if kind == "review-signal":
+        item = register.items.get(event["initiative"])
+        review = item["_signal_reviews"].get(event["signal"]) if item else None
+        if not review:
+            raise ValueError("Choose a signal recorded on this initiative after approval")
+        claim = None
+        if event["claim"] is not None:
+            claims = initiative_views.signal_claims(storage.private_root(root), review["basis"])
+            claim = next((claim for claim in claims if claim["text"] == event["claim"]), None)
+            if claim is None:
+                raise ValueError("Quote a specific claim from the signed brief, approval, or plan")
+        return {"basis": review["basis"], "claim": claim}
     action = event["action"]
     initiative = event["initiative"]
     if initiative not in register.items:
@@ -293,6 +306,7 @@ def prepare(root, product, changes, *, review_dates=None):
     previous_events = payload["events"]
     accepted = []
     intake_reviews = {}
+    signal_sources = {}
     proposed_experiments = set()
     definitions = None
     for event in changes:
@@ -361,6 +375,9 @@ def prepare(root, product, changes, *, review_dates=None):
         if needs_reference(event):
             event = {**event, "references": capture_references(root, product, event, register)}
         register.accept(event, len(previous_events) + len(accepted))
+        if event["type"] in {"signal", "review-signal"}:
+            source = event["signal"] if event["type"] == "review-signal" else event["source"]
+            signal_sources.setdefault(event["initiative"], set()).add(source)
         if event["type"] == "decision" and event["action"] == "plan":
             cycle = register.cycles[event["cycle"]]
             if register.approved_at[event["initiative"]] > cycle["compared_at"]:
@@ -376,13 +393,22 @@ def prepare(root, product, changes, *, review_dates=None):
     }
     if intake_reviews:
         proposal["intake_reviews"] = intake_reviews
+    signal_reviews = {}
+    for initiative, sources in signal_sources.items():
+        reviews = [review for review in initiative_views.signal_reviews(storage.private_root(root), register.items[initiative])
+                   if review["id"] in sources]
+        if reviews:
+            signal_reviews[initiative] = reviews
+    if signal_reviews:
+        proposal["signal_reviews"] = signal_reviews
     return proposal, original, candidate, register
 
 
 def apply(root, product, proposal, key, confirmations=()):
     private = storage.private_root(root)
     if (not isinstance(proposal, dict)
-            or set(proposal) - {"intake_reviews"} != {"product", "base", "changes", "reviewed_transactions", "revision"}):
+            or set(proposal) - {"intake_reviews", "signal_reviews"}
+            != {"product", "base", "changes", "reviewed_transactions", "revision"}):
         raise ValueError("Apply requires the complete JSON from initiative propose")
     reviewed = proposal["reviewed_transactions"]
     if not isinstance(reviewed, list):

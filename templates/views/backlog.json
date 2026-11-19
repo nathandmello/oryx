@@ -15,7 +15,8 @@
     "last_decision_on": "Last decision",
     "revisit": "Next review or trigger",
     "outcome_risks": "Outcome risks",
-    "sources": "Signal references"
+    "sources": "Signal references",
+    "evidence_reviews": "Evidence review"
   },
   "sources": [
     "https://www.atlassian.com/software/jira/templates/product-backlog-template",

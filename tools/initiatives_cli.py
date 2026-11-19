@@ -4,7 +4,7 @@ import json
 import sys
 
 from initiative_events import (DECISION_FIELDS, EVALUATION_FIELDS, FIELDS, HORIZONS, OPTIONAL_FIELDS,
-                               OUTCOME_STATUSES, PHASES, RESULTS, RISKS, TRANSITIONS)
+                               OUTCOME_STATUSES, PHASES, RESULTS, RISKS, SIGNAL_ACTIONS, SIGNAL_IMPACTS, TRANSITIONS)
 import experiment_drafts
 import initiative_areas
 import storage
@@ -56,6 +56,7 @@ def run(root, args):
             "optional_fields_by_type": OPTIONAL_FIELDS,
             "registry_metric": "Use type metric and its registry ID. For a revised snapshot, use a new metric ID plus registry_metric.",
             "intake_review": "Proposals compare new IDs against this product's history. The PM confirms distinct captures at apply.",
+            "signal_review": "Review new evidence against the active signed plan. Use the source locator as signal and quote the affected claim.",
             "extra_fields_by_decision": DECISION_FIELDS,
             "ship_exceptions": "Optional object keyed by outstanding readiness ID. Each entry needs reason and authority. Review the generated readiness snapshot before signing.",
             "outcome_evidence": {
@@ -76,7 +77,8 @@ def run(root, args):
             "transitions": {action: {"from": sorted(start), "to": end} for action, (start, end) in TRANSITIONS.items()},
             "horizons": HORIZONS,
             "allowed_values": {"risk": RISKS, "conclusion": RESULTS, "horizon": HORIZONS,
-                               "window": metric_registry.REPORTING_WINDOWS, "transition": sorted(TRANSITIONS), "outcome status": OUTCOME_STATUSES},
+                               "window": metric_registry.REPORTING_WINDOWS, "transition": sorted(TRANSITIONS), "outcome status": OUTCOME_STATUSES,
+                               "signal impact": SIGNAL_IMPACTS, "signal action": SIGNAL_ACTIONS},
             "formats": {
                 "object": "JSON object with the fields specified for its transaction",
                 "number": "finite numeric value in the signed unit; use a decimal string to preserve precision",
@@ -93,6 +95,7 @@ def run(root, args):
                 "positive": "integer greater than zero", "count": "nonnegative integer",
                 "confidence": "integer from 0 to 10", "URL": "absolute HTTPS URL without credentials",
                 "path": "workspace-relative path", "text": "concrete single-line text without placeholders",
+                "optional text": "concrete single-line text or null",
             },
         }, indent=2))
         return
