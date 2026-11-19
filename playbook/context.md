@@ -32,7 +32,8 @@ For company work, emphasise binding policies, exclusions, and shared terminology
 
 ## PM remit
 
-Keep the whole PM profile in `private/context/pm/context.md`. Use plain Markdown for background, working preferences, stakeholders, and other confirmed details.
+The PM profile is `private/context/pm/context.md`. Manage [reply preferences](working.md#reply-preferences) with Hub commands.
+Keep captured preferences as context.
 
 Ask once about missing or unfinished responsibilities when questions are welcome. Accept deferral. For a fresh profile, use `python3 tools/pm.py new pm-context context/pm/context.md`.
 

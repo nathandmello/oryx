@@ -29,7 +29,10 @@ jobs:
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
         run: python3 tools/release_candidate.py >> "$GITHUB_OUTPUT"
-      - run: python3 tools/pm.py check --system-only
+      - name: Check Hub structure and published commands
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: python3 tools/pm.py check --system-only --command-base "$BASE_SHA"
       - run: python3 -m unittest discover -s tests -v
       - name: Check context retrieval, artifact structure and numeric behavior
         run: python3 tests/context-evals/run.py --strict

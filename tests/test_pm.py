@@ -59,6 +59,33 @@ class HubTests(unittest.TestCase):
     def test_scaffold_passes(self):
         self.assertEqual(pm.check(self.root), [])
 
+    def test_system_check_rejects_standalone_slash_command_files(self):
+        paths = (".claude/commands/workspace-check.md", ".codex/prompts/workspace-check.md")
+        for name in paths:
+            target = self.root / name
+            target.parent.mkdir()
+            target.write_text("Check the workspace.\n")
+        errors = pm.check(self.root, include_workspace=False)
+        for name in paths:
+            self.assertIn(f"{name}: register shared slash actions in playbook/commands.json", errors)
+
+    def test_check_command_compares_published_paths_when_given_a_base(self):
+        name = "playbook/commands.json"
+        git = ["git", "-C", str(self.root), "-c", "user.name=Fixture PM", "-c", "user.email=pm@example.com"]
+        subprocess.run([*git, "add", name], check=True)
+        subprocess.run([*git, "commit", "--quiet", "-m", "Publish command paths"], check=True)
+        base = subprocess.check_output([*git, "rev-parse", "HEAD"], text=True).strip()
+        target = self.root / name
+        catalog = json.loads(target.read_text())
+        del catalog["commands"]["workspace preferences preview"]
+        target.write_text(json.dumps(catalog))
+        command = [sys.executable, str(self.root / "tools/pm.py"), "check", "--system-only"]
+        subprocess.run(command, check=True, capture_output=True, text=True)
+        result = subprocess.run([*command, "--command-base", base], capture_output=True, text=True)
+        self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+        for path in ("workspace preferences preview", "preferences preview"):
+            self.assertIn(f"Keep /pm {path} available", result.stdout)
+
     def test_system_check_catches_stale_template_index_and_routing_guide(self):
         index = self.root / "templates/README.md"
         guide = self.root / "playbook/context.md"
