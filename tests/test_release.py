@@ -182,3 +182,45 @@ Desktop sessions were outside this fixture.
         self.pr["merged"] = False
         with self.assertRaisesRegex(ValueError, "merged|tip"):
             self.gate()
+
+    def detached(self):
+        self.pr["head"].update(ref="codex/release-fix", repo={"id": 123, "owner": {"login": "fixture"}})
+        query = "pulls?state=all&head=fixture%3Acodex%2Frelease-fix&per_page=100"
+        self.responses[query] = [self.pr]
+        self.runs[0].update(pull_requests=[], event="pull_request", head_sha=self.head,
+                            head_branch="codex/release-fix", head_repository={"id": 123})
+        return query
+
+    def test_post_merge_run_without_association_requires_unique_exact_pr_head(self):
+        query = self.detached()
+        self.responses[query].insert(0, {"number": 4, "head": {"sha": "c" * 40}})
+        self.gate()
+
+        self.responses[query].append({"number": 10, "head": {"sha": self.head}})
+        with self.assertRaisesRegex(ValueError, "uniquely associate"):
+            self.gate()
+
+        self.responses[query] = [self.pr] * 100
+        with self.assertRaisesRegex(ValueError, "uniquely associate"):
+            self.gate()
+
+    def test_post_merge_run_rejects_wrong_source_or_explicit_association(self):
+        self.detached()
+        original = self.runs[0]
+        for changed in ({"head_sha": "c" * 40}, {"head_branch": "other"}, {"head_repository": {"id": 456}},
+                        {"event": "push"}, {"pull_requests": [{"number": 10}]}):
+            with self.subTest(changed=changed):
+                self.runs[0] = dict(original, **changed)
+                with self.assertRaisesRegex(ValueError, "successful"):
+                    self.gate()
+
+    def test_later_detached_failure_or_pending_attempt_blocks_publication(self):
+        self.detached()
+        self.gate()
+        self.runs.append(dict(self.runs[0], run_attempt=3, conclusion="failure"))
+        self.runs[0]["pull_requests"] = [{"number": 9}]
+        with self.assertRaisesRegex(ValueError, "successful"):
+            self.gate()
+        self.runs[-1]["conclusion"] = None
+        with self.assertRaisesRegex(ValueError, "successful"):
+            self.gate()

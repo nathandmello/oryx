@@ -31,6 +31,32 @@ def review(pr):
         raise ValueError("Identify the independent engineering and quality reviewers")
 
 
+def detached_pr_runs(pr, runs, api):
+    head = pr["head"]
+    repo = head.get("repo")
+    branch = head.get("ref")
+    if not repo or not branch:
+        return []
+
+    # GitHub can clear run associations after merge. Use the exact source
+    # identity only when the reviewed head belongs to one PR on that branch.
+    candidates = [
+        run for run in runs
+        if not run["pull_requests"] and run.get("event") == "pull_request"
+        and run.get("head_sha") == head["sha"] and run.get("head_branch") == branch
+        and (run.get("head_repository") or {}).get("id") == repo["id"]
+    ]
+    if not candidates:
+        return []
+    source = repo["owner"]["login"] + ":" + branch
+    query = urlencode({"state": "all", "head": source, "per_page": 100})
+    pulls = api("pulls?" + query)
+    exact = [item["number"] for item in pulls if item["head"]["sha"] == head["sha"]]
+    if len(pulls) >= 100 or exact != [pr["number"]]:
+        raise ValueError("Cannot uniquely associate the reviewed head with this pull request")
+    return candidates
+
+
 def publication(event, ref, sha, api):
     branch = event["repository"]["default_branch"]
     number = event["inputs"]["release_pr"]
@@ -47,6 +73,7 @@ def publication(event, ref, sha, api):
     query = urlencode({"head_sha": head, "event": "pull_request", "per_page": 100})
     runs = api("actions/workflows/check.yml/runs?" + query)["workflow_runs"]
     matching = [run for run in runs if any(p["number"] == pr["number"] for p in run["pull_requests"])]
+    matching.extend(detached_pr_runs(pr, runs, api))
     latest = max(matching, key=lambda run: (run["run_number"], run["run_attempt"]), default={})
     if latest.get("conclusion") != "success":
         raise ValueError("The reviewed pull request needs a successful PM Hub checks run")
