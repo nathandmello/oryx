@@ -2,9 +2,11 @@
 
 Open the updated Hub to verify compatibility.
 
-Releases 0.3.1 through 0.4.1 use private format 2. Follow [brief review](brief-review.md) and [red-team methods](../.agents/skills/red-team/SKILL.md).
+Releases 0.3.1 through 0.4.2 use private format 2.
 
-0.4.1 changes [publication](publication.md).
+0.4.2 automates [publication](publication.md).
+
+Release 0.4.1 adds [initiative tasks and launch checklists](initiative-work.md) on demand.
 
 Release 0.4.0 adds task context, a [metric registry](metrics.md), and optional artifact conversion.
 
@@ -14,7 +16,7 @@ Release 0.3.5 adds [context section leads](filing.md#when-a-section-earns-its-pl
 
 Check [signed prototype compatibility](initiative-approvals.md#existing-private-work).
 
-Update every client before sharing newly formatted records or signed changes. The updated Hub reads existing format-2 signatures.
+Update every client before sharing newly formatted records, initiative JSON lists, or signed changes. The Hub reads existing format-2 signatures.
 For an active discovery approved before source binding, review the plan and sources together. Sign a fresh `start-discovery` before concluding.
 
 ## What runs
@@ -30,7 +32,7 @@ For an active discovery approved before source binding, review the plan and sour
 
 ## Review artifact changes with the user
 
-Use [the upgrade review skill](../.agents/skills/review-hub-upgrade/SKILL.md). Explain benefits and audit with `align --status`. Offer a choice before conversion. The first alignment inventories and backs up older formats. It preserves artifact contents.
+Use [the upgrade review skill](../.agents/skills/review-hub-upgrade/SKILL.md). Explain benefits and run `align --status`. Ask before conversion. Alignment backs up older formats and preserves artifact contents.
 
 ## Using two machines
 

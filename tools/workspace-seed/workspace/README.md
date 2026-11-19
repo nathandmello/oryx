@@ -12,10 +12,13 @@ For registered initiatives, use these paths relative to the private repository:
 | --- | --- |
 | Product's signed initiative register | `workspace/backlogs/<product>/initiatives.json` |
 | Discovery and Initiative Briefs | `workspace/initiatives/<product>/<initiative>/` |
+| PM tasks and launch checkpoints | `tasks.json` and `launch-checklist.json` beside the initiative briefs |
 | Metric-linked experiment drafts | `workspace/experiments/<product>/<initiative>/experiment.<metric-id>.draft.json` |
 | Planning comparison for one cycle | `workspace/roadmaps/<product>/<cycle>.md` |
 
 Run `python3 tools/pm.py backlog --product PRODUCT` or `python3 tools/pm.py roadmap --product PRODUCT` from the Hub root.
 Add `--area AREA` for work explicitly linked to that product area. Follow the [opportunity workflow](../../../playbook/opportunities.md) for stage decisions.
+
+Use the [initiative work commands](../../../playbook/initiative-work.md) to manage tasks and review launch readiness.
 
 Keep a completed artifact with its work history. If a result changes standing guidance, record that finding in the relevant overview with its source.

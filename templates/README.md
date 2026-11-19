@@ -17,6 +17,7 @@ Create only the artifact needed for the current work. Templates guide thought; t
 | [Experiment](experiment.md) | Hypothesis, test, measure, criterion, and result | `workspace/experiments/` |
 | [Discovery Brief](discovery-brief.md) | Timebox, learning goals, evidence, and conclusion | `workspace/initiatives/<product>/<initiative>/discovery-brief.md` |
 | [Initiative Brief](initiative-brief.md) | Investment case, scope, launch, and success measures | `workspace/initiatives/<product>/<initiative>/initiative-brief.md` |
+| [Launch checklist](launch-checklist.json) | Starter checkpoints for launch readiness and follow-through | `workspace/initiatives/<product>/<initiative>/launch-checklist.json` |
 | [Prioritization](prioritization.md) | Comparison of approved candidates for a planning cycle | `workspace/roadmaps/<product>/<cycle>.md` |
 | [Roadmap](roadmap.md) | Narrative roadmap for work outside the signed initiative register | `workspace/roadmaps/` |
 
@@ -62,6 +63,8 @@ python3 tools/pm.py new prioritization workspace/roadmaps/checkout/quarter-two.m
 Follow [the initiative workflow](../playbook/opportunities.md) for the applicable decision gates.
 
 For registered initiative metrics, use the [named experiment draft](../playbook/opportunities.md#start-an-experiment-draft). The register supplies the metric definition.
+
+Use [initiative work commands](../playbook/initiative-work.md) to start the launch checklist and manage PM tasks.
 
 The Markdown command creates a draft with a stable ID and a work-state block. It refuses an existing destination.
 
