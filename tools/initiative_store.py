@@ -14,6 +14,8 @@ import brief_review
 import experiment_drafts
 import initiative_areas
 import initiative_intake
+import initiative_work
+import launch_readiness
 import layout
 import layout_upgrade
 import metric_registry
@@ -253,12 +255,14 @@ def read(root, product):
         raise ValueError(f"{product}: unexpected initiative register schema or product")
     for index, event in enumerate(payload["events"]):
         register.accept(event, index)
+        if event.get("action") == "ship" and "readiness" in event:
+            launch_readiness.require_exceptions(event)
     if context_references(root, product, register.setup) != register.setup["references"]:
         raise ValueError(f"{product}: registered company or product context identity changed")
     return original, payload, register
 
 
-def prepare(root, product, changes):
+def prepare(root, product, changes, *, review_dates=None):
     if not isinstance(changes, list) or not changes:
         raise ValueError("Provide a nonempty JSON array of transactions")
     original, payload, register = read(root, product)
@@ -302,6 +306,13 @@ def prepare(root, product, changes):
             problems = live_errors(root, register, event["initiative"], investment=event["action"] in {"plan", "start-delivery"})
             if problems:
                 raise ValueError("Resolve the existing review gates:\n" + "\n".join(problems))
+        if event.get("action") == "ship":
+            reviewed_on = review_dates.get(len(accepted)) if review_dates else None
+            snapshot = initiative_work.ship_snapshot(root, product, event["initiative"], event["on"], reviewed_on)
+            if set(event.get("exceptions", {})) - snapshot["outstanding"].keys():
+                raise ValueError("Preview the current evidence. Ship exceptions must refer to current outstanding launch risks: "
+                                 + ", ".join(sorted(snapshot["outstanding"])))
+            event = {**event, "readiness": snapshot}
         if needs_reference(event):
             event = {**event, "references": capture_references(root, product, event, register)}
         register.accept(event, len(previous_events) + len(accepted))
@@ -328,16 +339,30 @@ def apply(root, product, proposal, key, confirmations=()):
     if (not isinstance(proposal, dict)
             or set(proposal) - {"intake_reviews"} != {"product", "base", "changes", "reviewed_transactions", "revision"}):
         raise ValueError("Apply requires the complete JSON from initiative propose")
+    reviewed = proposal["reviewed_transactions"]
+    if not isinstance(reviewed, list):
+        raise ValueError("Apply requires the reviewed transactions from initiative propose")
+    review_dates = {}
+    for index, event in enumerate(reviewed):
+        if isinstance(event, dict) and event.get("action") == "ship" and "readiness" in event:
+            launch_readiness.validate_snapshot(event["readiness"])
+            review_dates[index] = event["readiness"]["reviewed_on"]
     with storage.writer_lock(private):
-        expected, original, candidate, _ = prepare(root, product, proposal["changes"])
+        expected, original, candidate, _ = prepare(root, product, proposal["changes"], review_dates=review_dates)
         if proposal != expected:
             raise ValueError("The proposal is stale or was modified. Preview it and review the new revision.")
+        for event in expected["reviewed_transactions"]:
+            if event.get("action") == "ship":
+                launch_readiness.require_exceptions(event)
         initiative_intake.confirm_distinct(expected["reviewed_transactions"], confirmations)
         target = register_path(root, product)
         storage.require_visible(private, target.relative_to(private))
         signature = sign(root, candidate, key)
         # A hardware-backed signer can wait for human confirmation. Recheck before publication.
-        current, _, _, register = prepare(root, product, proposal["changes"])
+        try:
+            current, _, _, register = prepare(root, product, proposal["changes"], review_dates=review_dates)
+        except (ValueError, OSError) as exc:
+            raise ValueError(f"Records changed while approval was pending. Review a new proposal. {exc}") from exc
         if current != expected:
             raise ValueError("Records changed while approval was pending. Review a new proposal.")
         envelope = json.dumps({"record": candidate, "signature": signature}, ensure_ascii=False, indent=2) + "\n"

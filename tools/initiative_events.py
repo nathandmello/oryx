@@ -5,6 +5,7 @@ import re
 from urllib.parse import urlsplit
 
 import brief_review
+import launch_readiness
 import initiative_intake
 import metric_registry
 from opportunities import SLUG
@@ -166,6 +167,20 @@ def validate_event(event, approved=False):
             raise ValueError("Choose a supported decision action")
         fields = {**fields, **DECISION_FIELDS.get(action, {})}
     known = {"type", *fields}
+    if kind == "decision" and action == "ship":
+        if "exceptions" in event:
+            known.add("exceptions")
+            exceptions = event["exceptions"]
+            if not isinstance(exceptions, dict):
+                raise ValueError("Give ship exceptions by outstanding readiness ID")
+            for identifier, exception in exceptions.items():
+                if (not isinstance(identifier, str) or not isinstance(exception, dict)
+                        or set(exception) != {"reason", "authority"} or not text(exception["authority"])
+                        or not text(exception["reason"]) or not brief_review.has_answer(exception["reason"])):
+                    raise ValueError("Each ship exception needs a specific reason and the approving authority")
+        if approved and "readiness" in event:
+            known.add("readiness")
+            launch_readiness.validate_snapshot(event["readiness"])
     if approved and kind == "capture" and "intake_review" in event:
         known.add("intake_review")
     if approved and needs_reference(event):

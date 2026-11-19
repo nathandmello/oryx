@@ -59,7 +59,7 @@ REQUIRED = (
     "tools/workspace-seed/.gitignore", "tools/opportunities.py", "tools/brief_review.py", "playbook/opportunities.md",
     "tools/initiative_events.py", "tools/initiative_store.py", "tools/initiatives_cli.py", "tools/initiative_views.py",
     "tools/initiative_areas.py", "tools/initiative_intake.py", "tools/experiment_drafts.py",
-    "tools/initiative_work.py", "templates/launch-checklist.json", "playbook/initiative-work.md",
+    "tools/initiative_work.py", "tools/launch_readiness.py", "templates/launch-checklist.json", "playbook/initiative-work.md",
     ".agents/skills/manage-initiative-work/SKILL.md",
     "templates/views/backlog.json", "templates/views/roadmap.json",
     "playbook/initiative-approvals.md", "playbook/initiative-views.md",

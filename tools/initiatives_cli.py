@@ -56,6 +56,7 @@ def run(root, args):
             "registry_metric": "Use type metric and its registry ID. For a revised snapshot, use a new metric ID plus registry_metric.",
             "intake_review": "Proposals compare new IDs against this product's history. The PM confirms distinct captures at apply.",
             "extra_fields_by_decision": DECISION_FIELDS,
+            "ship_exceptions": "Optional object keyed by outstanding readiness ID. Each entry needs reason and authority. Review the generated readiness snapshot before signing.",
             "evaluation_fields": EVALUATION_FIELDS,
             "target_review_fields": {
                 "status": "PM judgment using an allowed outcome status",

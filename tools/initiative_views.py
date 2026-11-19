@@ -139,6 +139,9 @@ def trace(product, register, identifier=None, *, private):
     metric_ids = sorted(set(drafts) | set(item["targets"]) | {test["metric"] for test in item["experiments"].values()})
     initiative = {**item, "experiment_drafts": drafts}
     if item["phase"] == "shipped":
+        ship = next(event for event in reversed(item["decisions"]) if event["action"] == "ship")
+        initiative["launch_review"] = ("Recorded in the signed ship decision." if "readiness" in ship
+                                       else "Readiness was not recorded in this historical ship decision.")
         decision = item["decisions"][-1]
         next_date = next_review(item, decision)
         initiative["outcome_review"] = {

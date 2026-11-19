@@ -34,6 +34,39 @@ Link supporting tasks with `tasks`. Completing an alert setup task records deliv
 
 Include upstream and launch phases. The view shows readiness after both phases clear. The PM makes the decision. Review downstream checks after rollout.
 
+### Evidence changes
+
+Saved material edits retain previous evidence and blockers in each list. Previewing an edit leaves the records untouched.
+A task's second completion retains its withdrawal. Recheck the affected checkpoint before signing.
+
+By default, verification relies on every linked task. To cite independent evidence, set `verification.basis_tasks` to matching task IDs or `[]`.
+Name the independent source in `verification.evidence`. A linked task with changed evidence needs a fresh verification statement.
+The task owner and named verifier retain their own roles. History records the date of the saved change.
+
+### Ship decision
+
+Use `/pm delivery launch review PRODUCT INITIATIVE` or ask “Are we ready to ship?”
+
+The ship proposal includes a scoped revision, upstream and launch checks, evidence history, waivers, and outstanding risks.
+Review missing phases, unresolved checks removed from scope, and attestations dated after the effective ship date.
+Use the PM’s stated reason and approving authority for each outstanding ID in `ship.exceptions`.
+
+```json
+{"exceptions":{"missing:checklist":{"reason":"The incident commander verified rollback in drill R4.","authority":"Incident PM"}}}
+```
+
+Prepare a fresh proposal when the reviewed evidence changes. The PM signs the [reviewed decision](initiative-approvals.md#propose-and-approve).
+Use `/pm initiative record show` to read the signed evidence after launch. Downstream changes continue separately.
+
+### Existing records
+
+Existing version-1 lists remain readable. Preview the first edit, then save it to start a version-2 history.
+The new list preserves the exact prior text in `legacy_original`. To recover it, extract that UTF-8 string into a separate file.
+Verify the recovered copy against your private backup before restoring it. Update each client before sharing new lists or signed ship decisions.
+
+Recheck linked verifications without a recorded task basis. Earlier signed releases retain their original evidence gaps.
+History starts with known records. External withdrawals need a saved update and source.
+
 ## Use the commands
 
 ```sh

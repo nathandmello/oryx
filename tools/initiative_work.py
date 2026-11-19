@@ -8,7 +8,7 @@ from pathlib import Path
 import re
 import sys
 
-import initiative_store
+import launch_readiness
 import layout
 import records
 import storage
@@ -73,7 +73,7 @@ def links(value, field):
 
 
 def attestation(value, key):
-    fields(value, {key, "by", "on"})
+    fields(value, {key, "by", "on"}, {"basis_tasks"} if key == "evidence" else set())
     text(value[key], key)
     text(value["by"], "by")
     day(value["on"], "on", past=True)
@@ -111,6 +111,11 @@ def validate_row(filename, row):
         if status == "verified":
             text(row["owner"], "owner")
             attestation(row["verification"], "evidence")
+            if "basis_tasks" in row["verification"]:
+                basis = row["verification"]["basis_tasks"]
+                links(basis, "basis_tasks")
+                if set(basis) - set(row["tasks"]):
+                    raise ValueError("Verification basis_tasks must be linked to the checkpoint")
         elif row["verification"] is not None:
             raise ValueError("Set verification only for a verified checkpoint")
         if status == "waived":
@@ -150,6 +155,8 @@ def template(root):
 
 def resolve_initiative(root, product, initiative, registrations=None):
     """Use the qualified register or a typed, product-owned initiative overview."""
+    import initiative_store
+
     private = storage.private_root(root)
     name = records.initiative_home(private, product, initiative)
     target = private / name
@@ -178,17 +185,20 @@ def read(root, product, initiative, filename):
     if target.resolve() != target or (target.exists() and not target.is_file()):
         raise ValueError(f"{relative}: use a regular private file")
     if not target.exists():
-        return target, None, {}
+        return target, None, {}, {}
     if relative.as_posix() in upgrades.source_paths(private):
         raise ValueError(f"{relative} is preserved as original evidence")
     storage.require_visible(private, relative)
     original = target.read_bytes().decode("utf-8")
     field = layout.INITIATIVE_WORK[filename]
     value = storage.json_input(original)
-    fields(value, {"version", "product", "initiative", field})
-    if type(value["version"]) is not int or value["version"] != 1 or (value["product"], value["initiative"]) != (product, initiative):
+    fields(value, {"version", "product", "initiative", field}, {"history", "legacy_original"})
+    if (type(value["version"]) is not int or value["version"] not in (1, 2)
+            or ("history" in value) != (value["version"] == 2)
+            or ("legacy_original" in value and (value["version"] != 2 or not isinstance(value["legacy_original"], str)))
+            or (value["product"], value["initiative"]) != (product, initiative)):
         raise ValueError(f"{relative}: schema version and initiative must match the record's home")
-    return target, original, read_rows(filename, value[field])
+    return target, original, read_rows(filename, value[field]), value.get("history", {})
 
 
 def relationships(tasks, checkpoints):
@@ -209,9 +219,7 @@ def check(root, identities, registrations):
         home = layout.initiative_work_path(product, initiative, TASKS).parent
         try:
             resolve_initiative(root, product, initiative, registrations)
-            _, _, tasks = read(root, product, initiative, TASKS)
-            _, _, checkpoints = read(root, product, initiative, CHECKLIST)
-            relationships(tasks, checkpoints)
+            load_work(root, product, initiative)
         except (OSError, ValueError) as exc:
             yield f"{home}: {exc}"
 
@@ -253,7 +261,7 @@ def refresh_evidence(filename, before, after, delta):
     proof = {"done": "resolution", "verified": "verification", "waived": "waiver"}.get(
         status if isinstance(status, str) else None
     )
-    review_fields = REQUIRED[filename] | {"owner"}
+    review_fields = REQUIRED[filename] | {"owner", "source"}
     if filename == CHECKLIST:
         review_fields |= {"tasks"}
     if (proof and status == before["status"] and proof not in delta
@@ -261,35 +269,45 @@ def refresh_evidence(filename, before, after, delta):
         raise ValueError(f"Refresh {proof} or reopen the record when its reviewed scope changes")
 
 
-def save(target, original, product, initiative, rows):
+def save(target, original, product, initiative, rows, history):
     filename = target.name
-    body = json.dumps({
-        "version": 1, "product": product, "initiative": initiative, layout.INITIATIVE_WORK[filename]: rows,
-    }, indent=2, sort_keys=True, ensure_ascii=False, allow_nan=False) + "\n"
+    data = {"version": 2, "product": product, "initiative": initiative, layout.INITIATIVE_WORK[filename]: rows, "history": history}
+    if original is not None:
+        old = storage.json_input(original)
+        if old["version"] == 1:
+            data["legacy_original"] = original
+        elif "legacy_original" in old:
+            data["legacy_original"] = old["legacy_original"]
+    body = json.dumps(data, indent=2, sort_keys=True, ensure_ascii=False, allow_nan=False) + "\n"
     storage.replace_text(target, original, body, mode=storage.initiative_mode(target, draft=True))
     return body
 
 
-def view(filename, target, raw, rows, tasks):
+def view(filename, target, raw, rows, history, tasks, task_history):
     data = {"path": target.as_posix(), "revision": revision(raw)}
     if filename == TASKS:
         data["tasks"] = [
-            dict(row, id=identifier, unfinished_dependencies=[key for key in row["depends_on"] if tasks[key]["status"] != "done"])
+            dict(row, id=identifier, history=history.get(identifier, []), unfinished_dependencies=[key for key in row["depends_on"] if tasks[key]["status"] != "done"])
             for identifier, row in sorted(rows.items(), key=lambda pair: (
                 PRIORITIES.index(pair[1]["priority"]), pair[1]["due_on"] or "9999-12-31", pair[0]
             ))
         ]
     else:
         data["checkpoints"] = [
-            dict(row, id=identifier, task_status={key: tasks[key]["status"] for key in row["tasks"]})
+            dict(row, id=identifier, history=history.get(identifier, []),
+                 review_issues=launch_readiness.concerns(row, history.get(identifier, []), tasks, task_history, date.today().isoformat()),
+                 task_status={key: tasks[key]["status"] for key in row["tasks"]})
             for identifier, row in sorted(rows.items(), key=lambda pair: (
                 PHASES.index(pair[1]["phase"]), pair[1]["due_on"] or "9999-12-31", pair[0]
             ))
         ]
-        readiness = [row for row in rows.values() if row["phase"] in ("upstream", "launch")]
-        if {row["phase"] for row in readiness} != {"upstream", "launch"}:
+        snapshot = launch_readiness.snapshot(rows, history, tasks, task_history, present=raw is not None or bool(rows),
+                                             effective_on=date.today().isoformat())
+        data["readiness_revision"] = snapshot["revision"]
+        data["outstanding"] = snapshot["outstanding"]
+        if any(key.startswith("missing:") for key in data["outstanding"]):
             data["launch_readiness"] = "upstream or launch checks missing"
-        elif any(row["status"] not in ("verified", "waived") for row in readiness):
+        elif data["outstanding"]:
             data["launch_readiness"] = "pending"
         else:
             data["launch_readiness"] = "ready for launch decision"
@@ -303,6 +321,8 @@ def markdown(result):
     print(f"Record revision: {result['revision']}\n")
     if "launch_readiness" in result:
         print(f"Launch readiness: **{result['launch_readiness']}**\n")
+        for key, reasons in result["outstanding"].items():
+            print(f"- {plain(key)}: {plain(' '.join(reasons))}")
     rows = result.get("tasks", result.get("checkpoints"))
     if not rows:
         print("No records yet.")
@@ -310,7 +330,7 @@ def markdown(result):
         print(f"### {plain(row['title'])} ({row['id']})\n")
         for key in ("phase", "status", "owner", "priority", "due_on", "completion_criteria", "criterion",
                     "source", "blocked_reason", "depends_on", "unfinished_dependencies", "task_status",
-                    "resolution", "verification", "waiver"):
+                    "resolution", "verification", "waiver", "review_issues"):
             value = row.get(key)
             if key == "owner" and value is None:
                 value = "Unassigned"
@@ -342,30 +362,55 @@ def add_commands(commands):
             operation.add_argument("initiative")
 
 
+def load_work(root, product, initiative):
+    task_file = read(root, product, initiative, TASKS)
+    check_file = read(root, product, initiative, CHECKLIST)
+    relationships(task_file[2], check_file[2])
+    for path, _, rows, history in (task_file, check_file):
+        def validate_state(state):
+            validate_row(path.name, {**DEFAULTS[path.name], **state})
+        launch_readiness.validate_history(rows, history, validate_state)
+    return task_file, check_file
+
+
+def ship_snapshot(root, product, identifier, on, reviewed_on=None):
+    slug = identifier.split("/")[1]
+    (_, _, tasks, task_history), (_, raw, checks, history) = load_work(root, product, slug)
+    return launch_readiness.snapshot(checks, history, tasks, task_history, present=raw is not None, effective_on=on,
+                                     reviewed_on=reviewed_on)
+
+
 def run(root, args, *, write=False):
     product, initiative = args.product, args.initiative
     filename = TASKS if args.command == "task" else CHECKLIST
     relative = layout.initiative_work_path(product, initiative, filename)
     resolve_initiative(root, product, initiative)
-    target, original, rows = read(root, product, initiative, filename)
-    other_file = CHECKLIST if filename == TASKS else TASKS
-    _, _, other = read(root, product, initiative, other_file)
+    task_file, check_file = load_work(root, product, initiative)
+    target, original, before, history = task_file if filename == TASKS else check_file
+    previous_history = history
+    rows, changes = before, []
     if args.operation == "apply":
         if args.revision != revision(original):
             raise ValueError("The list changed. Read its current revision and review your edits")
-        rows = edit(filename, rows, storage.json_input(sys.stdin.read()))
+        changes = storage.json_input(sys.stdin.read())
+        rows = edit(filename, before, changes)
     elif args.operation == "init" and original is None:
         rows = template(root)
-    tasks, checkpoints = (rows, other) if filename == TASKS else (other, rows)
+        changes = [{"id": key, "fields": row} for key, row in rows.items()]
+    tasks = rows if filename == TASKS else task_file[2]
+    checkpoints = rows if filename == CHECKLIST else check_file[2]
     relationships(tasks, checkpoints)
-    if args.operation == "apply" or (args.operation == "init" and original is None):
+    if changes:
         private = storage.private_root(root)
         if relative.as_posix() in upgrades.source_paths(private):
             raise ValueError(f"{relative} is preserved as original evidence")
         storage.require_visible(private, relative)
-        if write:
-            original = save(target, original, product, initiative, rows)
-    result = view(filename, relative, original, rows, tasks)
+        history = launch_readiness.audit_rows(before, rows, history, changes, tasks, task_file[3], checklist=filename == CHECKLIST)
+        if write and (original is None or rows != before or history != previous_history):
+            original = save(target, original, product, initiative, rows, history)
+    result = view(filename, relative, original, rows, history, tasks, task_file[3])
+    if args.operation == "apply" and original and storage.json_input(original)["version"] == 1:
+        result["format_note"] = "The first saved change creates version 2 and preserves the original file text in legacy_original."
     if getattr(args, "format", "json") == "markdown":
         markdown(result)
     else:
