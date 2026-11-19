@@ -62,8 +62,9 @@ Research and results can change earlier choices. Keep learning, delivery progres
 
 - Implement the smallest complete workflow for each need.
 - Follow the README placement map. Add templates only for requested artifact types.
-- Use [extend-hub](.agents/skills/extend-hub/SKILL.md) automatically for every shared Hub change, including fixes and documentation edits.
+- Use [extend-hub](.agents/skills/extend-hub/SKILL.md) for every shared Hub change.
 - Prefer files, existing tools, and one command layer. Add dependencies or services for demonstrated needs.
+- Follow the [slash command convention](playbook/commands.md).
 - Apply [the filing rules](playbook/filing.md) before creating or converting any record. Keep one authoritative record per artifact. Preserve stable identifiers when files move.
 - Define sources, ownership, relationships, completion conditions, and review triggers for each new capability.
 - Use scripts for deterministic rules and skills for guided work. Apply the same checks through both agents and CI.

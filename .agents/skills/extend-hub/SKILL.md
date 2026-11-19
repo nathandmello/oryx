@@ -18,6 +18,10 @@ Read `AGENTS.md` and the existing work relevant to the request. Complete the dep
 7. Add meaningful tests for new enforcement. Check a valid case and a rejected case.
 8. Keep instructions portable. Author shared skills under `.agents/skills/`.
 
+For every shared slash command change, follow the [command convention](../../../playbook/commands.md).
+Register its path and target in the shared catalog. Preserve published paths with aliases when needed.
+Check discovery and execution through `pm.py action`. Compare with the base commit for an existing command change.
+
 ## Dependency review
 
 1. Identify the changed behaviour, command, path, field, or term. Trace what defines it and what relies on it.

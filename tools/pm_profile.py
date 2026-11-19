@@ -51,7 +51,7 @@ def _split_row(line):
     return tuple(cell.strip() for cell in line.strip()[1:-1].split("|"))
 
 
-def _visible(lines):
+def visible_lines(lines):
     """Ignore headings or tables quoted inside fenced source examples."""
     result = {}
     fence = None
@@ -74,7 +74,7 @@ def _visible(lines):
 def capture_block(text):
     """Separate the sourced capture block from the PM's own prose, without reformatting either."""
     lines = text.splitlines(keepends=True)
-    visible = _visible(lines)
+    visible = visible_lines(lines)
     starts = [i for i, line in visible.items() if line == CAPTURE_START]
     ends = [i for i, line in visible.items() if line == CAPTURE_END]
     if not starts and not ends:
@@ -86,7 +86,7 @@ def capture_block(text):
 
 
 def _structure(lines):
-    visible = _visible(lines)
+    visible = visible_lines(lines)
     heads = [i for i, line in visible.items() if line.rstrip() == HEADING]
     if not heads:
         return None

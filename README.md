@@ -68,7 +68,7 @@ Start reference material in the entity overview. Create a topic folder only for 
 - [Initiative work](playbook/initiative-work.md) covers PM tasks and launch readiness.
 - [Templates](templates/README.md): company context, product context, and PM artifacts.
 - [Context rules](playbook/context.md) cover routing, sources, parent links, dates, and gaps.
-- [Working practices](playbook/working.md): checkpoints, thought-partner mode, and quiet mode.
+- [Hub commands](playbook/commands.md) and [working practices](playbook/working.md) cover actions, preferences, and checkpoints.
 - [Git rules](playbook/git.md): the correct repository for saves, updates, and contributions.
 
 The Git command name `workspace` selects the entire private repository.
@@ -120,7 +120,8 @@ Shared CI runs `check --system-only` and tests against fictional workspaces. Fol
 
 ## Hooks and checks
 
-Both clients load context and opportunity guidance at session start, then check the Hub before a normal stop. Hooks work from nested workspace directories.
+Hooks load guidance at startup, refresh reply preferences each turn, and check the Hub before stopping.
+They work from nested directories.
 
 The edit hook enforces filing rules for supported native edits. Use the shared commands to start typed records. Keep original sources identifiable.
 
