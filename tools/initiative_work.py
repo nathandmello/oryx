@@ -6,7 +6,6 @@ from hashlib import sha256
 import json
 from pathlib import Path
 import re
-import sys
 
 import initiative_store
 import layout
@@ -342,31 +341,36 @@ def add_commands(commands):
             operation.add_argument("initiative")
 
 
-def run(root, args, *, write=False):
-    product, initiative = args.product, args.initiative
-    filename = TASKS if args.command == "task" else CHECKLIST
+def render(result, output_format):
+    if output_format == "markdown":
+        markdown(result)
+    else:
+        print(json.dumps(result, indent=2, ensure_ascii=False))
+
+
+def execute(root, command, operation, product, initiative, *, expected=None, changes=None, write=False):
+    filename = {"task": TASKS, "launch-checklist": CHECKLIST}[command]
     relative = layout.initiative_work_path(product, initiative, filename)
     resolve_initiative(root, product, initiative)
     target, original, rows = read(root, product, initiative, filename)
     other_file = CHECKLIST if filename == TASKS else TASKS
     _, _, other = read(root, product, initiative, other_file)
-    if args.operation == "apply":
-        if args.revision != revision(original):
+    if operation == "apply":
+        if expected != revision(original):
             raise ValueError("The list changed. Read its current revision and review your edits")
-        rows = edit(filename, rows, storage.json_input(sys.stdin.read()))
-    elif args.operation == "init" and original is None:
-        rows = template(root)
+        rows = edit(filename, rows, changes)
+    elif operation == "init":
+        if expected is not None and expected != revision(original):
+            raise ValueError("The list changed. Read its current revision and review your edits")
+        if original is None:
+            rows = template(root)
     tasks, checkpoints = (rows, other) if filename == TASKS else (other, rows)
     relationships(tasks, checkpoints)
-    if args.operation == "apply" or (args.operation == "init" and original is None):
+    if operation == "apply" or (operation == "init" and original is None):
         private = storage.private_root(root)
         if relative.as_posix() in upgrades.source_paths(private):
             raise ValueError(f"{relative} is preserved as original evidence")
         storage.require_visible(private, relative)
         if write:
             original = save(target, original, product, initiative, rows)
-    result = view(filename, relative, original, rows, tasks)
-    if getattr(args, "format", "json") == "markdown":
-        markdown(result)
-    else:
-        print(json.dumps(result, indent=2, ensure_ascii=False))
+    return view(filename, relative, original, rows, tasks)

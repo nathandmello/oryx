@@ -2,10 +2,12 @@
 
 Open the updated Hub to verify compatibility.
 
-Releases 0.3.1 through 0.5.0 use private format 2.
+Releases 0.3.1 through 0.6.1 use private format 2.
 
 | Release | Change |
 | --- | --- |
+| 0.6.1 | Keeps [dated backlog reviews](initiative-views.md#read-the-views) visible when a signed approval needs review. |
+| 0.6.0 | Opens [roadmaps, PM tasks, and launch checklists](local-ui.md) in a local browser. The app reads and updates existing private records. |
 | 0.5.0 | Adds [Hub commands](commands.md) and optional [reply preferences](working.md#reply-preferences). Existing profiles use Hub defaults. |
 | 0.4.2 | Automates [publication](publication.md). |
 
