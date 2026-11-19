@@ -1,0 +1,246 @@
+{
+  "evidence": {
+    "slack-limits": {
+      "title": "Slack Developer Docs, May 2025 rate-limit announcement",
+      "url": "https://docs.slack.dev/changelog/2025/05/29/rate-limit-changes-for-non-marketplace-apps/",
+      "date": "2025-05-29",
+      "text": "For conversations.history and conversations.replies, the 1-request-per-minute limit and 15-object cap apply to new commercially distributed unlisted app installs. Existing installs and Marketplace apps are outside this change."
+    },
+    "slack-clarification": {
+      "title": "Slack Developer Docs, June 2025 clarification",
+      "url": "https://docs.slack.dev/changelog/2025/06/03/rate-limits-clarity/",
+      "date": "2025-06-03",
+      "text": "Internal customer-built apps keep their existing limits for both conversation methods."
+    },
+    "slack-retry": {
+      "title": "Slack Developer Docs, responding to rate limits",
+      "url": "https://docs.slack.dev/apis/web-api/rate-limits/#responding-to-rate-limiting-conditions",
+      "date": "undated",
+      "text": "A 429 response gives a Retry-After interval in seconds. The restriction applies to the affected method and workspace."
+    },
+    "stripe-total": {
+      "title": "Stripe Docs, issuing refunds",
+      "url": "https://docs.stripe.com/refunds#issue-refunds",
+      "date": "undated",
+      "text": "A charge can have several refunds. Their cumulative value cannot exceed the original charge."
+    },
+    "stripe-churn": {
+      "title": "Stripe Billing, subscriber churn",
+      "url": "https://docs.stripe.com/billing/subscriptions/analytics#subscriber-churn-rate",
+      "date": "undated",
+      "text": "Stripe's 30-day subscriber churn divides churned subscribers by the active base 30 days ago plus new subscribers in the window."
+    },
+    "chartmogul-retention": {
+      "title": "ChartMogul, paid subscriber retention",
+      "url": "https://help.chartmogul.com/article/322-chart-paid-subscriber-retention-rate",
+      "date": "undated",
+      "text": "ChartMogul's paid subscriber retention starts with the paid cohort at the period start. It excludes reactivations before period end from churn."
+    },
+    "nasa-initial": {
+      "title": "NASA JPL, preliminary Mars Climate Orbiter findings",
+      "url": "https://www.jpl.nasa.gov/news/mars-climate-orbiter-team-finds-likely-cause-of-loss/",
+      "date": "1999-09-30",
+      "text": "The preliminary peer review identified a likely mismatch between English and metric units. The formal investigation was still underway."
+    },
+    "nasa-final": {
+      "title": "NASA, Mars Climate Orbiter investigation, Phase I",
+      "url": "https://discovery.larc.nasa.gov/PDF_FILES/MCO_report_2.pdf",
+      "date": "1999-11-10",
+      "text": "The board identified the ground trajectory input as the root cause. Its interface specified newton-seconds, but the input was delivered in pound-force seconds."
+    },
+    "chrome-proposal": {
+      "title": "Google Privacy Sandbox, July 2024 proposal",
+      "url": "https://privacysandbox.google.com/blog/privacy-sandbox-update",
+      "date": "2024-07-22",
+      "text": "Google proposed a new Chrome experience for choosing how third-party cookies are handled across browsing."
+    },
+    "chrome-decision": {
+      "title": "Google Privacy Sandbox, April 2025 decision",
+      "url": "https://privacysandbox.google.com/blog/privacy-sandbox-next-steps",
+      "date": "2025-04-22",
+      "text": "Google decided to retain the existing third-party cookie choice in Chrome settings. It ruled out a separate new prompt."
+    }
+  },
+  "cases": [
+    {
+      "id": "slack-new-install",
+      "artifact": "working plan",
+      "prompt": "Write the rollout instruction for the conversation import feature on a new, commercially distributed unlisted Slack installation. Set the request frequency and page size for conversations.history.",
+      "context": ["stripe-total", "slack-limits", "slack-clarification"],
+      "decision": "apply_reduced_limit",
+      "facts": {"requests_per_minute": 1, "max_objects": 15},
+      "required": ["slack-limits"],
+      "forbidden": ["stripe-total"]
+    },
+    {
+      "id": "slack-existing-install",
+      "artifact": "stakeholder reply",
+      "prompt": "A customer installed our unlisted commercial Slack app before May 29, 2025. They still use that installation. Tell them whether to adopt the new lower cap for conversations.replies.",
+      "context": ["slack-limits", "slack-clarification"],
+      "decision": "keep_existing_limits",
+      "facts": {"existing_installation": true},
+      "required": ["slack-limits"],
+      "forbidden": []
+    },
+    {
+      "id": "slack-new-install-of-old-app",
+      "artifact": "discovery brief",
+      "prompt": "The commercial unlisted Slack app was built before May 29, 2025. We are testing a new installation created after the policy took effect. State the throughput bounds for the conversation replies experiment.",
+      "context": ["slack-clarification", "slack-limits"],
+      "decision": "apply_reduced_limit",
+      "facts": {"requests_per_minute": 1, "max_objects": 15},
+      "required": ["slack-limits"],
+      "forbidden": []
+    },
+    {
+      "id": "slack-internal-after-clarification",
+      "artifact": "correction to a working plan",
+      "prompt": "Our earlier draft applied the new 1-per-minute limit to all non-Marketplace installs. Update the rollout note for a new Slack app built and used solely by the customer's own team.",
+      "context": ["slack-limits", "slack-clarification"],
+      "decision": "keep_existing_limits",
+      "facts": {"internal_customer_built": true, "revise_earlier_draft": true},
+      "required": ["slack-clarification"],
+      "forbidden": []
+    },
+    {
+      "id": "slack-marketplace",
+      "artifact": "roadmap decision",
+      "prompt": "Should our approved Slack Marketplace app move its conversation-history work forward solely to accommodate the May 2025 reduction? Record the decision and reason.",
+      "context": ["slack-clarification", "slack-limits", "stripe-total"],
+      "decision": "keep_current_priority",
+      "facts": {"marketplace_approved": true, "reduced_limit_applies": false},
+      "required": ["slack-limits"],
+      "forbidden": ["stripe-total"]
+    },
+    {
+      "id": "slack-unknown-scope",
+      "artifact": "chat reply",
+      "prompt": "Does the reduced Slack Conversations API cap apply to our app? Its distribution and installation history are unavailable.",
+      "context": ["slack-limits", "slack-clarification"],
+      "decision": "clarify_scope",
+      "facts": {"need_app_category": true, "need_installation_timing": true},
+      "required": ["slack-limits"],
+      "forbidden": []
+    },
+    {
+      "id": "slack-retry-method-scope",
+      "artifact": "working plan",
+      "prompt": "When one workspace's conversations.history returns 429 and Retry-After: 47, what waits and for how long? Give a practical incident instruction.",
+      "context": ["slack-limits", "stripe-total", "slack-retry"],
+      "decision": "wait_before_same_method_retry",
+      "facts": {"wait_seconds": 47, "pause_all_workspaces": false, "pause_all_methods": false},
+      "required": ["slack-retry"],
+      "forbidden": ["stripe-total"]
+    },
+    {
+      "id": "stripe-over-cap",
+      "artifact": "support reply",
+      "prompt": "Switch from the Slack rollout to Stripe refunds. The original charge was $120 and two completed refunds were $45 and $25. Write a support reply to a request for a further $55.",
+      "context": ["slack-limits", "stripe-total", "nasa-final"],
+      "decision": "decline_requested_amount",
+      "facts": {"requested_usd": 55, "remaining_usd": 50},
+      "required": ["stripe-total"],
+      "forbidden": ["slack-limits", "nasa-final"]
+    },
+    {
+      "id": "stripe-exact-cap",
+      "artifact": "chat reply",
+      "prompt": "A captured Stripe charge was $120. Completed partial refunds were $45 and $25. Can another $50 be refunded under the amount cap? Assume all other requirements are satisfied.",
+      "context": ["stripe-total", "slack-retry"],
+      "decision": "amount_within_cap",
+      "facts": {"requested_usd": 50, "remaining_usd": 50},
+      "required": ["stripe-total"],
+      "forbidden": ["slack-retry"]
+    },
+    {
+      "id": "stripe-experiment",
+      "artifact": "experiment",
+      "prompt": "Define a boundary test for the remaining amount on a captured $120 Stripe charge with $70 already refunded. Use whole dollars and propose two independent test cases with matching initial state.",
+      "context": ["slack-limits", "stripe-total"],
+      "decision": "test_at_and_above_cap",
+      "facts": {"allow_usd": 50, "reject_usd": 51, "independent_initial_state": true},
+      "required": ["stripe-total"],
+      "forbidden": ["slack-limits"]
+    },
+    {
+      "id": "nasa-preliminary",
+      "artifact": "stakeholder reply",
+      "prompt": "Write a short status update as of September 30, 1999, on the cause of the Mars Climate Orbiter loss. Distinguish what was known that day from a final finding.",
+      "context": ["nasa-final", "nasa-initial"],
+      "decision": "report_preliminary_hypothesis",
+      "facts": {"formal_root_cause_confirmed_as_of_date": false, "unit_mismatch_suspected": true},
+      "required": ["nasa-initial"],
+      "forbidden": ["nasa-final"]
+    },
+    {
+      "id": "nasa-approved-learning",
+      "artifact": "release checklist",
+      "prompt": "Use the later Mars Climate Orbiter investigation to set an acceptance check on a new ground-system impulse-data handoff. Its interface also specifies metric impulse. The producer delivered a file in pound-force seconds.",
+      "context": ["nasa-initial", "stripe-total", "nasa-final"],
+      "decision": "hold_handoff_until_verified",
+      "facts": {"expected_unit": "N·s", "observed_unit": "lbf·s", "verify_end_to_end": true},
+      "required": ["nasa-final"],
+      "forbidden": ["stripe-total"]
+    },
+    {
+      "id": "chrome-before-decision",
+      "artifact": "strategy brief",
+      "prompt": "Write the dependency note as of July 22, 2024. Our team wants to commit a release date against Chrome's proposed cookie-choice experience.",
+      "context": ["chrome-decision", "chrome-proposal"],
+      "decision": "treat_as_proposed_dependency",
+      "facts": {"new_experience_proposed": true, "firm_launch_date_available": false},
+      "required": ["chrome-proposal"],
+      "forbidden": ["chrome-decision"]
+    },
+    {
+      "id": "chrome-after-decision",
+      "artifact": "working plan",
+      "prompt": "Update a partner education plan as of April 22, 2025. The draft assumes it should wait for a new standalone Chrome cookie-choice prompt. State the edit the team should make.",
+      "context": ["chrome-proposal", "slack-limits", "chrome-decision"],
+      "decision": "remove_standalone_prompt_dependency",
+      "facts": {"standalone_prompt_planned": false, "settings_remain_choice_path": true},
+      "required": ["chrome-decision"],
+      "forbidden": ["slack-limits"]
+    },
+    {
+      "id": "stripe-churn-denominator",
+      "artifact": "KPI report",
+      "prompt": "A Stripe 30-day dashboard starts with 1,000 subscribers, adds 100, and records 100 churned subscribers. A slide describes this as 10% Stripe subscriber churn. Give the corrected rate to one decimal place.",
+      "context": ["stripe-total", "stripe-churn"],
+      "decision": "correct_stripe_churn",
+      "facts": {"numerator": 100, "denominator": 1100, "churn_percent": 9.1},
+      "required": ["stripe-churn"],
+      "forbidden": ["stripe-total"]
+    },
+    {
+      "id": "mixed-churn-definitions",
+      "artifact": "stakeholder reply",
+      "prompt": "Stripe subscriber churn fell from 10% to 9.1%, but the older figure was the complement of ChartMogul paid subscriber retention. Can we report a like-for-like improvement?",
+      "context": ["stripe-churn", "chartmogul-retention", "nasa-final"],
+      "decision": "recalculate_on_common_cohort",
+      "facts": {"like_for_like": false, "denominator_can_differ": true, "reactivation_treatment_matters": true},
+      "required": ["stripe-churn", "chartmogul-retention"],
+      "forbidden": ["nasa-final"]
+    },
+    {
+      "id": "revenue-growth-unverified",
+      "artifact": "chat reply",
+      "prompt": "An executive says revenue is up 10%. We only have that statement. There are no periods, underlying amounts, or reporting basis. What can the team safely say?",
+      "context": ["stripe-churn", "slack-limits"],
+      "decision": "keep_reported_claim_and_request_basis",
+      "facts": {"verified": false, "need_periods": true, "need_underlying_amounts": true, "need_comparable_basis": true},
+      "required": [],
+      "forbidden": ["stripe-churn", "slack-limits"]
+    },
+    {
+      "id": "no-relevant-context",
+      "artifact": "formatting task",
+      "prompt": "Format the supplied agenda in this order: Open, Readout, Close. The workspace records concern unrelated products.",
+      "context": ["stripe-total", "slack-limits", "nasa-final"],
+      "decision": "format_synthesized_agenda",
+      "facts": {"order": ["Open", "Readout", "Close"]},
+      "required": [],
+      "forbidden": ["stripe-total", "slack-limits", "nasa-final"]
+    }
+  ]
+}

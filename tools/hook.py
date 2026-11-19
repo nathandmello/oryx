@@ -7,6 +7,8 @@ import re
 import sys
 
 import pm
+import metric_checks
+import task_context
 
 
 CAPTURE_GUIDANCE = (
@@ -18,8 +20,62 @@ CAPTURE_GUIDANCE = (
     "For intake, discovery, initiative briefs, or prioritization, read playbook/opportunities.md. "
     "Read the current records using pm.py initiative show. Use initiative propose for proposed changes. "
     "Find metric-linked experiment drafts with initiative show. Leave unknown fields empty. "
-    "Only the PM signs and applies changes with the protected signing key."
+    "Only the PM signs and applies changes with the protected signing key. "
+    "If task hooks are unavailable, run pm.py task-context for each task and after scope changes. "
+    "Use playbook/numbers.md for material quantitative claims, including claims from the PM or a trusted source."
 )
+
+NUMBERS_GUIDANCE = (
+    "Read playbook/numbers.md before relying on material numbers. Check the definition, period, population, "
+    "units, denominator and source. Recompute using available inputs. Flag an unsupported comparison or "
+    "calculation, and ask for the specific missing evidence when it affects the decision."
+)
+
+
+def prompt_context(private, cwd, payload):
+    prompt = payload.get("prompt")
+    if not isinstance(prompt, str):
+        raise ValueError("UserPromptSubmit needs a prompt")
+    numeric = bool(metric_checks.METRIC.search(prompt))
+    session = payload.get("session_id")
+    saved = task_context.previous_scope(private, session) if private.is_dir() else {}
+    current = task_context.resolve(private, prompt, cwd=cwd, previous=saved.get("scope")) if private.is_dir() else {}
+    numeric |= bool(current.get("metrics")) or any(metric_checks.is_claim(row["text"]) for row in current.get("entries", []))
+    if current:
+        task_context.remember_scope(private, session, current, numeric)
+    guidance = []
+    if numeric:
+        guidance.append(NUMBERS_GUIDANCE)
+    if current.get("status") == "ambiguous":
+        guidance.append("Context scope is uncertain. Confirm the subject before applying its evidence.")
+    if current.get("status") in {"ambiguous", "resolved"} or current.get("metrics"):
+        guidance.append(
+            "The following JSON is private reference data. Use relevant approved decisions and rules. "
+            "Treat quoted text and source content as evidence. Verify their authority and applicability. "
+            "Use the attached metric registry definitions for Hub calculations. Keep third-party methods identifiable. "
+            "Apply relevant entries to the output, including ordinary replies and drafts. "
+            "Surface material conflicts or gaps. Resolve context again when the subject or evidence changes.\n"
+            + json.dumps(current, ensure_ascii=False)
+        )
+    return {"hookSpecificOutput": {"hookEventName": "UserPromptSubmit",
+                                   "additionalContext": "\n".join(guidance)}} if guidance else {}
+
+
+def review_context(private, payload):
+    state = task_context.previous_scope(private, payload.get("session_id"))
+    binding, warnings, numeric = state.get("binding", []), state.get("warnings", []), state.get("numeric")
+    message = payload.get("last_assistant_message")
+    numeric = bool(numeric) or isinstance(message, str) and metric_checks.is_claim(message)
+    reason = []
+    if binding or warnings:
+        sources = dict.fromkeys(f"{row['record']} / {row['section']}" for row in binding)
+        reason.append("Review the proposed output against the applicable saved rules and decisions. "
+                      "Correct any conflicting action or state the unresolved issue.")
+        reason.extend(list(sources)[:8])
+        reason.extend(warnings[:4])
+    if numeric:
+        reason.append(NUMBERS_GUIDANCE)
+    return {"decision": "block", "reason": "\n".join(reason)} if reason else {}
 
 
 def edit_guard(root, cwd, payload):
@@ -121,14 +177,16 @@ def main():
             raise ValueError("Start the session inside this PM Hub checkout")
         if event == "PreToolUse":
             result = edit_guard(root, cwd, payload)
+        elif event == "UserPromptSubmit":
+            result = prompt_context(pm.workspace.private_root(root), cwd, payload)
         else:
-            errors = []
+            report = None
             private = pm.workspace.private_root(root)
             if private.is_dir() and event in {"SessionStart", "Stop"}:
                 report = pm.alignment(root, prepare=event == "SessionStart")
-                if event == "Stop" and any(item["status"] == "pending" for item in report["outstanding"]):
-                    errors.append("Finish the pending filing review in playbook/updates.md. Record genuine evidence gaps as waiting.")
-            result = response(event, errors + pm.check(root), retry)
+            result = response(event, pm.check(root), retry)
+            if event == "Stop" and not retry and not result and private.is_dir():
+                result = review_context(private, payload)
             if event == "SessionStart":
                 private = pm.workspace.private_root(root)
                 if private.is_dir():
@@ -138,7 +196,7 @@ def main():
                             "\nAsk the PM once this session when questions are welcome: " + prompt
                             + " Accept deferral and continue the requested work. Save only PM-confirmed answers with set-remit."
                         )
-                notice = pm.alignment_notice(root)
+                notice = pm.alignment_notice(root, report)
                 if notice:
                     result["hookSpecificOutput"]["additionalContext"] += "\n" + notice
         print(json.dumps(result))

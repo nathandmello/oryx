@@ -13,6 +13,8 @@ import storage
 
 LEDGER = ".hub-upgrades.json"
 RULE = "record-filing-0.2"
+STRUCTURE_RULE = "artifact-structure-1"
+STRUCTURE_HANDOFF = "artifact-structure-handoff-1"
 TRANSACTIONS = "filing-transactions-0.2"
 
 
@@ -42,7 +44,7 @@ def encode(state):
 
 
 def fresh(private):
-    storage.replace_text(private / LEDGER, None, encode({RULE: {}}))
+    storage.replace_text(private / LEDGER, None, encode({RULE: {}, STRUCTURE_RULE: {}}))
     storage.replace_text(scan_marker(private), None, RULE)
 
 
@@ -123,6 +125,16 @@ def read_state(private):
         if (not isinstance(item, dict) or item.get("status") not in ("pending", "waiting", "reviewed")
                 or not isinstance(item.get("note"), str) or not item["note"].strip()):
             raise ValueError("Invalid context review entry")
+    structure = state.get(STRUCTURE_RULE, {})
+    if not isinstance(structure, dict) or type(state.get(STRUCTURE_HANDOFF, False)) is not bool:
+        raise ValueError("Invalid artifact structure review")
+    for name, item in structure.items():
+        review_path(private, name)
+        if (not isinstance(item, dict) or set(item) != {"digest", "issues"}
+                or not re.fullmatch(r"[0-9a-f]{64}", str(item["digest"]))
+                or not isinstance(item["issues"], list) or not item["issues"]
+                or not all(isinstance(issue, str) and issue.strip() for issue in item["issues"])):
+            raise ValueError("Invalid artifact structure review entry")
     return original, state
 
 
@@ -131,6 +143,56 @@ def source_paths(private):
     state = read_state(private)[1]
     return ({name for name, item in state.get(RULE, {}).items() if item.get("role") == "source"}
             | set(layout_upgrade.receipt(private, state).get("sources", [])))
+
+
+def structure_review(root, private, state, originals):
+    """Preview legacy structure issues or find unchanged, inventoried copies."""
+    if STRUCTURE_RULE in state:
+        return {name: issue for name, issue in state[STRUCTURE_RULE].items()
+                if fingerprint(review_path(private, name)) == issue["digest"]}
+    found, orders = {}, {}
+    for path in storage.inventory(private):
+        relative = path.relative_to(private)
+        name = relative.as_posix()
+        if (relative.parts[0] not in {"context", "workspace"} or path.suffix != ".md"
+                or relative.name == "README.md" or name in originals
+                or any(part.startswith(".") or part in {"secrets", "sources"} for part in relative.parts)
+                or path.resolve() != path or not path.is_file()):
+            continue
+        raw = path.read_bytes()
+        text = raw.decode("utf-8", errors="replace").replace("\r\n", "\n")
+        marker = records.MARKER.match(text)
+        if marker and marker[1] in records.KINDS and not records.context_location(marker[1], name):
+            kind = marker[1]
+            if kind not in orders:
+                template = (root / "templates" / f"{kind}.md").read_text(encoding="utf-8")
+                orders[kind] = records.heading_order(kind, template)
+            issues = records.structure_errors(kind, text, orders[kind])
+        elif not marker and layout.valid_work(name) and relative.parts[1] in {"initiatives", "backlogs"}:
+            issues = records.working_errors(text)
+        else:
+            continue
+        if issues:
+            found[name] = {"digest": hashlib.sha256(raw).hexdigest(), "issues": issues}
+    return found
+
+
+def align_structure(root, private, *, prepare=False):
+    original, state = read_state(private)
+    needs_scan = STRUCTURE_RULE not in state
+    found = structure_review(root, private, state, source_paths(private))
+    copies = {}
+    if prepare and needs_scan:
+        if found:
+            copies = backup(private, sorted(found))
+            if any(fingerprint(review_path(private, name)) != item["digest"] for name, item in found.items()):
+                raise ValueError("Artifact changed during the structure inventory. Run align again.")
+        state[STRUCTURE_RULE] = found
+        state[STRUCTURE_HANDOFF] = True
+        storage.replace_text(private / LEDGER, original, encode(state))
+    return {"needs_scan": needs_scan and not prepare, "inventoried_now": needs_scan and prepare,
+            "offer_handoff": state.get(STRUCTURE_HANDOFF, False),
+            "records": [dict(issue, path=name) for name, issue in sorted(found.items())], "backups": copies}
 
 
 def run(private, inventory, *, prepare=False, record=None, outcome=None, digest=None, note=None):

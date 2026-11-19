@@ -60,7 +60,7 @@ def current_links(private, product, subjects):
 
 
 def initiative_context(private, product, identifier):
-    name = layout.initiative(identifier.split("/")[1])
+    name = records.initiative_home(private, product, identifier.split("/")[1])
     if not records.existing_briefs(private, name, "initiative"):
         return None
     text = (private / name).read_text(encoding="utf-8")

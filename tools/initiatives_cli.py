@@ -53,6 +53,7 @@ def run(root, args):
             "input": "array of objects with type and all required fields",
             "fields_by_type": {**FIELDS, "approve-experiment": experiment_drafts.APPROVAL},
             "optional_fields_by_type": OPTIONAL_FIELDS,
+            "registry_metric": "Use type metric and its registry ID. For a revised snapshot, use a new metric ID plus registry_metric.",
             "intake_review": "Proposals compare new IDs against this product's history. The PM confirms distinct captures at apply.",
             "extra_fields_by_decision": DECISION_FIELDS,
             "evaluation_fields": EVALUATION_FIELDS,

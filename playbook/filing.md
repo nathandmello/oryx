@@ -7,8 +7,8 @@ Choose the purpose first. File information used for reference in `context/`. Fil
 | Company-wide facts, commitments, or exclusions | `context/company/overview.md` |
 | Standing product guidance | `context/products/<product>/overview.md` |
 | Standing guidance for one product area | A labelled entry in the product overview, or its maintained area overview |
-| Reusable initiative guidance | `context/initiatives/<initiative>/overview.md`, linked to the owning product |
-| Transcript evidence for an initiative meeting | Original transcript at its provider. An authorised local export goes under `context/initiatives/<initiative>/sources/`. |
+| Reusable initiative guidance | `context/products/<product>/initiatives/<initiative>/overview.md`, linked to the owning product |
+| Transcript evidence for an initiative meeting | Original transcript at its provider. An authorised local export goes in `sources/` beside the owning initiative overview. |
 | Initiative meeting history readers revisit | A dated `event-history` context note beside the initiative overview |
 | PM background, preferences, responsibilities, or interests | `context/pm/context.md` |
 | Priorities, plans, progress, or tests | The applicable work type under `workspace/`, such as `workspace/experiments/` |

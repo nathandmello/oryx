@@ -9,7 +9,7 @@ Create only the artifact needed for the current work. Templates guide thought; t
 | [Company context](company-context.md) | Organisation, business model, direction, operations, and constraints | `context/company/overview.md` |
 | [Product context](product-context.md) | Product purpose, users, vocabulary, constraints, and accepted decisions | `context/products/<product>/overview.md` |
 | [Product area context](product-area-context.md) | Standing area boundaries, users, rules, goals, and decisions | `context/products/<product>/areas/<area>/overview.md` |
-| [Initiative context](initiative-context.md) | Outcome, affected workflow, dependencies, and decisions for recurring initiative work | `context/initiatives/<initiative>/overview.md` |
+| [Initiative context](initiative-context.md) | Outcome, affected workflow, dependencies, and decisions for recurring initiative work | `context/products/<product>/initiatives/<initiative>/overview.md` |
 | [Context note](context-note.md) | Supporting detail that passes [the filing test](../playbook/filing.md) | One topic level under the owning context entity, when the filing rule permits it |
 | [Goal](goal.md) | The five outcome components and their alignment | `workspace/goals/` |
 | [Problem](problem.md) | Customer problem, evidence, knowledge audit, and research | `workspace/problems/` |
@@ -25,7 +25,7 @@ Create a [PM profile](../playbook/context.md#pm-remit) with `new pm-context cont
 Use the [context section rules](../playbook/filing.md#when-a-section-earns-its-place) to choose headings. Give each substantive section a lead that explains when it applies.
 
 Registered initiatives share one signed product register. Generate their live backlog and roadmap with the [view templates](../playbook/initiative-views.md).
-Ordinary Markdown can hold other working plans. Cite the applicable company, product, or area context.
+For other working plans, use Scope, Evidence, and Next action in that order. State specific evidence gaps. Link applicable context.
 
 ## Create a draft
 
@@ -40,7 +40,7 @@ Use the context templates when the PM starts that work:
 ```sh
 python3 tools/pm.py new company-context context/company/overview.md --title "Company context"
 python3 tools/pm.py new product-context context/products/example/overview.md --title "Product context"
-python3 tools/pm.py new initiative-context context/initiatives/renewals/overview.md --parent context/products/example/overview.md --title "Renewals context"
+python3 tools/pm.py new initiative-context context/products/example/initiatives/renewals/overview.md --parent context/products/example/overview.md --title "Renewals context"
 ```
 
 For a separately maintained [product area](../playbook/filing.md#product-area-context), record the reader need and review trigger:

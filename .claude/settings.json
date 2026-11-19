@@ -15,6 +15,21 @@
         ]
       }
     ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3",
+            "args": [
+              "-c",
+              "from pathlib import Path; import runpy, sys; p=Path.cwd().resolve(); root=next(p for p in (p, *p.parents) if (p/\"playbook/release.json\").is_file() and (p/\"tools/hook.py\").is_file()); sys.path.insert(0, str(root/\"tools\")); runpy.run_path(str(root/\"tools/hook.py\"), run_name=\"__main__\")"
+            ],
+            "timeout": 15
+          }
+        ]
+      }
+    ],
     "Stop": [
       {
         "hooks": [
