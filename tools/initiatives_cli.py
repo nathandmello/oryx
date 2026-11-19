@@ -3,7 +3,7 @@
 import json
 import sys
 
-from initiative_events import (DECISION_FIELDS, EVALUATION_FIELDS, FIELDS, HORIZONS, OPTIONAL_FIELDS,
+from initiative_events import (DECISION_FIELDS, RATIONALE_FIELDS, EVALUATION_FIELDS, FIELDS, HORIZONS, OPTIONAL_FIELDS,
                                OUTCOME_STATUSES, PHASES, RESULTS, RISKS, TRANSITIONS)
 import experiment_drafts
 import initiative_areas
@@ -57,6 +57,9 @@ def run(root, args):
             "intake_review": "Proposals compare new IDs against this product's history. The PM confirms distinct captures at apply.",
             "extra_fields_by_decision": DECISION_FIELDS,
             "evaluation_fields": EVALUATION_FIELDS,
+            "optional_decision_rationale": {"required": RATIONALE_FIELDS, "optional": ["review_on"],
+                "alternatives": "nonempty list distinct from choice; decision source also covers rationale",
+                "storage": "reviewed as part of the signed reason"},
             "target_review_fields": {
                 "status": "PM judgment using an allowed outcome status",
                 "measurements": "distinct release measurement IDs for this initiative and target; met, missed and inconclusive require evidence",
