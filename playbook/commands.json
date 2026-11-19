@@ -16,6 +16,7 @@
     "coach": "Think through a product decision with the PM.",
     "critique": "Challenge claims, trade-offs, or decision quality.",
     "draft": "Start or resume a working artifact.",
+    "open": "Launch a local interface for the named work.",
     "plan": "Prepare a comparison or plan for a future decision.",
     "preview": "Show a proposed change or sample without saving.",
     "reset": "Restore inherited defaults for selected settings.",
@@ -157,6 +158,12 @@
       "effect": "local-write",
       "cli": ["conversation", "checkpoint", "apply"],
       "example": ["workspace/problems/export.md"]
+    },
+    "workspace browser open": {
+      "summary": "Open the local PM Hub browser app to a workspace screen.",
+      "effect": "read",
+      "cli": ["ui"],
+      "example": ["--screen", "roadmap"]
     },
     "workspace health check": {
       "summary": "Run Hub structure, content, and workflow checks.",

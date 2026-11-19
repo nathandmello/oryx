@@ -1,13 +1,12 @@
 # Updating an installed Hub
 
-Open the updated Hub to verify compatibility.
-
-This release uses private format 2.
+Private format 2 applies.
 
 | Release | Change |
 | --- | --- |
-| 0.7.0 | Adds [decision coaching](conversation.md), [weekly review](decision-review.md), and optional [forecasts](decision-forecasts.md). |
-| 0.5.0 | Adds [Hub commands](commands.md) and optional [reply preferences](working.md#reply-preferences). Existing profiles use Hub defaults. |
+| 0.7.0 | Adds [decision coaching](conversation.md), [weekly review](decision-review.md), and [forecasts](decision-forecasts.md). |
+| 0.6.0 | Opens [roadmaps, tasks, and checklists](local-ui.md) in a local browser. |
+| 0.5.0 | Adds [Hub commands](commands.md) and optional [reply preferences](working.md#reply-preferences). |
 | 0.4.2 | Automates [publication](publication.md). |
 
 Release 0.4.1 adds [initiative tasks and launch checklists](initiative-work.md) on demand.
