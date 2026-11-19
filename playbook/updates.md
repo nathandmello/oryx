@@ -7,6 +7,7 @@ Releases 0.3.1 through 0.8.0 use private format 2.
 | Release | Change |
 | --- | --- |
 | 0.8.0 | Adds launch evidence history, decision conflict reviews, guardrail readings, and measurement corrections. |
+| 0.6.1 | Requires [browser impact evidence](local-ui.md#review-workflow-changes) for changes to roadmap, task, and launch checklist workflows. |
 | 0.6.0 | Opens [roadmaps, PM tasks, and launch checklists](local-ui.md) in a local browser. The app reads and updates existing private records. |
 | 0.5.0 | Adds [Hub commands](commands.md) and optional [reply preferences](working.md#reply-preferences). Existing profiles use Hub defaults. |
 | 0.4.2 | Automates [publication](publication.md). |

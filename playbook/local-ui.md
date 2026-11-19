@@ -69,3 +69,13 @@ npm test --prefix tests/browser
 
 Set `PM_HUB_CHROMIUM` to use an installed Chromium binary.
 The tests use temporary workspaces and fixture keys. The signing tests simulate the desktop confirmation and run OpenSSH.
+
+## Review workflow changes
+
+The required PR review checks changes to roadmap, task, launch checklist, and browser workflow files.
+Add one `## Browser impact` section to the pull request.
+Start with `Changed:` and describe the affected behavior, or use `Unchanged:` and explain why it stays the same.
+
+For changed behavior, add or update a Playwright spec in `tests/browser/`.
+Describe what you verified through the terminal and browser.
+The reviewer checks the explanation and test coverage. The required CI check runs Playwright.
