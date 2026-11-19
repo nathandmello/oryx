@@ -1,0 +1,144 @@
+{
+  "domains": {
+    "context": "Company, product, area, and initiative reference material, including source and meeting evidence.",
+    "strategy": "Goals and strategic choices about which problems and outcomes to pursue.",
+    "discovery": "Customer and problem validation, discovery briefs, hypotheses, and experiments.",
+    "initiative": "Intake, definition, and decisions for one proposed investment.",
+    "portfolio": "Backlog and roadmap views, cross-initiative trade-offs, and planning capacity.",
+    "delivery": "Engineering handoffs, launch and enablement, and measured outcomes.",
+    "review": "Independent critique and quality reviews that span record types.",
+    "workspace": "Personal settings, workspace health, and installation or repository maintenance."
+  },
+  "verbs": {
+    "capture": "Record evidence or prepare new intake with its source.",
+    "check": "Inspect against stated rules and report failures.",
+    "critique": "Challenge claims, trade-offs, or decision quality.",
+    "draft": "Start or resume a working artifact.",
+    "plan": "Prepare a comparison or plan for a future decision.",
+    "preview": "Show a proposed change or sample without saving.",
+    "reset": "Restore inherited defaults for selected settings.",
+    "review": "Assess the named work at its existing review gate.",
+    "set": "Save specified personal settings.",
+    "show": "Read the current record, view, or settings.",
+    "summarize": "Summarize source material with its evidence and decisions."
+  },
+  "aliases": {
+    "preferences": "workspace preferences"
+  },
+  "commands": {
+    "context area show": {
+      "summary": "Locate a product area's standing context and sources.",
+      "effect": "read",
+      "cli": ["area-context"],
+      "example": ["checkout", "refunds"]
+    },
+    "context evidence capture": {
+      "summary": "Route supplied evidence to its owning context record.",
+      "guide": ".agents/skills/ingest-context/SKILL.md"
+    },
+    "context meeting summarize": {
+      "summary": "Summarize an initiative meeting and cite its transcript.",
+      "guide": ".agents/skills/summarize-meeting/SKILL.md"
+    },
+    "strategy brief draft": {
+      "summary": "Create a strategy draft for the selected scope.",
+      "effect": "local-write",
+      "cli": ["new", "strategy"],
+      "example": ["workspace/strategies/checkout.md"]
+    },
+    "strategy brief check": {
+      "summary": "Show the next review step and gaps in an existing strategy brief.",
+      "effect": "read",
+      "cli": ["strategy"],
+      "example": ["workspace/strategies/checkout.md"]
+    },
+    "strategy goal draft": {
+      "summary": "Create a goal draft for an outcome and its measure.",
+      "effect": "local-write",
+      "cli": ["new", "goal"],
+      "example": ["workspace/goals/refunds.md"]
+    },
+    "discovery brief draft": {
+      "summary": "Prepare the investigation and timebox for a registered initiative.",
+      "guide": ".agents/skills/run-discovery/SKILL.md"
+    },
+    "discovery experiment draft": {
+      "summary": "Start or resume an experiment draft linked to an initiative metric.",
+      "effect": "local-write",
+      "cli": ["initiative", "draft-experiment"],
+      "example": ["checkout", "product-context-0123456789ab/refunds", "refund-time"]
+    },
+    "discovery findings review": {
+      "summary": "Assess findings and hypotheses for the current discovery timebox.",
+      "guide": ".agents/skills/run-discovery/SKILL.md"
+    },
+    "initiative record show": {
+      "summary": "Trace a registered initiative, its evidence, and its decisions.",
+      "effect": "read",
+      "cli": ["initiative", "show"],
+      "example": ["checkout", "product-context-0123456789ab/refunds"]
+    },
+    "initiative intake capture": {
+      "summary": "Capture an initiative signal or prepare intake for a distinct problem.",
+      "guide": ".agents/skills/manage-backlog/SKILL.md"
+    },
+    "initiative brief draft": {
+      "summary": "Start or resume an Initiative Brief for a registered initiative.",
+      "guide": ".agents/skills/define-initiative/SKILL.md"
+    },
+    "portfolio backlog show": {
+      "summary": "Generate the backlog from the signed initiative register.",
+      "effect": "read",
+      "cli": ["backlog"],
+      "example": ["--product", "checkout", "--due"]
+    },
+    "portfolio roadmap show": {
+      "summary": "Generate the selected roadmap from the signed initiative register.",
+      "effect": "read",
+      "cli": ["roadmap"],
+      "example": ["--product", "checkout", "--format", "markdown"]
+    },
+    "portfolio roadmap plan": {
+      "summary": "Compare roadmap candidates and prepare a capacity decision.",
+      "guide": ".agents/skills/prioritize-roadmap/SKILL.md"
+    },
+    "delivery outcome review": {
+      "summary": "Review measured outcomes from a shipped initiative and prepare a follow-up decision.",
+      "guide": "playbook/initiative-approvals.md"
+    },
+    "review artifact critique": {
+      "summary": "Challenge a PM artifact or decision against its evidence.",
+      "guide": ".agents/skills/red-team/SKILL.md"
+    },
+    "workspace health check": {
+      "summary": "Run Hub structure, content, and workflow checks.",
+      "effect": "read",
+      "cli": ["check"],
+      "example": ["--system-only"]
+    },
+    "workspace preferences show": {
+      "summary": "Show active reply preferences and inherited defaults.",
+      "effect": "read",
+      "cli": ["preferences", "show"],
+      "example": []
+    },
+    "workspace preferences preview": {
+      "summary": "Try presentation choices on a sample reply before saving.",
+      "effect": "read",
+      "cli": ["preferences", "preview"],
+      "example": ["--detail", "concise", "--layout", "bullets"]
+    },
+    "workspace preferences set": {
+      "summary": "Save the supplied reply preferences in the private PM profile.",
+      "effect": "local-write",
+      "cli": ["preferences", "set"],
+      "example": ["--layout", "prose"]
+    },
+    "workspace preferences reset": {
+      "summary": "Restore reply defaults for one setting or all settings.",
+      "effect": "local-write",
+      "cli": ["preferences", "reset"],
+      "example": ["layout"]
+    }
+  }
+}

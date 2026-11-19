@@ -1,9 +1,12 @@
 # Updating an installed Hub
 
-Releases 0.3.1 through 0.5.0 use private format 2.
-0.5.0 adds source-linked strategy skills and a readiness check for new strategy drafts. Existing drafts remain readable.
+Releases 0.3.1 through 0.6.0 use private format 2.
 
-0.4.2 automates [publication](publication.md).
+| Release | Change |
+| --- | --- |
+| 0.6.0 | Adds [source-linked skills](framework.md) and checks strategy readiness. Existing strategies remain readable. |
+| 0.5.0 | Adds [Hub commands](commands.md) and optional [reply preferences](working.md#reply-preferences). Existing profiles use Hub defaults. |
+| 0.4.2 | Automates [publication](publication.md). |
 
 0.4.1 adds [initiative tasks and launch checklists](initiative-work.md).
 

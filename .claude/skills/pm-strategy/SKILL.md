@@ -10,6 +10,7 @@ The brief lets the PM assess the proposed choice and the responsible owners revi
 1. Follow [the session steps](../../../playbook/working.md#run-a-workflow). Read [Product Strategy](../../../playbook/sources/product-strategy-mindset.md#section-1-product-strategy) and the [Strategy Template](../../../playbook/sources/product-strategy-mindset.md#section-2-strategy-template).
 2. Identify the strategy record from the request or handoff. Use the [strategy template](../../../templates/strategy.md) for a requested new draft.
 3. Run `python3 tools/pm.py strategy <path>` with a path relative to `private/`, under `workspace/strategies/`.
+   The shared menu exposes the same check as `/pm strategy brief check <path>`.
 4. Follow the reported step. Preserve the source trail and earlier decisions. Check only the section that the command identifies.
 5. Run the command again after changes. Let its result determine the next step.
 

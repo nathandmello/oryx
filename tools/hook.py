@@ -8,6 +8,7 @@ import sys
 
 import pm
 import metric_checks
+import preferences
 import task_context
 
 
@@ -23,7 +24,8 @@ CAPTURE_GUIDANCE = (
     "Only the PM signs and applies changes with the protected signing key. "
     "If task hooks are unavailable, run pm.py task-context for each task and after scope changes. "
     "Use playbook/numbers.md for material quantitative claims, including claims from the PM or a trusted source. "
-    "For initiative tasks or launch checklists, read .agents/skills/manage-initiative-work/SKILL.md."
+    "For initiative tasks or launch checklists, read .agents/skills/manage-initiative-work/SKILL.md. "
+    "Use the pm skill for /pm actions and requests to manage saved Hub preferences."
 )
 
 NUMBERS_GUIDANCE = (
@@ -166,6 +168,23 @@ def response(event, errors, retry=False):
     return {"systemMessage": message}
 
 
+def reply_preferences(root):
+    values = {}
+    result = {}
+    try:
+        if pm.workspace.private_root(root).is_dir():
+            values = preferences.load(pm.workspace.repo(root, "workspace"))
+    except (OSError, ValueError):
+        result["systemMessage"] = (
+            "PM Hub is using default reply preferences. Run pm.py preferences show to check the saved settings."
+        )
+    result["hookSpecificOutput"] = {
+        "hookEventName": "UserPromptSubmit",
+        "additionalContext": preferences.guidance(values),
+    }
+    return result
+
+
 def main():
     try:
         payload = json.load(sys.stdin)
@@ -182,13 +201,21 @@ def main():
         if event == "PreToolUse":
             result = edit_guard(root, cwd, payload)
         elif event == "UserPromptSubmit":
-            result = prompt_context(pm.workspace.private_root(root), cwd, payload)
+            result = reply_preferences(root)
+            context = prompt_context(pm.workspace.private_root(root), cwd, payload)
+            if context:
+                result["hookSpecificOutput"]["additionalContext"] += (
+                    "\n" + context["hookSpecificOutput"]["additionalContext"]
+                )
         else:
             report = None
             private = pm.workspace.private_root(root)
             if private.is_dir() and event in {"SessionStart", "Stop"}:
                 report = pm.alignment(root, prepare=event == "SessionStart")
-            result = response(event, pm.check(root), retry)
+            checks = pm.check(root)
+            if event == "Stop":
+                checks = [error for error in checks if not error.startswith(preferences.CHECK_PREFIX)]
+            result = response(event, checks, retry)
             if event == "Stop" and not retry and not result and private.is_dir():
                 result = review_context(private, payload)
             if event == "SessionStart":

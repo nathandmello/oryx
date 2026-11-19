@@ -86,3 +86,14 @@ class StrategyFrameworkTests(unittest.TestCase):
         path.write_text(original.replace("<!-- pm-contract: strategy-v2 -->\n", ""))
         self.assertEqual(pm.check(self.root), [])
         self.assertEqual(self.strategy_status()["step"], "legacy-record")
+
+    def test_hub_action_uses_the_same_strategy_check(self):
+        self.strategy_draft()
+        command = [sys.executable, "-B", str(self.root / "tools/pm.py"), "action", "strategy", "brief", "check"]
+        result = subprocess.run([*command, self.destination], cwd=self.work, capture_output=True, text=True)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertEqual(json.loads(result.stdout), self.strategy_status())
+        missing = subprocess.run([*command, "workspace/strategies/missing.md"],
+                                 cwd=self.work, capture_output=True, text=True)
+        self.assertEqual(missing.returncode, 1, missing.stdout + missing.stderr)
+        self.assertIn("Select an existing record", missing.stdout)

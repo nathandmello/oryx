@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import sys
 from html import unescape
 from pathlib import Path
 import re
@@ -29,6 +30,8 @@ import layout
 import layout_upgrade
 import opportunities
 import pm_profile
+import preferences
+import hub_commands
 import initiatives_cli
 import initiative_store
 import initiative_views
@@ -44,6 +47,8 @@ REQUIRED = (
     "tools/layout.py", "tools/layout_upgrade.py", "tools/pm_profile.py", "playbook/workspace-format.json", "tools/filing.py", "tools/conversion.py", "tools/snapshots.py", "playbook/filing.md", "playbook/writing.md",
     "tools/context_capture.py", "tools/task_context.py", "tools/metric_checks.py", "tools/storage.py", "tools/upgrades.py",
     "playbook/numbers.md", "playbook/metrics.md", "playbook/saas-metrics.json", "tools/metric_registry.py",
+    "tools/preferences.py", ".agents/skills/pm/SKILL.md", ".claude/skills/pm/SKILL.md",
+    "tools/hub_commands.py", "playbook/commands.md", hub_commands.CATALOG,
     ".agents/skills/extend-hub/SKILL.md", ".claude/skills/extend-hub/SKILL.md",
     ".agents/skills/ingest-context/SKILL.md", ".claude/skills/ingest-context/SKILL.md",
     ".codex/hooks.json", ".codex/config.toml", ".claude/settings.json",
@@ -258,7 +263,7 @@ def hook_errors(texts: dict[str, str]) -> list[str]:
                 group = {"hooks": [dict(handler, timeout=600 if event == "SessionStart" else 15)]}
                 if event == "PreToolUse":
                     group["matcher"] = "Write|Edit|MultiEdit" if claude else "apply_patch"
-                elif len(hooks[event]) != 1 or set(hooks[event][0]) != {"hooks"}:
+                elif len(hooks.get(event, [])) != 1 or set(hooks[event][0]) != {"hooks"}:
                     errors.append(f"{name}: {event} must run without a matcher")
                 if hooks.get(event) != [group]:
                     errors.append(f"{name}: {event} must call the shared checker once")
@@ -305,6 +310,10 @@ def check_workspace(root: Path, system_texts: dict[str, str]) -> list[str]:
         metric_registry.history(private)
     except (OSError, ValueError) as exc:
         errors.append(f"private/{metric_registry.PRIVATE}: {exc}")
+    try:
+        preferences.load(private)
+    except (OSError, ValueError) as exc:
+        errors.append(f"{preferences.CHECK_PREFIX}{exc}")
     files = inventory(private)
     initiative_work_homes = set()
     for path in files:
@@ -395,7 +404,7 @@ def check_workspace(root: Path, system_texts: dict[str, str]) -> list[str]:
     return errors
 
 
-def check(root: Path = ROOT, include_workspace=True) -> list[str]:
+def check(root: Path = ROOT, include_workspace=True, *, command_base=None) -> list[str]:
     root = root.resolve()
     errors, texts, safe = [], {}, set()
     for path in inventory(root):
@@ -413,6 +422,9 @@ def check(root: Path = ROOT, include_workspace=True) -> list[str]:
             continue
         safe.add(path)
         parts = path.relative_to(root).parts
+        if parts[:2] in hub_commands.NATIVE_COMMAND_DIRS:
+            errors.append(f"{rel}: register shared slash actions in {hub_commands.CATALOG}")
+            continue
         if (len(parts) == 1 and rel not in ROOT_FILES) or (len(parts) > 1 and parts[0] not in ROOT_DIRS):
             errors.append(f"{rel}: use a home from the README placement map")
         if path.suffix not in (".md", ".json", ".toml") and path.name != ".gitignore":
@@ -450,6 +462,14 @@ def check(root: Path = ROOT, include_workspace=True) -> list[str]:
     except (OSError, ValueError) as exc:
         errors.append(f"{initiative_work.TEMPLATE}: {exc}")
     errors.extend(guidance_errors(root, texts))
+    try:
+        parser = build_parser()
+        catalog = hub_commands.load(root, parser)
+        if command_base is not None:
+            errors.extend(f"{hub_commands.CATALOG}: {error}" for error in
+                          hub_commands.compatibility_errors(root, command_base, catalog, parser))
+    except (OSError, ValueError) as exc:
+        errors.append(f"{hub_commands.CATALOG}: {exc}")
     errors.extend(hook_errors(texts))
     errors.extend(records.validate(texts))
     if not strategy.uses_contract(texts.get("templates/strategy.md", "")):
@@ -670,11 +690,14 @@ def capture_errors(root, target, text):
     return errors + writing_errors(text) + link_errors(root, target, text)
 
 
-def main() -> int:
+def build_parser():
     parser = argparse.ArgumentParser(description=__doc__)
     commands = parser.add_subparsers(dest="command", required=True)
+    commands.add_parser("action", help="Discover and run published PM Hub actions")
+    preferences.add_commands(commands)
     checks = commands.add_parser("check")
     checks.add_argument("--system-only", action="store_true")
+    checks.add_argument("--command-base", metavar="COMMIT", help="Check published slash actions against a base commit")
     align = commands.add_parser("align", help="Prepare or resume the private context upgrade")
     align.add_argument("--status", action="store_true", help="Read-only preview")
     plans = align.add_mutually_exclusive_group()
@@ -732,8 +755,20 @@ def main() -> int:
     git.add_argument("role", choices=("system", "workspace"))
     git.add_argument("operation", choices=("status", "fetch", "pull", "push"))
     red_team_eval.register(commands)
-    args = parser.parse_args()
+    return parser
+
+
+def main() -> int:
     try:
+        argv = sys.argv[1:]
+        if argv[:1] == ["action"]:
+            argv = hub_commands.route(ROOT, argv[1:])
+            if argv is None:
+                return 0
+        args = build_parser().parse_args(argv)
+        if hasattr(args, "hub_action"):
+            args.hub_action(ROOT, args, prepare_private_write)
+            return 0
         if args.command == "align":
             if args.preview_plan or args.apply_plan:
                 if any((args.status, args.record, args.outcome, args.note, args.digest, args.backup)):
@@ -944,11 +979,11 @@ def main() -> int:
             return red_team_eval.run(args)
         if not args.system_only and workspace.private_root(ROOT).is_dir() and workspace.settings(ROOT, compatible=False)["workspace_format"] == 1:
             report = alignment(ROOT)
-            system_errors = check(include_workspace=False)
+            system_errors = check(include_workspace=False, command_base=args.command_base)
             if not system_errors and report["needs_setup"]:
                 print("Shared Hub checks passed. Private format 1 checks await session alignment.")
                 return 0
-        errors = check(include_workspace=not args.system_only)
+        errors = check(include_workspace=not args.system_only, command_base=args.command_base)
         if not args.system_only:
             notice = alignment_notice(ROOT)
             if notice:

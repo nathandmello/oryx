@@ -18,17 +18,40 @@ Both modes retain source checks, ownership boundaries, and existing permissions.
 
 ## Run a workflow
 
-1. Open the outer Hub. Read the [constitution](../AGENTS.md), `private/settings.json`, and the private handoff.
-2. Use the PM's current request, the handoff, and the record to identify the next action and active mode.
-3. Reuse the authoritative record. Apply [the filing rules](filing.md) and the matching [template](../templates/README.md) before creating a record.
-4. Create new records with `python3 tools/pm.py new <kind> <path>` from the system root. Pass a path relative to `private/`.
-5. Fill what the session establishes. Keep gaps and unapproved choices visible. Follow the requested scope for any edits.
+1. Read the [constitution](../AGENTS.md), `private/settings.json`, and handoff. Identify the requested action and mode.
+2. Reuse the authoritative record. Consult the [filing rules](filing.md) and [template](../templates/README.md) before creating a record.
+3. From the outer Hub, run `python3 tools/pm.py new <kind> <path>` with a private-relative path.
+4. Preserve gaps and unapproved choices. Check parent commitments, data boundaries, and closed decisions.
 
-When work relies on context, check parent commitments, data boundaries, and closed decisions. Follow [the context review rules](context.md#review-existing-context) for flagged briefs.
+Follow [context review](context.md#review-existing-context) for flagged briefs and [ingestion](../.agents/skills/ingest-context/SKILL.md) for context changes. Link evidence from the owning record.
 
-Use [context ingestion](../.agents/skills/ingest-context/SKILL.md) for requested context changes. Keep evidence with its owner and link it from the work record.
+Report an unavailable private workspace when an action requires it. Honour requests for discussion and preview.
 
-When a record action depends on an unavailable private workspace, report the missing workspace. Honour requests for discussion or a draft preview.
+## Reply preferences
+
+Use [Hub commands](commands.md) to find the preference actions.
+
+| In Claude Code | Result |
+| --- | --- |
+| `/pm workspace preferences show` | Show effective reply preferences. |
+| `/pm workspace preferences preview --detail concise --layout bullets` | Try changes on a sample reply. |
+| `/pm workspace preferences set --detail concise --layout bullets` | Save the supplied preferences. |
+| `/pm workspace preferences set --layout prose` | Change the layout. |
+| `/pm workspace preferences reset layout` | Restore the Hub default layout. |
+| `/pm workspace preferences reset all` | Restore all Hub defaults. |
+
+In a terminal at the outer Hub, replace `/pm` with `python3 tools/pm.py action`.
+The shorter terminal form is `python3 tools/pm.py preferences` followed by the action and options.
+
+Select concise or detailed replies. Select bullets or prose where the content fits.
+Review a sample with `preview`, then save when ready. You can also ask for changes in plain language.
+Each save affects only the supplied fields. A failed save keeps the previous settings.
+
+The PM's profile stores the choices. With trusted hooks, each new turn uses the latest valid settings in the open checkout.
+If the hooks are disabled, invoke the `pm` skill and use `preferences show` to load the current choices.
+
+Hub rules and required artifact content govern all work. For a single task, the PM can override a saved presentation choice.
+An invalid saved block uses defaults and produces a check error. Use `preferences reset all` to restore a valid block with complete markers.
 
 ## Resume
 
