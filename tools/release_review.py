@@ -1,4 +1,4 @@
-"""Check authenticated Codex code and security reviews for a specific release candidate."""
+"""Check browser impact and authenticated reviews for a release candidate."""
 
 import json
 import os
@@ -6,6 +6,27 @@ import re
 import sys
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
+
+
+BROWSER_WORKFLOW_FILES = {
+    ".agents/skills/manage-initiative-work/SKILL.md",
+    ".agents/skills/prioritize-roadmap/SKILL.md",
+    "playbook/initiative-approvals.md",
+    "playbook/initiative-views.md",
+    "playbook/initiative-work.md",
+    "templates/launch-checklist.json",
+    "templates/prioritization.md",
+    "templates/views/roadmap.json",
+    "tools/initiative_events.py",
+    "tools/initiative_store.py",
+    "tools/initiative_views.py",
+    "tools/initiative_work.py",
+    "tools/initiatives_cli.py",
+    "tools/layout.py",
+    "tools/local_ui.py",
+    "tools/pm.py",
+    "tools/roadmap_edit.py",
+}
 
 
 class RetryPublication(ValueError):
@@ -45,6 +66,32 @@ def joint_clearance(pr, summary, api):
     if any(r["content"] == "eyes" for r in reactions):
         return False
     return any(r["content"] == "+1" and r["created_at"] > summary["updated_at"] for r in reactions)
+
+
+def browser_impact(pr, api):
+    count = pr["changed_files"]
+    files = {}
+    for page in range(1, (count + 99) // 100 + 1):
+        for changed in api(f"pulls/{pr['number']}/files?per_page=100&page={page}"):
+            files[changed["filename"]] = changed
+    if len(files) != count:
+        raise ValueError("Could not verify all changed paths for the browser impact check")
+    paths = files.keys() | {item["previous_filename"] for item in files.values() if item.get("previous_filename")}
+    if not (paths & BROWSER_WORKFLOW_FILES or any(path.startswith("tools/local_ui/") for path in paths)):
+        return
+
+    body = (pr.get("body") or "").replace("\r\n", "\n")
+    sections = re.findall(r"^## Browser impact[ \t]*\n(.*?)(?=^## |\Z)", body, re.M | re.S)
+    if len(sections) != 1 or "<!--" in sections[0]:
+        raise ValueError("Add one Browser impact section for the affected workflow")
+    impact = re.match(r"^(Changed|Unchanged):[ \t]+\S", sections[0].strip())
+    if not impact:
+        raise ValueError("Start Browser impact with Changed: or Unchanged: and explain the result")
+    if impact[1] == "Changed" and not any(
+        path.startswith("tests/browser/") and path.endswith(".spec.js") and item["additions"] > 0
+        for path, item in files.items()
+    ):
+        raise ValueError("Add or update a Playwright scenario for the changed browser behavior")
 
 
 def review(pr, api):
@@ -146,8 +193,19 @@ def publication(pr, branch, sha, api):
 
 def main():
     with open(os.environ["GITHUB_EVENT_PATH"], encoding="utf-8") as stream:
-        event = json.load(stream)
-    review(event["pull_request"], github)
+        submitted = json.load(stream)["pull_request"]
+    endpoint = f"pulls/{submitted['number']}"
+    current = github(endpoint)
+    for ref in ("base", "head"):
+        if current[ref]["sha"] != submitted[ref]["sha"]:
+            raise ValueError("The pull request commits changed. Run review on the current pull request")
+    browser_impact(current, github)
+    review(current, github)
+    latest = github(endpoint)
+    if (latest["head"]["sha"], latest["base"]["sha"], latest["body"]) != (
+        current["head"]["sha"], current["base"]["sha"], current["body"]
+    ):
+        raise ValueError("The pull request changed during review. Run review again")
     print("PM Hub release review passed.")
 
 
