@@ -9,4 +9,6 @@
 5. Use `initiative propose` to validate `start-discovery` with a review date. Ask the PM to review the brief and approve.
 6. Before research begins, read the signed authorization. Use the documented timebox and methods.
 
+Keep the template’s section headings. Use `###` for additional subsections. Indent literal headings inside code samples.
+
 For a new timebox, preserve previous evidence and obtain a new signed start decision. Customer contact and external research require the applicable permission.

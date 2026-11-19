@@ -129,9 +129,14 @@ def doc_reference(root, name, kind, *, plan_scope=None, options=None, initiative
             raise ValueError(parent_error)
     if plan_scope == DISCOVERY_PLAN_SCOPE:
         # The section reader treats column-zero "## " lines as boundaries, including inside examples.
-        headings_pattern = r"(?m)^## [^\n]*"
-        if re.findall(headings_pattern, text) != re.findall(headings_pattern, brief_review.visible(text)):
-            raise ValueError(f"{name}: ambiguous discovery section boundary. To resolve it, indent example headings inside code or comments.")
+        headings_pattern = r"(?m)^## ([^\n]*)"
+        raw = [heading.rstrip() for heading in re.findall(headings_pattern, text)]
+        visible = [heading.rstrip() for heading in re.findall(headings_pattern, brief_review.visible(text))]
+        required = {"Parent initiative", "Work state", "Sources", *opportunities.DISCOVERY_PLAN}
+        names = set(raw)
+        if raw != visible or len(raw) != len(names) or names not in (required, required | {"Findings and recommendation"}):
+            raise ValueError(f"{name}: ambiguous discovery section boundary. Use ### for subsections "
+                             "and indent example headings inside code or comments.")
     headings = (*opportunities.DISCOVERY_PLAN, "Sources") if plan_scope else opportunities.REQUIRED_SECTIONS[kind]
     missing = opportunities.missing(text, headings)
     if missing:

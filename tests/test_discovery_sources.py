@@ -54,7 +54,7 @@ class DiscoverySourceTests(unittest.TestCase):
         h = self.hub
         path = h.work / h.discovery
         original = path.read_text()
-        for opening, closing in (("```markdown", "```"), ("<!--", "-->")):
+        for opening, closing in (("```markdown", "```"), ("<!--", "-->"), ("<pre>", "</pre>")):
             with self.subTest(opening=opening):
                 source = f"{self.source}\n\n{opening}\n## Example\n{closing}\n\n### Interview notes\nInterview 21, page 4."
                 ambiguous = original.replace(self.source, source)
@@ -83,9 +83,13 @@ class DiscoverySourceTests(unittest.TestCase):
             envelope["signature"] = initiative_store.sign(h.root, envelope["record"], h.key)
         h.ledger.write_text(json.dumps(envelope))
         self.assertEqual(h.trace()["review_issues"], [])
-        h.fill(h.discovery, {"Sources": "Updated renewal log after the older timebox began."}, complete=False)
+        h.fill(h.discovery, {"Sources": "Updated renewal log.\n\n<pre>\n## Example\n</pre>\nLost interview 91."},
+               complete=False)
         self.assertEqual(h.trace()["review_issues"], [])
         h.preview(self.finish, error="sign start-discovery before prepare-brief")
+        h.preview(self.start, error="indent example headings")
+        path = h.work / h.discovery
+        path.write_text(path.read_text().replace("## Example", "    ## Example"))
 
         proposal = h.preview(self.start)
         del proposal["reviewed_transactions"][0]["references"]["scope"]
