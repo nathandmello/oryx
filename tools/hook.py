@@ -22,7 +22,8 @@ CAPTURE_GUIDANCE = (
     "Find metric-linked experiment drafts with initiative show. Leave unknown fields empty. "
     "Only the PM signs and applies changes with the protected signing key. "
     "If task hooks are unavailable, run pm.py task-context for each task and after scope changes. "
-    "Use playbook/numbers.md for material quantitative claims, including claims from the PM or a trusted source."
+    "Use playbook/numbers.md for material quantitative claims, including claims from the PM or a trusted source. "
+    "For initiative tasks or launch checklists, read .agents/skills/manage-initiative-work/SKILL.md."
 )
 
 NUMBERS_GUIDANCE = (
@@ -115,6 +116,9 @@ def edit_reason(root, private, requested, content):
     if any(private in path.parents and pm.opportunities.path_kind(path.relative_to(private)) == "register"
            for path in (requested, target)):
         return "Use pm.py initiative propose for register changes. The PM signs and applies the proposal."
+    if any(private in path.parents and pm.layout.initiative_work_identity(path.relative_to(private))
+           for path in (requested, target)):
+        return "Use pm.py task or pm.py launch-checklist to preview and apply changes."
     if private not in target.parents:
         return None
     relative = target.relative_to(private)

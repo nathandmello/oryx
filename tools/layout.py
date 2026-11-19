@@ -9,6 +9,8 @@ PROFILE = "context/pm/context.md"
 WORK_FOLDERS = {"goal": "goals", "problem": "problems", "strategy": "strategies",
                 "roadmap": "roadmaps", "experiment": "experiments"}
 INITIATIVE_BRIEFS = ("discovery-brief", "initiative-brief")
+INITIATIVE_WORK = {"tasks.json": "tasks", "launch-checklist.json": "checkpoints"}
+INITIATIVE_WORK_RESERVED = {"sources", "secrets"}
 MAX_TOPICS = 6
 
 
@@ -40,6 +42,23 @@ def initiative_brief(product_name, initiative_slug, kind):
     if kind not in INITIATIVE_BRIEFS:
         raise ValueError("Choose a Discovery Brief or Initiative Brief")
     return f"workspace/initiatives/{slug(product_name)}/{slug(initiative_slug)}/{kind}.md"
+
+
+def initiative_work_path(product_name, initiative_slug, filename):
+    if filename not in INITIATIVE_WORK:
+        raise ValueError("Choose the task list or launch checklist")
+    product_name, initiative_slug = slug(product_name), slug(initiative_slug)
+    if {product_name, initiative_slug} & INITIATIVE_WORK_RESERVED:
+        raise ValueError("Choose an initiative outside reserved sources and secrets paths")
+    return Path("workspace/initiatives") / product_name / initiative_slug / filename
+
+
+def initiative_work_identity(name):
+    parts = Path(name).parts
+    if (len(parts) == 5 and parts[:2] == ("workspace", "initiatives") and parts[4] in INITIATIVE_WORK
+            and not INITIATIVE_WORK_RESERVED.intersection(parts[2:4])
+            and all(SLUG.fullmatch(part) for part in parts[2:4])):
+        return tuple(parts[2:])
 
 
 def prioritization(product_name, cycle):

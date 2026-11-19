@@ -14,6 +14,7 @@ Choose the purpose first. File information used for reference in `context/`. Fil
 | Priorities, plans, progress, or tests | The applicable work type under `workspace/`, such as `workspace/experiments/` |
 | Proposed investments, sources, and lifecycle decisions | Signed `workspace/backlogs/<product>/initiatives.json` |
 | Formal discovery or proposed investment | `discovery-brief.md` or `initiative-brief.md` under `workspace/initiatives/<product>/<initiative>/` |
+| PM delivery work and launch readiness | [Initiative tasks and checkpoints](initiative-work.md) beside the briefs |
 | Test for an initiative metric | `workspace/experiments/<product>/<initiative>/experiment.<metric-id>.draft.json` during drafting |
 | Investment comparison for a planning cycle | `workspace/roadmaps/<product>/<cycle>.md` |
 | Current backlog or selected roadmap | Generate either view from the register with `pm.py backlog` or `pm.py roadmap` |

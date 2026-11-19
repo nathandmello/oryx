@@ -1,0 +1,37 @@
+{
+  "upstream-dependencies": {
+    "phase": "upstream",
+    "title": "Confirm upstream dependencies",
+    "criterion": "Record each dependency owner, confirmed delivery date, and any condition that could delay launch."
+  },
+  "approvals-and-scope": {
+    "phase": "upstream",
+    "title": "Confirm launch scope and approvals",
+    "criterion": "Record the release audience and applicable decision owners, approvals, exclusions, and open risks."
+  },
+  "enablement": {
+    "phase": "upstream",
+    "title": "Confirm customer and team enablement",
+    "criterion": "Record the agreed communications, documentation, and support readiness for the launch audience."
+  },
+  "rollout-and-rollback": {
+    "phase": "launch",
+    "title": "Verify rollout and rollback readiness",
+    "criterion": "Record the rollout owner, sequence, stop conditions, and confirmed rollback or containment procedure."
+  },
+  "launch-monitoring": {
+    "phase": "launch",
+    "title": "Verify launch monitoring",
+    "criterion": "Confirm the dashboard, alert routing, and response owner with evidence from a readiness check."
+  },
+  "support-handoff": {
+    "phase": "downstream",
+    "title": "Confirm support handoff and follow-through",
+    "criterion": "Record receipt of the handoff, escalation owner, and resolution or ownership of remaining launch issues."
+  },
+  "outcome-review": {
+    "phase": "downstream",
+    "title": "Review launch outcomes",
+    "criterion": "Record the review date, measured results and guardrails, and ownership of any follow-up decision."
+  }
+}
