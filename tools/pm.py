@@ -45,6 +45,7 @@ REQUIRED = (
     ".agents/skills/extend-hub/SKILL.md", ".claude/skills/extend-hub/SKILL.md",
     ".agents/skills/ingest-context/SKILL.md", ".claude/skills/ingest-context/SKILL.md",
     ".codex/hooks.json", ".codex/config.toml", ".claude/settings.json",
+    ".github/workflows/release.yml", ".github/workflows/review.yml", "tools/publish_release.py", "tools/release_candidate.py",
     ".github/workflows/check.yml", ".github/pull_request_template.md", "tools/release_review.py", "tests/test_pm.py",
     "playbook/framework.md", "playbook/working.md", "playbook/context.md", "templates/README.md", "tools/records.py",
     ".agents/skills/red-team/SKILL.md", ".claude/skills/red-team/SKILL.md",

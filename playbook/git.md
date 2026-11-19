@@ -107,19 +107,17 @@ Verify links, stable IDs, citations, and the intended outcome. Keep missing evid
 
 Follow [the installed-workspace upgrade procedure](updates.md) for all existing private records, regardless of filename.
 
-## Engineering and quality review before publication
+## Codex review before publication
 
 Merging to the default branch makes changes available to consumers who pull it. Apply this process to every Hub release. Compare the candidate with the last published version and the PM requirements.
 
 | Stage | Evidence required to advance |
 | --- | --- |
 | Implement | Contribution branch, dependency review, passing system check and full test suite. |
-| Engineering review | An independent reviewer checks correctness, compatibility, upgrade ordering, and recovery. Resolve findings and retest. |
-| Quality review | A separate reviewer exercises the PM requirements on fresh and upgraded installations. Include failure and restore scenarios. |
-| Pull request | Record both reviewers, decisions, evidence, user impact, recovery, and verification limits. Bind evidence to the full head SHA. |
-| Merge | Refresh reviews after candidate changes. Require green pull request checks and maintainer authorisation. |
-| Publication | Run “PM Hub checks” on the default branch with the merged release PR number. Publish that commit only after a pass and explicit authorisation. |
+| Pull request | Open ready for review. Describe consumer impact, recovery and verification limits. |
+| Code review | Codex reviews the current PR head. Address findings, test fixes and obtain a fresh review. |
+| Security review | Codex Security reviews the same head. Require an explicit passing security result. |
+| Merge | The agent may merge the exact reviewed SHA when both reviews and required CI pass. Respect repository protections. |
+| Publication | An authorised merge starts publication. Verify the tested tree and publish the version in the merged commit. |
 
-Use the merge gate for default-branch consumers. Use the publication check before tagging or announcing a release.
-
-The read-only publication check verifies the default branch tip, reviewed tree, merged pull request, and successful pull request checks.
+Require `check` and `review` before merging. Follow [release setup and recovery](publication.md).

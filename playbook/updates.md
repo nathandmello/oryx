@@ -1,8 +1,10 @@
 # Updating an installed Hub
 
-Pull and open the shared Hub to verify compatibility.
+Open the updated Hub to verify compatibility.
 
-Releases 0.3.1 through 0.4.1 use private format 2.
+Releases 0.3.1 through 0.4.2 use private format 2.
+
+0.4.2 automates [publication](publication.md).
 
 Release 0.4.1 adds [initiative tasks and launch checklists](initiative-work.md) on demand.
 
@@ -116,7 +118,7 @@ For GNU tar on Linux, use `--xattrs --xattrs-include='*'` when restoring extende
 
 Compare the recovered working files before switching installations.
 
-Keep a private off-device copy for recovery after disk loss. The archive can contain credentials from ignored files. It stays local during Git operations.
+Keep a private off-device recovery copy. The archive can contain credentials from ignored files. It stays local during Git operations.
 
 Before conversion, the tool verifies a ZIP with the exact bytes of each existing affected file, including untracked files. It stores the plan alongside those originals.
 
