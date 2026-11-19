@@ -4,13 +4,16 @@ from datetime import date, datetime
 from collections import Counter
 from hashlib import sha256
 import json
+import os
 from pathlib import Path
 import re
 import time
 from urllib.parse import urlsplit
 
-import layout
 import evidence_reviews
+import context_index
+import context_search
+import layout
 import metric_registry
 import records
 import storage
@@ -29,18 +32,23 @@ FOLLOW_UP = re.compile(r"^(?:please\s+)?(?:(?:can|could|would) you\s+(?:please\s
                        r"(?:continue\b|resume\b|revise (?:it|that|this)\b|"
                        r"update (?:it|that|this)\b|make (?:it|that|this)\b|what about\b)", re.I)
 SWITCH = re.compile(r"^(?:please\s+)?switch\s+from\b.+?\bto\s+", re.I)
+COMPANY_QUERY = re.compile(r"\bcompany(?:-wide| context| overview| policy)\b", re.I)
 IDENTIFIER = re.compile(r"\b[a-z][\w-]*\.[a-z][\w.-]*[a-z0-9]\b", re.I)
 DATE = re.compile(r"\b(?:as of|on)\s+(\d{4}-\d{2}-\d{2}|"
                   r"(?:January|February|March|April|May|June|July|August|September|October|November|December)"
                   r" \d{1,2}, \d{4})\b", re.I)
 
 
-def words(value):
-    tokens = {word for word in re.findall(r"[^\W_]+", value.casefold())
-              if len(word) >= 3 and not word.isdigit() and word not in STOP_WORDS}
-    return {word[:-2] if len(word) >= 6 and word.endswith("ed")
+def tokens(value):
+    terms = (word for word in re.findall(r"[^\W_]+", value.casefold())
+             if len(word) >= 3 and not word.isdigit() and word not in STOP_WORDS)
+    return [word[:-2] if len(word) >= 6 and word.endswith("ed")
             else word[:-1] if len(word) >= 5 and word.endswith("s") and not word.endswith("ss") else word
-            for word in tokens}
+            for word in terms]
+
+
+def words(value):
+    return set(tokens(value))
 
 
 def title(path, text):
@@ -54,8 +62,39 @@ def private_files(private, domain):
         relative = path.relative_to(private)
         if (relative.parts[0] in domain and relative.name != "README.md" and relative.suffix == ".md"
                 and not any(part.startswith(".") or part in {"sources", "secrets"} for part in relative.parts)
-                and relative.as_posix() not in excluded and path.resolve() == path and path.is_file()):
+                and relative.as_posix() not in excluded and path.resolve() == path and path.is_file() and os.access(path, os.R_OK)):
             yield relative, path
+
+
+def read_document(relative, path, *, text=None, through=None):
+    if text is None:
+        text = path.read_text(encoding="utf-8")
+    kind = records.MARKER.match(text)
+    if not kind or kind[1] not in records.CONTEXT_KINDS or records.context_location(kind[1], relative):
+        return None
+    name = relative.as_posix()
+    entity = layout.entity(relative)
+    parent = records.parent_reference(name, text)
+    product = entity.parts[2] if entity.parts[1] == "products" else None
+    initiative = None
+    if entity.parts[1] == "initiatives" or entity.parts[3:4] == ("initiatives",):
+        owner = entity / "overview.md"
+        if kind[1] == "context-note":
+            parent = owner.as_posix()
+        initiative = entity.name
+        if parent and layout.brief_kind(parent) == "product-context":
+            product = Path(parent).parts[2]
+    sources, _ = records.table(records.visible_section_markup(text), "Sources", records.SOURCE_COLUMNS)
+    coverage = {ref: state for ref, state, checked in records.SOURCE_COVERAGE.findall(records.section(text, "Sources") or "")
+                if through is None or checked <= through.isoformat()}
+    return {
+        "record": name, "kind": kind[1], "title": title(relative, text), "product": product,
+        "area": entity.name if entity.parts[3:4] == ("areas",) else None,
+        "initiative": initiative, "parent": parent, "text": text, "company": entity == Path(layout.COMPANY).parent,
+        "sources": {row[0]: {**dict(zip(records.SOURCE_COLUMNS, row)), "coverage": coverage.get(row[0], "unrecorded")}
+                    for row in sources
+                    if re.fullmatch(r"S[1-9]\d*", row[0])},
+    }
 
 
 def context_documents(private, *, override=None, through=None):
@@ -65,37 +104,21 @@ def context_documents(private, *, override=None, through=None):
         relative = Path(override[0])
         paths[relative] = private / relative
     for relative, path in paths.items():
-        text = override[1] if override and relative.as_posix() == override[0] else path.read_text(encoding="utf-8")
-        kind = records.MARKER.match(text)
-        if not kind or kind[1] not in records.CONTEXT_KINDS or records.context_location(kind[1], relative):
+        try:
+            doc = read_document(relative, path, through=through,
+                                text=override[1] if override and relative.as_posix() == override[0] else None)
+        except (FileNotFoundError, PermissionError):
             continue
-        name = relative.as_posix()
-        entity = layout.entity(relative)
-        parent = records.parent_reference(name, text)
-        product = entity.parts[2] if entity.parts[1] == "products" else None
-        initiative = None
-        if entity.parts[1] == "initiatives" or entity.parts[3:4] == ("initiatives",):
-            owner = entity / "overview.md"
-            if kind[1] == "context-note":
-                parent = owner.as_posix()
-            initiative = entity.name
-            if parent and layout.brief_kind(parent) == "product-context":
-                product = Path(parent).parts[2]
-        sources, _ = records.table(records.visible_section_markup(text), "Sources", records.SOURCE_COLUMNS)
-        coverage = {ref: state for ref, state, checked in records.SOURCE_COVERAGE.findall(records.section(text, "Sources") or "")
-                    if through is None or checked <= through.isoformat()}
-        documents[name] = {
-            "record": name, "kind": kind[1], "title": title(relative, text), "product": product,
-            "area": entity.name if entity.parts[3:4] == ("areas",) else None,
-            "initiative": initiative, "parent": parent, "text": text, "company": entity == Path(layout.COMPANY).parent,
-            "sources": {row[0]: {**dict(zip(records.SOURCE_COLUMNS, row)), "coverage": coverage.get(row[0], "unrecorded")}
-                        for row in sources
-                        if re.fullmatch(r"S[1-9]\d*", row[0])},
-        }
+        if doc:
+            documents[doc["record"]] = doc
+    inherit_products(documents)
+    return documents
+
+
+def inherit_products(documents):
     for doc in documents.values():
         if doc["initiative"] and not doc["product"] and doc["parent"] in documents:
             doc["product"] = documents[doc["parent"]]["product"]
-    return documents
 
 
 def resolved_artifact(name, documents):
@@ -119,26 +142,71 @@ def mentions(prompt, name):
     return bool(phrase and re.search(r"(?<!\w)" + phrase + r"(?!\w)", prompt, re.I))
 
 
+def routing_metadata(doc):
+    aliases, providers = set(), set()
+    for row in doc["sources"].values():
+        label, separator, target = row["Source"].partition("](")
+        label_words = words(label)
+        aliases.update(label_words)
+        if separator and target.startswith(("https://", "http://")):
+            try:
+                labels = (urlsplit(target[:-1]).hostname or "").split(".")
+            except ValueError:
+                continue
+            if len(labels) > 1 and labels[-1] not in {"test", "example", "invalid", "localhost"}:
+                provider = labels[-3] if len(labels) >= 3 and labels[-2] in {"co", "com", "org"} else labels[-2]
+                providers.update(words(provider) & label_words)
+    controls, _ = records.table(doc["text"], "Context controls", ("Field", "Value"))
+    leads = {}
+    for heading, _, start, end in records.section_blocks(doc["text"]):
+        lead, _ = records.split_context_lead(doc["text"][start:end])
+        if lead and records.valid_context_lead(lead):
+            leads[heading] = lead
+    visible = SUPERSEDED.sub("", records.visible_section_markup(doc["text"]))
+    reviewable = ("Decisions already closed" in visible or "- Rule:" in visible
+                  or bool(evidence_reviews.RISK_LANGUAGE.search(visible) or evidence_reviews.GATE.search(visible)))
+    return {"reviewable": reviewable, "journal": evidence_reviews.HEADING in doc["text"], "leads": leads, "due": dict(controls).get("Review by", ""), **{k: v for k, v in doc.items() if k not in {"sources", "text"}},
+            "identifiers": sorted(set(IDENTIFIER.findall(records.visible_section_markup(doc["text"]).casefold()))),
+            "providers": sorted(providers), "aliases": sorted(aliases), "areas": AREA.findall(doc["text"]),
+            "id": records.work_state(doc["text"])[0].get("ID")}
+
+
+def scope_inventory(private, index, through):
+    docs, loaded, stamps = {}, {}, {}
+    # A journal in another product can explicitly target this initiative.
+    for relative, path in private_files(private, {"context"}):
+        name = relative.as_posix()
+        try:
+            stamp = context_index.signature(path)
+            hit, meta = index.metadata(name, stamp)
+            if not hit:
+                doc = read_document(relative, path, through=through)
+                meta = routing_metadata(doc) if doc else None
+                if stamp != context_index.signature(path):
+                    raise InventoryChanged()
+                index.store(name, stamp, meta)
+                if doc:
+                    loaded[name] = doc
+            if meta:
+                docs[name], stamps[name] = meta, stamp
+        except (FileNotFoundError, PermissionError):
+            continue
+    index.prune()
+    inherit_products(docs)
+    return docs, loaded, stamps
+
+
+class InventoryChanged(Exception):
+    pass
+
+
 def source_matches(scoped, prompt, terms):
-    """Use a provider or exact identifier as a stronger signal than topical overlap."""
-    aliases = set()
     identifiers = set(IDENTIFIER.findall(prompt.casefold()))
+    aliases = set()
     direct = False
     for doc in scoped:
-        direct |= bool(identifiers.intersection(IDENTIFIER.findall(records.visible_section_markup(doc["text"]).casefold())))
-        for row in doc["sources"].values():
-            reference = row["Source"]
-            label, separator, target = reference.partition("](")
-            aliases.update(words(label))
-            if separator and target.startswith(("https://", "http://")):
-                try:
-                    host = urlsplit(target[:-1]).hostname or ""
-                except ValueError:
-                    continue
-                labels = host.split(".")
-                if len(labels) > 1 and labels[-1] not in {"test", "example", "invalid", "localhost"}:
-                    provider = labels[-3] if len(labels) >= 3 and labels[-2] in {"co", "com", "org"} else labels[-2]
-                    direct |= bool(words(provider) & terms & words(label))
+        direct |= bool(identifiers.intersection(doc["identifiers"]) or terms.intersection(doc["providers"]))
+        aliases.update(doc["aliases"])
     return direct, len(terms & aliases)
 
 
@@ -153,7 +221,7 @@ def choose_scope(private, documents, prompt, cwd, previous, explicit):
     for value in re.findall(r"\bproduct/([a-z0-9-]+)(?:/area/([a-z0-9-]+))?", prompt):
         known.append({"product": value[0], "area": value[1] or None, "initiative": None})
     for product, doc in overview.items():
-        identifier = records.work_state(doc["text"])[0].get("ID")
+        identifier = doc["id"]
         if identifier and (match := re.search(r"\b" + re.escape(identifier) + r"/([a-z0-9-]+)\b", prompt)):
             known.append({"product": product, "area": None, "initiative": match[1]})
     if known:
@@ -166,7 +234,7 @@ def choose_scope(private, documents, prompt, cwd, previous, explicit):
             return (specific or known)[0], []
         return known[0], []
 
-    if re.search(r"\bcompany(?:-wide| context| overview| policy)\b", prompt, re.I):
+    if COMPANY_QUERY.search(prompt):
         return {"company": True}, []
 
     terms = words(prompt)
@@ -199,7 +267,7 @@ def choose_scope(private, documents, prompt, cwd, previous, explicit):
 def inferred_scope(documents, product, terms):
     candidates = [doc for doc in documents.values() if doc["product"] == product]
     areas = {doc["area"] for doc in candidates if doc["area"]}
-    areas.update(area for doc in candidates for area in AREA.findall(doc["text"]))
+    areas.update(area for doc in candidates for area in doc["areas"])
     initiatives = {doc["initiative"] for doc in candidates if doc["initiative"]}
     matches = []
     for choices in (areas, initiatives):
@@ -266,26 +334,67 @@ def linked_entries(doc, areas, through):
                    "binding": binding}
 
 
-def resolve(private, prompt="", *, cwd=None, previous=None, explicit=None, include_history=False):
+def live_document(private, name, loaded, stamps, through):
+    if not stamps:
+        return loaded[name]
+    path = private / name
+    try:
+        if path.resolve() != path or context_index.signature(path) != stamps[name]:
+            raise InventoryChanged()
+        doc = loaded.get(name)
+        if doc is None:
+            doc = read_document(Path(name), path, through=through)
+            if doc is None or context_index.signature(path) != stamps[name]:
+                raise InventoryChanged()
+            loaded[name] = doc
+        return doc
+    except (FileNotFoundError, PermissionError):
+        raise InventoryChanged() from None
+
+
+def resolve(private, prompt="", *, cwd=None, previous=None, explicit=None, explain=False, include_history=False):
     through = as_of(prompt)
-    docs = context_documents(private, through=through)
+    with context_index.opened(private) as index:
+        try:
+            docs, loaded, stamps = scope_inventory(private, index, through)
+            return resolve_current(private, prompt, cwd, previous, explicit, explain, include_history, through,
+                                   index, docs, loaded, stamps)
+        except InventoryChanged:
+            # A concurrent edit invalidated the routing snapshot. Rebuild from current source bytes.
+            loaded = context_documents(private, through=through)
+            docs = {name: routing_metadata(doc) for name, doc in loaded.items()}
+            return resolve_current(private, prompt, cwd, previous, explicit, explain, include_history, through,
+                                   context_index.Index(), docs, loaded, {})
+
+
+def resolve_current(private, prompt, cwd, previous, explicit, explain, include_history, through,
+                    index, docs, loaded, stamps):
     scope, choices = choose_scope(private, docs, prompt, cwd, previous, explicit)
+
+    def live(name):
+        doc = live_document(private, name, loaded, stamps, through)
+        doc["product"] = docs[name]["product"]
+        return doc
+
     risk_ids = set(re.findall(r"\brisk-[0-9a-f]{20}\b", prompt))
-    saved_reviews = evidence_reviews.stored(docs.values(), through.isoformat())
-    if not explicit and len(risk_ids) == 1:
+    journals = (live(name) for name, meta in docs.items() if meta["journal"])
+    saved_reviews = evidence_reviews.stored(journals, through.isoformat())
+    if not scope and not explicit and len(risk_ids) == 1:
         requested = next(iter(risk_ids))
         review = saved_reviews.get(requested)
-        if review is None and not scope:
-            # Legacy records have no journal yet. Reconstruct this one ID without changing either record.
-            candidates = evidence_reviews.pair_candidates(evidence_reviews.observations(docs.values(), through))
+        if review is None:
+            peers = (live(name) for name, meta in docs.items() if meta["reviewable"])
+            candidates = evidence_reviews.pair_candidates(evidence_reviews.observations(peers, through))
             review = next((candidate for candidate in candidates if candidate["id"] == requested), None)
-        if review and not scope:
+        if review:
             scope = review["scope"] if review["scope"].get("product") else {"company": True}
             choices = []
     status = "ambiguous" if choices else "resolved" if scope else "unscoped"
     result = {"status": status, "scope": scope, "choices": choices, "entries": [], "warnings": []}
     metrics = metric_registry.effective(private.parent, private, scope.get("product"), through.isoformat())
     if not scope:
+        if explain:
+            result["retrieval"] = {"mode": status, "eligible": 0}
         selected_metrics = metric_registry.matching(metrics, prompt)
         if selected_metrics:
             result["metrics"] = selected_metrics
@@ -320,20 +429,72 @@ def resolve(private, prompt="", *, cwd=None, previous=None, explicit=None, inclu
     if company and company not in docs:
         result["warnings"].append(f"Missing inherited context at {company}.")
     terms = words(prompt)
-    entries = []
+    rows, base, due_dates = [], set(), {}
+    labels, cached_notes = {}, {}
+    view = json.dumps([through.isoformat(), sorted(areas)])
     review_documents = []
-    for name, doc in docs.items():
-        if not evidence_reviews.in_scope(doc, scope, areas, company):
+    for name, meta in docs.items():
+        if not evidence_reviews.in_scope(meta, scope, areas, company):
             continue
-        review_documents.append(doc)
-        if doc["kind"] == "context-note" and name not in prompt and not terms & words(doc["title"]):
+        if meta["reviewable"]:
+            review_documents.append(live(name))
+        if meta["kind"] != "context-note" or name in prompt or mentions(prompt, meta["title"]):
+            base.add(name)
+        elif not terms:
             continue
-        controls, _ = records.table(doc["text"], "Context controls", ("Field", "Value"))
-        due = dict(controls).get("Review by", "")
-        if re.fullmatch(r"\d{4}-\d{2}-\d{2}", due) and due < date.today().isoformat():
+        due_dates[name] = meta["due"]
+        optional_note = name not in base
+        candidates = index.projection(name, view) if optional_note and name not in loaded else None
+        if candidates is None:
+            doc = live(name)
+            candidates = list(linked_entries(doc, areas, through))
+            if optional_note:
+                index.save_projection(name, view, candidates)
+        else:
+            cached_notes[name] = (len(rows), len(candidates))
+        for row in candidates:
+            heading = row["section"]
+            key = (name, heading)
+            if key not in labels:
+                labels[key] = " ".join(filter(None, (meta["title"], heading if heading != "Context" else "",
+                                                    meta["leads"].get(heading))))
+        rows.extend(candidates)
+
+    hits, scores, mode = context_search.rank(prompt, scope, rows, labels, index, tokens, IDENTIFIER)
+    admitted = base | {rows[i]["record"] for i in hits}
+    if not hits and "?" in prompt and not any(name in prompt for name in base):
+        result["evidence_gap"] = "No close passage matched the question. Verify the answer against the scoped records."
+    for name in admitted.intersection(cached_notes):
+        start, count = cached_notes[name]
+        doc = live(name)
+        current = list(linked_entries(doc, areas, through))
+        projection = [{key: val for key, val in row.items() if key != "sources"} for row in current]
+        if projection != rows[start:start + count]:
+            index.save_projection(name, view, current)
+            raise InventoryChanged()
+        rows[start:start + count] = current
+    entries = []
+    for i, row in enumerate(rows):
+        name = row["record"]
+        governed = row["binding"] or row["section"] == "Data boundaries"
+        if name in base or i in hits or (governed and name in admitted):
+            # Preserve inherited constraints ahead of constraints from newly discovered notes.
+            priority = (0 if name in base else 1) if governed else 2
+            exact, fused, semantic = scores[i]
+            order = (priority, row["section"] != "Data boundaries", not row["binding"], name not in prompt,
+                     not exact, -fused, -semantic, name)
+            entries.append((order, row))
+    entries.sort(key=lambda item: item[0])
+    entries = [row for _, row in entries]
+    if explain:
+        result["retrieval"] = {"mode": mode if terms else "navigation", "eligible": len(rows),
+                               "ranked_matches": len(hits), "supplemental_records": sorted(admitted - base),
+                               "model": "potion-base-8M int8" if mode.startswith("hybrid") else None,
+                               "cache_available": index.db is not None}
+    for name, due in due_dates.items():
+        if name in admitted and re.fullmatch(r"\d{4}-\d{2}-\d{2}", due) and due < date.today().isoformat():
             result["warnings"].append(f"Review overdue for {name}. Confirm current authority before relying on it.")
-        entries.extend(linked_entries(doc, areas, through))
-    relevant = evidence_reviews.scoped_reviews(docs, review_documents, saved_reviews, scope, areas, through,
+    relevant = evidence_reviews.scoped_reviews(loaded, review_documents, saved_reviews, scope, areas, through,
                                               recall_ids=risk_ids, recall_all=include_history)
     for review in signed_reviews:
         relevant[("signal", review["initiative"], review["id"])] = review
@@ -359,11 +520,9 @@ def resolve(private, prompt="", *, cwd=None, previous=None, explicit=None, inclu
     for (record, *_), count in decisions.items():
         if count > 1:
             result["warnings"].append(f"Resolve repeated active decisions in {record} before relying on their outcome.")
-    entries.sort(key=lambda row: (row["section"] != "Data boundaries", not row["binding"],
-                                  -len(terms & words(row["text"])), row["record"]))
-    budget = 6500
+    budget = 6500 - len("[]")
     for row in entries:
-        size = len(json.dumps(row, ensure_ascii=False))
+        size = len(json.dumps(row, ensure_ascii=False)) + (2 if result["entries"] else 0)
         if size > budget:
             if row["binding"]:
                 warning = f"Read the remaining binding entries in {row['record']} before acting."
@@ -376,6 +535,7 @@ def resolve(private, prompt="", *, cwd=None, previous=None, explicit=None, inclu
     selected_metrics = metric_registry.matching(metrics, f"{prompt} {numeric_context}")
     if selected_metrics:
         result["metrics"] = selected_metrics
+        result.pop("evidence_gap", None)
     profile = private / layout.PROFILE
     if profile.resolve() == profile and profile.is_file() and layout.PROFILE not in upgrades.source_paths(private):
         preferences = records.section(profile.read_text(encoding="utf-8"), "Working preferences")

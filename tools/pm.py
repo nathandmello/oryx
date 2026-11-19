@@ -745,6 +745,7 @@ def build_parser():
     task.add_argument("--initiative", type=layout.slug)
     task.add_argument("--company", action="store_true")
     task.add_argument("--history", action="store_true", help="Include recorded risk dispositions in this scope")
+    task.add_argument("--explain", action="store_true", help="Include local retrieval diagnostics")
     commands.add_parser("catalog", help="List private records by title, type, state, and scope")
     commands.add_parser("check-metric", help="Check a numerical claim from JSON on stdin")
     metrics = commands.add_parser("metric", help="Read and maintain the business metric registry")
@@ -888,7 +889,7 @@ def main() -> int:
                     {"product": args.product, "area": args.area, "initiative": args.initiative} if args.product else None
                 )
                 result = task_context.resolve(private, args.prompt, cwd=Path.cwd().resolve(), explicit=explicit,
-                                              include_history=args.history)
+                                              include_history=args.history, explain=args.explain)
             print(json.dumps(result, indent=2, ensure_ascii=False))
             return 0
         if args.command == "check-metric":
