@@ -23,7 +23,8 @@ Agree on the question, source scope and what you will bring back. Ask before exp
 
 ## Decide what to capture
 
-Discuss the [five company topics](company-frameworks.md) in order. Adapt each opener to what exists today.
+Discuss the [five company topics](company-frameworks.md) in order. Adapt each opener to what exists today and what this person knows firsthand.
+When a choice is still open, capture the alternatives they are considering. When an answer exists elsewhere, agree how to find it.
 Reflect relevant evidence and invite correction. A PM can leave every topic open or mark a topic inapplicable.
 
 Keep a standing claim in the overview when it changes how oryx would guide company or product work. Preserve the source, scope, date, qualifications and unresolved conflicts.

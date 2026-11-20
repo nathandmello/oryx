@@ -1,21 +1,22 @@
 # Evidence and frameworks for company context
 
-Visit each of the five topics during the company walkthrough. The examples suggest where to look after the PM describes their sources.
+Visit each topic once. Pick the follow-up from what the person can speak to for that part of the business.
 
-| Question | Evidence to look for |
-| --- | --- |
-| Who are the customers, and what value does each receive? | Research or support evidence for experienced value. A company deck can establish the intended segment and promise. Distinguish the buyer, user and beneficiary when they differ. |
-| How does the company make money, and what drives its economics? | Pricing establishes the offer. Finance or billing records can establish realised revenue, concentration and costs within a stated period. |
-| How do products work together? | Start with what exists or is planned. With several offerings, a portfolio map or observed journey can show where they depend on each other. |
-| What drives growth and competitive advantage? | Cohorts, channel records and win/loss evidence can explain repeat acquisition, retention or purchasing choices. A growth rate alone leaves the mechanism open. |
-| Where are the opportunities, risks and strategic trade-offs? | Approved plans, operating reviews, commitments or constraints can identify competing choices. Attribute any ranking and the reason to its owner. |
+| Company topic | What a founder starting out might contribute | What a PM in an established business might contribute |
+| --- | --- | --- |
+| Customers and value | Who they want to serve first, what prompted the idea, and what a prospective customer has actually experienced. | Segments served, who buys and who uses the product, and outcomes customers report or demonstrate. |
+| Business model and economics | Who might pay, a price under consideration, an actual pilot payment, or a cost they already incur. | The pricing model, which products earn revenue, and the costs they know. Billing or Finance can establish figures within a stated period. |
+| Products and their relationships | What exists today, from a manual service to a prototype, and the job they want the first offering to do. | How offerings fit into a customer’s workflow, which can stand alone, and where customers use them together. |
+| Growth and competitive advantage | How they met an early prospect, what that person uses today, and why they think someone might switch. | Which channels bring in customers, what keeps them, and why deals are won or lost. Scope claims to the available evidence. |
+| Opportunities, risks and trade-offs | The choice the founder faces now, what constrains it, and which assumption could change their mind. | Current company priorities, investments or constraints, who chose them, and what remains open beyond the PM’s remit. |
 
-## When a founder is still figuring it out
+## Interpret the answer in context
 
-Let the founder describe where things stand. Their title alone tells you little about the maturity of the business.
-If they have an idea, ask who they hope it will help. If they mention a pilot, ask what the pilot customer actually did.
-For one planned product, discuss its intended value and move on once the founder has covered it.
-Pricing or acquisition can stay open until there is something to learn from.
+Use the examples to listen and select one follow-up. A startup can have paying customers. An established company can still be exploring a new market.
+
+If someone says “I don’t know,” ask “Has that been decided yet?” when the distinction matters.
+An unmade pricing decision belongs in the brief as an open choice if the founder wants to record it.
+If pricing exists and the PM lacks visibility, capture the limit of their knowledge. Offer to check a source they identify.
 
 “We haven't charged anyone yet” establishes the founder's account of revenue to date.
 “I think clinics would pay” is a hypothesis. Preserve the quote and name the founder's hypothesis in `interpretation`.
