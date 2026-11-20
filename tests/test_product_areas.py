@@ -7,6 +7,7 @@ import sys
 import unittest
 
 import test_pm
+from onboarding_fixtures import reviewed_studio
 import context_capture
 import pm
 import records
@@ -32,6 +33,7 @@ class ProductAreaTests(unittest.TestCase):
         return json.loads(result.stdout)["hookSpecificOutput"]["additionalContext"]
 
     def test_hierarchy_and_confirmed_consequences(self):
+        reviewed_studio(self.root, self.work)
         refunds = "product/checkout/area/refunds"
         receipts = "product/checkout/area/receipts"
         remit = {"responsibilities": [self.responsibility(refunds), self.responsibility(receipts, "shared"),
@@ -72,6 +74,7 @@ class ProductAreaTests(unittest.TestCase):
             self.assertEqual(both, ("affected", responsibilities))
 
     def test_area_scope_survives_capture_answers_and_structured_rows(self):
+        reviewed_studio(self.root, self.work)
         records.create(self.root, "company-context", "context/company/overview.md")
         fact = {"scope": "product", "product": "shop", "product_area": "refunds", "topic": "constraints",
                 "source": 1, "location": "Policy", "quote": "We will reimburse fees."}
@@ -131,45 +134,22 @@ class ProductAreaTests(unittest.TestCase):
             self.assertNotEqual(self.capture({"sources": [], "entries": [row]}).returncode, 0)
         self.assertFalse((self.work / "context/products/checkout").exists())
 
-    def test_new_and_existing_workspace_prompts(self):
-        empty = {"responsibilities": [], "follow": []}
-        whole = self.responsibility("product/shop")
-        assigned = dict(empty, responsibilities=[whole])
-        self.assertEqual(json.loads(self.cli("align", "--status"))["company_onboarding"]["phase"], "welcome")
-        self.assertNotIn(context_capture.REMIT_PROMPT, self.startup())
-        company = "context/company/overview.md"
-        source = {"reference": "Fixture deck", "coverage": "read", "date": "undated", "checked_on": "2025-01-01"}
-        entry = {"scope": "company", "topic": "constraints", "source": 1, "location": "Slide 1",
-                 "quote": "We support local cooperatives."}
-        saved = self.capture({"sources": [source], "entries": [entry]}, "--write", company)
-        self.assertEqual(saved.returncode, 0, saved.stdout)
-        for remit, want in (
-            (None, context_capture.REMIT_PROMPT), (empty, context_capture.REMIT_PROMPT),
-            (dict(empty, follow=["area/pricing"]), context_capture.DRAFT_REMIT_PROMPT),
-            (dict(assigned, status="draft"), context_capture.DRAFT_REMIT_PROMPT),
-            (assigned, None), (dict(empty, status="confirmed"), None),
+    def test_capturing_ownership_does_not_complete_the_walkthrough(self):
+        company = records.create(self.root, "company-context", "context/company/overview.md")
+        original = company.read_bytes()
+        for remit in (
+            {"responsibilities": [], "follow": []},
+            {"responsibilities": [self.responsibility("product/shop")], "follow": [], "status": "confirmed"},
         ):
-            path = self.work / context_capture.REMIT_PATH
-            if remit is not None:
-                self.assertEqual(self.save(remit).returncode, 0)
-            before = path.read_bytes() if path.exists() else None
+            self.assertEqual(self.save(remit).returncode, 0)
+            report = json.loads(self.cli("align", "--status"))
+            self.assertEqual(report["onboarding"]["stage"], "company")
             guidance = self.startup()
-            self.assertEqual(json.loads(self.cli("align", "--status")).get("remit_prompt"), want)
-            if want:
-                self.assertEqual(guidance.count(want), 1)
-            else:
-                self.assertNotIn(context_capture.REMIT_PROMPT, guidance)
-                self.assertNotIn(context_capture.DRAFT_REMIT_PROMPT, guidance)
-            self.assertEqual(path.read_bytes() if path.exists() else None, before)
-            self.assertEqual(pm.check(self.root), [])
-        self.work.rename(self.root.parent / "previous-private")
-        self.assertNotIn(context_capture.REMIT_PROMPT, self.startup())
-        init = self.cli("init-workspace")
-        self.assertIn("guided company setup", init)
-        self.assertNotIn(context_capture.REMIT_PROMPT, init)
-        self.assertFalse((self.work / context_capture.REMIT_PATH).exists())
+            self.assertEqual(json.loads(guidance.splitlines()[-1])["onboarding"]["stage"], "company")
+            self.assertEqual(company.read_bytes(), original)
 
     def test_damaged_remit_is_reported_and_capture_preserves_it(self):
+        reviewed_studio(self.root, self.work)
         path = self.work / context_capture.REMIT_PATH
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text("# PM context\n\n## PM remit\n\nStatus: broken\n")
@@ -209,6 +189,7 @@ class ProductAreaTests(unittest.TestCase):
         self.assertEqual(context_capture.relevance(remit, "product/checkout/area/checkout", {}), ("following", []))
 
     def test_independent_area_brief_preserves_inline_evidence_and_answer_home(self):
+        reviewed_studio(self.root, self.work)
         product = "context/products/shop/overview.md"
         area = "context/products/shop/areas/refunds/overview.md"
         initiative = "context/products/shop/initiatives/pilot/overview.md"
@@ -269,6 +250,7 @@ class ProductAreaTests(unittest.TestCase):
         self.assertEqual(pm.check(self.root), [])
 
     def test_area_brief_uses_legacy_parent_and_refuses_path_conflicts(self):
+        reviewed_studio(self.root, self.work)
         product = "context/products/shop/overview.md"
         area = "context/products/shop/areas/refunds/overview.md"
         old = test_pm.legacy_product(self.root, self.work, "products/shop/history/overview.md")
@@ -295,6 +277,7 @@ class ProductAreaTests(unittest.TestCase):
         self.assertNotEqual(self.capture({"sources": [], "entries": [foreign]}, "--write", area).returncode, 0)
 
     def test_area_filing_guard_protects_contract_sources_and_reserved_home(self):
+        reviewed_studio(self.root, self.work)
         product = "context/products/shop/overview.md"
         area = "context/products/shop/areas/refunds/overview.md"
         candidate = "context/products/shop/sources/approved.md"

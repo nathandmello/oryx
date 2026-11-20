@@ -12,6 +12,7 @@ import zipfile
 from unittest.mock import patch
 
 import test_pm
+from onboarding_fixtures import reviewed_studio
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "tools"))
 import git_ops
@@ -276,6 +277,7 @@ class RepositoryTests(unittest.TestCase):
         self.assertEqual(workspace.settings(self.root)["system_version"], metadata["system_version"])
 
     def test_core_pull_retires_only_a_fully_covered_override(self):
+        reviewed_studio(self.root, self.work)
         self.connect()
         contributor = self.contributor("system")
         desired = {"scope": "Weekly reviews", "behavior": "Show decisions first, then an owner."}
@@ -760,6 +762,7 @@ with storage.writer_lock(private), patch.object(storage, 'replace_text', side_ef
         command(primary, "git", "workspace", "push")
         command(restored, "git", "workspace", "pull")
         self.assertEqual(self.git(restored / "studio", "status", "--porcelain"), "")
+        reviewed_studio(primary, primary / "studio")
         command(primary, "override", "set", "contract-review", "--scope", "Contract review",
                 "--behavior", "Name the renewal owner.")
         self.commit(primary / "studio", "Continue work after migration")

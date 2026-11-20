@@ -12,7 +12,9 @@ from urllib.request import urlopen
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "tools"))
+sys.path.insert(0, str(ROOT / "tests"))
 import pm
+from onboarding_fixtures import reviewed_studio
 
 
 def digest(data):
@@ -82,6 +84,7 @@ def prepare(case, run, source_file, source_view):
             shutil.copyfile(source, target)
     subprocess.run(["git", "init", "-q", str(hub)], check=True)
     hub_command(hub, "init-workspace", "--owner", "Eval PM", "--delivery-system", "Fixture tracker")
+    reviewed_studio(hub, hub / "studio")
     hub_command(hub, "set-remit", data=json.dumps({
         "status": "confirmed", "follow": [],
         "responsibilities": [{"subject": "product/eval-product", "role": "owner", "goals": [], "depends_on": []}]

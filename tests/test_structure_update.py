@@ -11,6 +11,7 @@ from unittest.mock import patch
 import zipfile
 
 import test_pm
+from onboarding_fixtures import reviewed_studio
 from test_pm import pm, records, workspace
 import storage
 import upgrades
@@ -116,6 +117,7 @@ class StructureUpdateTests(unittest.TestCase):
         self.assertIn(PLAN, pm.check(self.root)[0])
 
     def test_capture_preserves_the_users_choice_on_older_brief(self):
+        reviewed_studio(self.root, self.work)
         self.old_workspace()
         company = records.create(self.root, "company-context", "context/company/overview.md")
         text = company.read_text().replace("## Sources", "## Historical evidence\n\nPending source review.\n\n## Sources")
@@ -129,6 +131,7 @@ class StructureUpdateTests(unittest.TestCase):
         self.assertEqual(company.read_text(), text)
 
     def test_company_capture_preserves_an_earlier_portfolio_section_position(self):
+        reviewed_studio(self.root, self.work)
         path = "context/company/overview.md"
         company = records.create(self.root, "company-context", path)
         text = company.read_text()
@@ -255,6 +258,9 @@ with storage.writer_lock(private), patch.object(conversion, 'recoverable_swap', 
                         self.assertEqual(recovery.read("original/" + PLAN), original)
                 if method == "section-lead":
                     self.assertEqual((private / "context/company/overview.md").read_bytes(), company_before)
+                    held = self.check_cli(consumer, "task-context", "--company", "Prepare a partner handoff.")
+                    self.assertEqual(json.loads(held)["status"], "onboarding_required")
+                    reviewed_studio(consumer, private)
                     context = self.check_cli(consumer, "task-context", "--company", "Prepare a partner handoff.")
                     self.assertIn(fact, context)
                 installed = workspace.settings(consumer)

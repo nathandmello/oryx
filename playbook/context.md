@@ -35,7 +35,8 @@ For company work, emphasise binding policies, exclusions, and shared terminology
 The PM profile is `studio/context/pm/context.md`. Manage [reply preferences](working.md#reply-preferences) with oryx commands.
 Keep captured preferences as context.
 
-Ask once when remit becomes relevant and questions are welcome. Accept deferral. For a fresh profile, use `python3 tools/pm.py new pm-context context/pm/context.md`.
+Use the PM’s own description of their responsibilities. Saving a remit provides material for the [onboarding walkthrough](company-context.md).
+For a fresh profile, use `python3 tools/pm.py new pm-context context/pm/context.md`.
 
 Ownership in `## PM remit` guides routing. The PM can edit it directly. For example:
 

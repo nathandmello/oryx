@@ -1,0 +1,11 @@
+{
+  "company": [
+    {"id": "customers", "question": "Who does your company help, and what do they get from it?"},
+    {"id": "economics", "question": "How does the business make money?"},
+    {"id": "portfolio", "question": "How do your products work together for customers?"},
+    {"id": "growth", "question": "What brings customers to you and keeps them choosing you?"},
+    {"id": "tradeoffs", "question": "Which opportunities or risks are shaping the company's choices?"}
+  ],
+  "pm": null,
+  "product": null
+}

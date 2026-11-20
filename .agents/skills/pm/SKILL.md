@@ -7,6 +7,7 @@ argument-hint: "[domain] [subject] [verb] [arguments]"
 # oryx actions
 
 Run `python3 tools/pm.py action` from the root of the oryx checkout.
+If an action returns a [setup step](../../../playbook/company-context.md), lead it in the conversation. Resume the request after onboarding.
 For `/pm` alone, show the available domains from `action`.
 For a partial path, pass it to `action` to list the next choices.
 Use `--help` on a complete path to check its purpose and accepted options.

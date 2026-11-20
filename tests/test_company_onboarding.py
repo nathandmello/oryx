@@ -149,7 +149,13 @@ class CompanyOnboardingTests(unittest.TestCase):
         payload = {key: source[key] for key in ("sources", "entries")}
         blocked = subprocess.run(route, input=json.dumps(payload), capture_output=True, text=True)
         self.assertNotEqual(blocked.returncode, 0)
-        self.assertIn("Review and accept", blocked.stdout)
+        gate = json.loads(blocked.stdout)
+        self.assertEqual(gate["status"], "onboarding_required")
+        self.assertEqual(gate["onboarding"]["company_phase"], "gather")
+        self.assertFalse((self.work / context_capture.COMPANY_PATH).exists())
+        plan = context_capture.route(payload, self.work)
+        with self.assertRaisesRegex(ValueError, "Review and accept"):
+            onboarding.check_capture(self.work, context_capture.COMPANY_PATH, plan)
         self.change("propose", **source)
         gap = {"question": "Has leadership approved enterprise?", "why": "Sets the target market.",
                "next_action": "Check the operating plan.", "resume_when": "New operating plan"}

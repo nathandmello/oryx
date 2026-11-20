@@ -7,6 +7,7 @@ from urllib.parse import urlsplit
 
 import context_capture as capture
 import layout
+import onboarding_review
 import records
 import storage
 
@@ -86,7 +87,9 @@ def view(private, state):
 
 
 def status(private):
-    return view(private, read(private)[1])
+    result = view(private, read(private)[1])
+    result["walkthrough"] = onboarding_review.status(private)["walkthroughs"]["company"]
+    return result
 
 
 def active(private):

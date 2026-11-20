@@ -5,7 +5,8 @@ description: Use for company onboarding and requests to capture, file, update, o
 
 # Ingest context
 
-Use the [company onboarding guide](../../../playbook/company-context.md) for company setup, interactive review and follow-through. Apply the [context rules](../../../playbook/context.md) and [conversation guidance](../../../playbook/conversation.md) across captures.
+Use the [onboarding guide](../../../playbook/company-context.md) to review each topic with the PM. Carry open questions forward.
+Apply the [context rules](../../../playbook/context.md) and [conversation guidance](../../../playbook/conversation.md) across captures.
 
 For initiative meetings, use the transcript retrieval and summary workflow in [summarize-meeting](../summarize-meeting/SKILL.md). Route reusable findings with this skill.
 

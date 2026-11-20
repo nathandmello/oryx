@@ -1,12 +1,17 @@
-# Bring oryx up to speed on the company
+# Walk through company context
 
-The first win is a company overview the PM recognises and can correct. A partial overview can guide future conversations.
+An ordinary request starts or resumes onboarding. Acknowledge it and keep it for after the walkthrough.
+With hooks disabled, run `python3 tools/pm.py onboarding status` yourself before starting PM work.
+
+Onboarding covers company, PM, then product context. Completion means the PM has reviewed each framework with oryx once.
+Company is the first available walkthrough. The PM and product frameworks are pending design.
+Use existing records to prepare each discussion. Saved context alone leaves the walkthrough pending.
 
 ## Start where the PM is
 
-If the PM has already shared context, pick up there. Otherwise, open with one easy question.
+Pick up where the PM left off. Connect the first question to what they came to do.
 
-> What does your company do?
+> We can come back to your Q4 roadmap. First, what does your company do?
 
 Follow their answer. If they mention a deck, offer to work from it. If they prefer talking, ask one relevant question at a time. They can also write directly or supply an excerpt. Attribute an interview answer to the speaker, date and discussion.
 
@@ -14,7 +19,10 @@ Learn how this company shares information before suggesting a tool. Offer public
 
 ## Decide what to capture
 
-Use the [five company questions and framework guide](company-frameworks.md) to choose evidence and one relevant follow-up.
+Work through the [five company questions](company-frameworks.md) in order with the PM.
+Use the coaching framework that helps explain the current topic. If earlier evidence covers this topic, reflect it briefly and invite correction.
+The PM can share what they know, leave a topic open, or say it does not apply.
+All five topics can remain open after a complete pass. Ask one question at a time.
 
 Keep a standing claim in the overview when it changes how oryx would guide company or product work. Preserve the source, scope, date, qualifications and unresolved conflicts.
 
@@ -70,6 +78,19 @@ Use `defer` for a pending finding or `gap` for a material unknown. Keep the ques
 
 To resolve a gap, propose the sourced answer with `answers` set to the exact question. When the PM confirms the answer, call `resolve` while it is pending. This saves it and closes the gap.
 
-Before pausing, check which of the five questions still matters to the PM. Offer one practical next check and retain its agreed cue.
+Read `walkthroughs.company.next_topic` from `pm.py onboarding status`. Discuss that topic and establish its disposition with the PM.
+Run `pm.py onboarding review-topic` with the onboarding revision, stage, topic, outcome and PM reply.
 
-Use `finish` when the PM is ready to leave this capture round. On return, bring back one relevant change or open question. Offer [product context and remit](framework.md#product-context-and-remit) when the PM is ready.
+| Field | Value |
+| --- | --- |
+| `revision` | Current revision from `onboarding status`. The company source plan has a separate revision. |
+| `stage`, `topic` | `company` and the current topic ID from `next_topic`. |
+| `outcome` | `reviewed`, `open`, or `not_applicable`. |
+| `pm_reply` | The PM’s actual reply about this topic. |
+
+If the PM says “I don’t know our margins,” the economics topic can remain open.
+Save its next evidence check with `gap` if the PM agrees.
+Use `finish` to end a source capture round. A pause preserves the next topic for a later conversation.
+
+After all five topics, acknowledge the company pass and keep the PM and product stages pending until their workflows exist.
+After onboarding, revisit an open item when it matters to the requested work. See [goal alignment](framework.md#goal-alignment) for strategy.

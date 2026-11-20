@@ -42,11 +42,13 @@ Install Git, Python 3.9 or later, and either Codex CLI or Claude Code. On Linux 
    | Codex CLI | `python3 tools/pm.py agent codex` |
    | Claude Code | `python3 tools/pm.py agent claude` |
 
-4. Trust the project hooks in your client. Ask oryx to help you set up your company context.
+4. Trust the project hooks in your client. Tell oryx what you want to work on.
 
-Start with what you know. Share an existing overview, explain the business in your own words, or agree on sources to explore.
-Review one finding at a time. Keep a partial brief and pick up where you left off.
-To start or resume explicitly, use `/pm context company capture`. [Company context](playbook/company-context.md)
+Your first request starts a walkthrough with oryx. You can share a source or explain the business in your own words.
+Together you review customers, economics, the product portfolio, growth, and strategic trade-offs. You can leave questions open or say a topic does not apply.
+
+The company walkthrough is available now. Product work stays on hold until the PM and product walkthroughs are available and complete.
+After onboarding, each activity checks the evidence it needs. [Onboarding](playbook/company-context.md)
 
 ## Make it yours
 

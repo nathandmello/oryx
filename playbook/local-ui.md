@@ -7,7 +7,9 @@ Use the [shared command menu](commands.md) to start the app:
 /pm workspace browser open
 ```
 
-The app opens to Roadmap by default. Add `--screen tasks` or `--screen launch-checklists` to start there.
+An incomplete Studio shows the current [onboarding](company-context.md) stage. Continue the walkthrough in your oryx conversation.
+Use **Check progress** to reopen the requested view after onboarding.
+Once ready, the app opens to Roadmap by default. Add `--screen tasks` or `--screen launch-checklists` to start there.
 From a terminal, run the same action:
 
 ```sh

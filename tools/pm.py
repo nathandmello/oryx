@@ -35,6 +35,8 @@ import opportunities
 import pm_profile
 import company_source
 import company_onboarding
+import onboarding
+import onboarding_review
 import customizations
 import studio_layout
 import agent_session
@@ -57,7 +59,8 @@ REQUIRED = (
     "tools/decision_authority.py", "tools/decision_review.py", "tools/decision_forecasts.py", "playbook/decision-review.md", "playbook/decision-forecasts.md",
     customizations.DEFAULTS, "tools/customizations.py", overrides.DEFAULTS_FILE, "tools/overrides.py", "tools/agent_session.py", "tools/preferences.py", ".agents/skills/pm/SKILL.md", ".claude/skills/pm/SKILL.md",
     "tools/studio_layout.py", "tools/company_source.py", "playbook/customization.md", "playbook/overrides.md",
-    "tools/conversation.py", conversation.GUIDE, "tools/company_onboarding.py",
+    "tools/conversation.py", conversation.GUIDE, "tools/company_onboarding.py", "tools/onboarding.py",
+    "tools/onboarding_review.py", "playbook/onboarding-frameworks.json",
     "tools/hub_commands.py", "playbook/commands.md", hub_commands.CATALOG,
     ".agents/skills/extend-hub/SKILL.md", ".claude/skills/extend-hub/SKILL.md",
     ".agents/skills/ingest-context/SKILL.md", ".claude/skills/ingest-context/SKILL.md",
@@ -363,9 +366,12 @@ def check_workspace(root: Path, system_texts: dict[str, str]) -> list[str]:
         parts = path.relative_to(private).parts
         if (len(parts) == 3 and parts[:2] == ("workspace", "forecasts") and path.suffix == ".json"):
             continue  # The forecast checker validates every receipt in this directory.
-        if rel == company_onboarding.FILE:
+        if rel in {company_onboarding.FILE, onboarding_review.FILE}:
             try:
-                company_onboarding.read(private)
+                if rel == onboarding_review.FILE:
+                    onboarding_review.status(private)
+                else:
+                    company_onboarding.read(private)
             except (ValueError, OSError) as exc:
                 errors.append(f"{label}: {exc}")
             continue
@@ -498,6 +504,11 @@ def check(root: Path = ROOT, include_workspace=True, *, command_base=None) -> li
             overrides.defaults(root)
         except (OSError, ValueError) as exc:
             errors.append(f"{overrides.DEFAULTS_FILE}: {exc}")
+    if root / onboarding_review.MANIFEST in safe:
+        try:
+            onboarding_review.manifest(root)
+        except (OSError, ValueError) as exc:
+            errors.append(f"{onboarding_review.MANIFEST}: {exc}")
     errors.extend(skill_errors(root, safe))
     for view in ("backlog", "roadmap"):
         try:
@@ -720,17 +731,15 @@ def run_initiative_work(root, command, operation, product, initiative, *, write=
 
 
 def studio_setup(private):
-    """Give both clients the same company-first startup and manual alignment hints."""
+    """Report the current walkthrough and any resumable company intake."""
+    setup = {"onboarding": onboarding.status(private)}
     try:
         status = company_onboarding.status(private)
     except (OSError, ValueError):
-        return {"company_onboarding": {"phase": "unavailable",
-                                      "next_action": "Run pm.py company-onboarding status to inspect the saved progress."}}
-    setup = {"company_onboarding": {"phase": status["phase"], "next_action": status["next_action"]}}
-    if status["phase"] in {"existing", "paused"}:
-        prompt = context_capture.remit_prompt(private)
-        if prompt:
-            setup["remit_prompt"] = prompt
+        setup["company_onboarding"] = {"phase": "unavailable",
+                                      "next_action": "Run pm.py company-onboarding status to inspect the saved progress."}
+        return setup
+    setup["company_onboarding"] = {"phase": status["phase"], "next_action": status["next_action"]}
     return setup
 
 
@@ -824,8 +833,10 @@ def build_parser():
                     help="Choose the first screen (default: roadmap)")
     ui.add_argument("--key", help="Absolute path to the PM signing key or its agent-backed public key")
     ui.add_argument("--no-open", action="store_true", help="Print the local URL without launching a browser")
-    onboarding = commands.add_parser("company-onboarding", help="Review or resume company context in Studio")
-    onboarding.add_argument("operation", choices=company_onboarding.OPERATIONS)
+    setup = commands.add_parser("onboarding", help="Continue the current guided walkthrough")
+    setup.add_argument("operation", choices=("status", "review-topic"))
+    company_setup = commands.add_parser("company-onboarding", help="Review or resume company context in Studio")
+    company_setup.add_argument("operation", choices=company_onboarding.OPERATIONS)
     route = commands.add_parser("route-context", help="Route supplied context evidence from JSON on stdin")
     route.add_argument("--write", metavar="PATH", help="Apply entries to one authorised context record")
     area = commands.add_parser("area-context", help="Locate a product area's context and its source records")
@@ -865,14 +876,84 @@ def build_parser():
     return parser
 
 
+# Installation and recovery must work even if the context itself needs repair.
+# The browser gates its own reads and writes. Numeric checks support intake evidence.
+SETUP_TOOLS = {
+    "agent", "align", "check", "check-metric", "company-onboarding", "eval-red-team", "git",
+    "init-workspace", "onboarding", "set-remit", "sync-skills", "ui",
+}
+
+
+def incomplete_setup():
+    private = workspace.optional_repo(ROOT)
+    if private is not None:
+        state = onboarding.status(private)
+        if not state["ready"]:
+            return state
+    return None
+
+
+def check_action_setup(path, entry):
+    if path == "context company capture" or (entry and entry.get("cli", [None])[0] in SETUP_TOOLS):
+        return
+    state = incomplete_setup()
+    if state:
+        raise onboarding.SetupRequired(state)
+
+
+def setup_capture(payload):
+    """Only foundational evidence may pass through the generic capture tool during setup."""
+    if not isinstance(payload, dict) or payload.get("responses") or not isinstance(payload.get("entries"), list):
+        return False
+    for entry in payload["entries"]:
+        if not isinstance(entry, dict) or entry.get("scope") not in ("company", "pm", "product"):
+            return False
+        if any(key in entry for key in ("decision", "record_decision", "product_area")) or entry.get("topic") == "decisions":
+            return False
+        if "record" in entry:
+            record = entry["record"]
+            if (not isinstance(record, dict) or not isinstance(record.get("path"), str)
+                    or not onboarding.setup_destination(record["path"])):
+                return False
+    return True
+
+
+def check_command_setup(args):
+    if args.command in SETUP_TOOLS:
+        return None
+    state = incomplete_setup()
+    if not state:
+        return None
+    if args.command == "task-context":
+        return state
+    if args.command == "route-context" and (args.write is None or onboarding.setup_destination(args.write)):
+        if args.write and Path(args.write).parts[:2] == ("context", "company"):
+            raise onboarding.SetupRequired(state)
+        return state  # The handler also verifies the supplied entries before routing them.
+    if (args.command == "new" and args.kind in {"company-context", "pm-context", "product-context", "context-note"}
+            and onboarding.setup_destination(args.path)):
+        return None
+    raise onboarding.SetupRequired(state)
+
+
 def main() -> int:
     try:
         argv = sys.argv[1:]
         if argv[:1] == ["action"]:
-            argv = hub_commands.route(ROOT, argv[1:])
+            argv = hub_commands.route(ROOT, argv[1:], check_setup=check_action_setup)
             if argv is None:
                 return 0
         args = build_parser().parse_args(argv)
+        setup = check_command_setup(args)
+        if args.command == "task-context" and setup:
+            print(json.dumps(onboarding.required(setup), indent=2, ensure_ascii=False))
+            return 0
+        if args.command == "onboarding":
+            if args.operation == "review-topic":
+                prepare_private_write(ROOT)
+                onboarding_review.review(workspace.repo(ROOT, "workspace"), storage.json_input(sys.stdin.read()))
+            print(json.dumps(onboarding.status(workspace.repo(ROOT, "workspace")), indent=2, ensure_ascii=False))
+            return 0
         if args.command == "agent":
             agent_session.launch(ROOT, args.client)
             return 0
@@ -922,7 +1003,7 @@ def main() -> int:
         if args.command == "init-workspace":
             workspace.initialise(ROOT, args.owner, args.delivery_system)
             print("Initialised studio/ as a separate Git repository. No remote, commit, or push was created.")
-            print("Start a protected session with pm.py agent codex or pm.py agent claude for guided company setup.")
+            print("Start a protected session with pm.py agent codex or pm.py agent claude. Your first request starts onboarding.")
             return 0
         if args.command == "git":
             if args.operation == "push":
@@ -1058,11 +1139,14 @@ def main() -> int:
             print(json.dumps(result, indent=2, ensure_ascii=False))
             return 0
         if args.command == "route-context":
+            payload = storage.json_input(os.sys.stdin.read())
+            if setup and not setup_capture(payload):
+                raise onboarding.SetupRequired(setup)
             if args.write is not None:
                 settings = prepare_private_write(ROOT)
             private = workspace.optional_repo(ROOT) or ROOT / storage.STUDIO
             remit, error = context_capture.inspect_remit(private)
-            plan = context_capture.route(json.load(os.sys.stdin), private, remit)
+            plan = context_capture.route(payload, private, remit)
             definitions = {}
             for entry in plan["entries"]:
                 text = entry.get("quote", "")
@@ -1101,6 +1185,9 @@ def main() -> int:
             notice = alignment_notice(ROOT)
             if notice:
                 print(notice)
+    except onboarding.SetupRequired as exc:
+        print(json.dumps(onboarding.required(exc.state), indent=2, ensure_ascii=False))
+        return 1
     except (OSError, ValueError, subprocess.SubprocessError) as exc:
         print(f"FAIL: {exc}")
         return 1

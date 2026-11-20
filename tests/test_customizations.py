@@ -10,6 +10,7 @@ import unittest
 from unittest.mock import patch
 
 import test_pm
+from onboarding_fixtures import reviewed_setup
 
 import customizations as custom
 import initiative_views
@@ -21,7 +22,7 @@ import roadmap_edit
 
 
 class CustomizationTests(unittest.TestCase):
-    setUp = test_pm.HubTests.setUp
+    setUp = reviewed_setup
 
     def change(self, config):
         return custom.apply(self.root, {"revision": custom.snapshot(self.root)["revision"], "config": config})

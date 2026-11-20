@@ -10,6 +10,7 @@ import threading
 import unittest
 
 import test_pm
+from onboarding_fixtures import reviewed_setup
 import context_capture
 import hook
 import pm
@@ -19,7 +20,7 @@ import upgrades
 
 
 class AlignmentTests(unittest.TestCase):
-    setUp = test_pm.HubTests.setUp
+    setUp = reviewed_setup
     capture = test_pm.HubTests.context_capture
 
     def test_installed_review_resumes_and_preserves_custom_work(self):

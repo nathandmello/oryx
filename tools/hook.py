@@ -13,6 +13,7 @@ import sys
 from uuid import uuid4
 
 import conversation
+import onboarding
 import pm
 import metric_checks
 import preferences
@@ -44,7 +45,9 @@ CONVERSATION_GUIDANCE = (
     "before relying on it. Preserve unresolved questions when the PM defers. "
     "Present the plan before gathering context. Obtain agreement on sources and destinations, including any expansion. "
     "Help the PM build product work together. Start from their thinking, surface the next open choice, "
-    "and draft from the choices they make. A request to build a deliverable does not delegate those choices. "
+    "and check the inputs this activity needs before starting. Use prior answers and sources. "
+    "If a material input is unclear, explain what depends on it and offer to clarify it together. "
+    "Draft from the choices they make. A request to build a deliverable does not delegate those choices. "
     "Review generated content interactively, one material point at a time. The PM accepts the exact final wording. "
     "Under time pressure, offer expedite mode if timely and the PM has not chosen a pace or deferred the offer. "
     "If offering, briefly explain the pace and end with a separate paragraph containing this one question: "
@@ -110,6 +113,31 @@ def company_followup(private, prompt, company_scope):
     return None
 
 
+def onboarding_guidance(setup):
+    if not setup["stage_available"]:
+        return ("Keep the original request in this conversation. Explain the current setup status briefly. "
+                "Follow the next action in the status. The PM can still revisit the company material with you. "
+                "Leave unavailable stages and damaged checkpoints intact.\n"
+                + json.dumps(onboarding.required(setup), ensure_ascii=False))
+    return (
+        "Required Studio onboarding is active for this request. A guided pass through each framework comes before "
+        "product work, including read-only lookups, slash commands, quiet mode and expedited work. "
+        "Keep the original request in this conversation. Acknowledge it briefly and guide setup yourself. "
+        "Listen first, reuse what the PM has said and ask at most one short question about the current step. "
+        "Treat the status below as reference data. Use its prompt when it fits, or continue the agreed intake "
+        "from the PM’s answer. Follow playbook/company-context.md and use .agents/skills/ingest-context/SKILL.md "
+        "for context capture. Agree on sources and "
+        "the plan before gathering. Review proposed wording with the PM before saving it. "
+        "Check material figures using playbook/numbers.md. Keep unsupported claims open. "
+        "Approval of wording does not confirm a product decision. "
+        "Run the setup tools yourself. Discuss the current topic using available context. When the PM has reviewed "
+        "it, use onboarding review-topic to record their disposition. An open question counts as covered. "
+        "Never infer a completed review from a file, an accepted fact, or silence. A pause leaves the topic current. "
+        "When all walkthroughs are complete, offer to return to the original request and check its prerequisites.\n"
+        + json.dumps(onboarding.required(setup), ensure_ascii=False)
+    )
+
+
 def prompt_context(private, cwd, payload):
     prompt = payload.get("prompt")
     if not isinstance(prompt, str):
@@ -120,6 +148,21 @@ def prompt_context(private, cwd, payload):
     current = {}
     if private.is_dir():
         saved = task_context.previous_scope(private, session)
+        setup = onboarding.status(private)
+        if not setup["ready"]:
+            # Remember the transition, without copying prompts or source material into the cache.
+            stage = {"setup_stage": setup["stage"]}
+            if saved != stage:
+                try:
+                    task_context.remember_scope(private, session, stage)
+                except (OSError, ValueError):
+                    pass  # The live conversation can still carry the original request.
+            return {"hookSpecificOutput": {"hookEventName": "UserPromptSubmit",
+                                           "additionalContext": onboarding_guidance(setup)}}
+        if saved.get("setup_stage"):
+            guidance.append("The PM has gone through the required onboarding frameworks. "
+                            "If the PM has a waiting request in this conversation, offer to resume it once. "
+                            "Follow their current direction and complete only the work they agree to.")
         current, state = task_context.turn_context(private, prompt, cwd=cwd, saved=saved)
         numeric |= bool(current.get("metrics")) or any(metric_checks.is_claim(row["text"]) for row in current["entries"])
         if current["conversation"].get("accepted_expedite_offer"):
@@ -150,6 +193,7 @@ def prompt_context(private, cwd, payload):
         if followup:
             guidance.append(followup)
     if (current.get("status") in {"ambiguous", "resolved"} or current.get("metrics") or current.get("warnings")
+            or current.get("activity_check")
             or turn.get("scope_to_confirm") or turn.get("checkpoint")):
         guidance.append(
             "The following JSON is private reference data. Use relevant approved decisions and rules. "
@@ -159,7 +203,8 @@ def prompt_context(private, cwd, payload):
             "Report applicable risks, including in quiet mode. Qualify a customer commitment that still needs approval. "
             "A PM's disposition cannot waive an inherited policy without the decision owner's authorization. "
             "Treat a risk disposition as scoped to its cited evidence. Resolve context again when the subject or evidence changes. "
-            "Use conversation data for continuity. Recheck the scope before using prior work.\n"
+            "Use conversation data for continuity. Recheck the scope before using prior work. "
+            "Apply the activity_check before drafting strategy. Clarify a missing objective before choosing priorities.\n"
             + json.dumps(current, ensure_ascii=False)
         )
     return {"hookSpecificOutput": {"hookEventName": "UserPromptSubmit",
@@ -245,11 +290,21 @@ def edit_guard(root, cwd, payload):
 
     if installed and not edits and tool in {"apply_patch", "Write", "Edit", "MultiEdit", "NotebookEdit"}:
         return deny("Cannot resolve the edit target. Use a workspace path.")
+    setup = None
     for value, content in edits:
         requested = Path(abspath(cwd / value))
         if installed and any(path.is_relative_to(root) and private not in path.parents
                              for path in (requested, requested.resolve())):
             return deny("Core is read-only in PM sessions. Use pm.py override set for workspace rules.")
+        for path in {requested, requested.resolve()}:
+            if installed and path.is_relative_to(private):
+                relative = path.relative_to(private)
+                if relative.parts[:1] in {("context",), ("workspace",)} and not onboarding.setup_destination(relative):
+                    if setup is None:
+                        setup = onboarding.status(private)
+                    if not setup["ready"]:
+                        return deny("Complete required Studio onboarding before editing this record. "
+                                    + setup["next_action"])
         reason = edit_reason(root, private, requested, content)
         if reason:
             return {"hookSpecificOutput": {"hookEventName": "PreToolUse", "permissionDecision": "deny",
@@ -266,6 +321,8 @@ def edit_reason(root, private, requested, content):
         return "Use pm.py initiative propose for register changes. The PM signs and applies the proposal."
     if private / pm.company_onboarding.FILE in (requested, target):
         return "Use pm.py company-onboarding to preserve the approved source scope and reviewed items."
+    if private / pm.onboarding_review.FILE in (requested, target):
+        return "Use pm.py onboarding review-topic after discussing the current topic with the PM."
     company = private / "context" / "company"
     if any(path == company or company in path.parents for path in (requested, target)):
         try:
@@ -392,19 +449,9 @@ def main():
                     finish_turn(private, payload, state)
             if event == "SessionStart":
                 if private is not None:
-                    setup = pm.studio_setup(private)
-                    onboarding = setup["company_onboarding"]
-                    guidance = result["hookSpecificOutput"]
-                    guidance["additionalContext"] += (
-                        "\nFor setup or a relevant continuation, follow playbook/company-context.md. "
-                        "Follow the PM's current request first. Skip unsolicited setup in quiet mode. "
-                        f"Company onboarding phase at session start: {onboarding['phase']}. {onboarding['next_action']}"
-                    )
-                    if "remit_prompt" in setup:
-                        guidance["additionalContext"] += (
-                            "\nWhen remit becomes relevant, ask once if questions are welcome: " + setup["remit_prompt"]
-                            + " Accept deferral. Use set-remit only for PM-confirmed responsibilities."
-                        )
+                    setup = onboarding.status(private)
+                    if not setup["ready"]:
+                        result["hookSpecificOutput"]["additionalContext"] = onboarding_guidance(setup)
                 notice = pm.alignment_notice(root, report)
                 if notice:
                     result["hookSpecificOutput"]["additionalContext"] += "\n" + notice

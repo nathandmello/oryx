@@ -7,6 +7,7 @@ import sys
 import unittest
 
 import test_pm
+from onboarding_fixtures import reviewed_setup
 
 
 REPOSITORY = "nathandmello/pm-hub"
@@ -47,7 +48,7 @@ else:
 @unittest.skipUnless(os.name == "posix", "The recording executable uses a POSIX interpreter directive")
 class FeedbackRoutingTests(unittest.TestCase):
     def setUp(self):
-        test_pm.HubTests.setUp(self)
+        reviewed_setup(self)
         control = self.root.parent / "recording-gh"
         control.mkdir()
         program = control / "gh"

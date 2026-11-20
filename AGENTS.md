@@ -5,13 +5,13 @@ oryx helps PMs practise product craft. PMs own their product decisions and final
 ## Start and scope
 
 Read [README.md](README.md). Save standing PM corrections as [workspace overrides](playbook/overrides.md). Apply each Studio rule within its scope.
-Follow [upgrade guidance](playbook/updates.md) and run `python3 tools/pm.py align`. Start an empty Studio with [company context](playbook/company-context.md).
+Run `python3 tools/pm.py align`. Follow [updates](playbook/updates.md). Route requests through [onboarding](playbook/company-context.md) until the PM has reviewed each framework with oryx.
 
 The shared system and `studio/` have independent Git histories. File evidence under `studio/context/` and working artifacts under `studio/workspace/`.
 
 Read [the Git rules](playbook/git.md) before any commit, pull, push, remote change, or GitHub action.
 
-Keep oryx work in this checkout. Obtain permission before changing delivery repositories or other workspaces.
+Keep oryx work here. Ask before changing other repositories or workspaces.
 
 Use [ingest-context](.agents/skills/ingest-context/SKILL.md) automatically for requests to capture or update context. Apply the workflow from the PM's intent.
 
@@ -72,7 +72,7 @@ Keep learning, delivery progress, and measured outcomes distinct.
 - Apply [the filing rules](playbook/filing.md) before creating or converting any record. Keep one authoritative record per artifact. Preserve stable identifiers when files move.
 - Define sources, ownership, relationships, completion conditions, and review triggers for each new capability.
 - Use scripts for deterministic rules and skills for guided work. Apply the same checks through both agents and CI.
-- Keep drafts usable. Enforce completeness before the action that needs it. People judge evidence and strategy.
+- Keep drafts usable. Check each activity’s evidence before starting. People judge evidence and strategy.
 - Change this constitution only when the PM explicitly changes its rules. Report the change.
 
 ## Writing

@@ -9,6 +9,7 @@ from unittest.mock import patch
 
 import test_opportunities
 import test_pm
+from onboarding_fixtures import reviewed_setup
 import conversation
 import hook
 import preferences
@@ -18,7 +19,7 @@ import task_context
 
 class ConversationTests(unittest.TestCase):
     def setUp(self):
-        test_pm.HubTests.setUp(self)
+        reviewed_setup(self)
         records.create(self.root, "company-context", "context/company/overview.md")
         records.create(self.root, "product-context", "context/products/billing/overview.md", "Billing")
         records.create(self.root, "product-context", "context/products/shipping/overview.md", "Shipping")
@@ -56,16 +57,11 @@ class ConversationTests(unittest.TestCase):
         line = guidance.splitlines()[-1]
         return (json.loads(line) if line.startswith("{") else {}), guidance
 
-    def test_registered_clients_use_company_first_welcome_and_per_turn_rules(self):
+    def test_registered_clients_keep_per_turn_rules_after_walkthrough(self):
         overview = self.work / "context/company/overview.md"
         original = overview.read_bytes()
         for client in ("Codex", "Claude"):
             with self.subTest(client=client):
-                overview.unlink()
-                start = self.turn(client, "SessionStart", client)["hookSpecificOutput"]["additionalContext"]
-                self.assertIn("Company onboarding phase at session start: welcome.", start)
-                self.assertIn("Skip unsolicited setup in quiet mode", start)
-                self.assertNotIn("Which products or product areas do you own", start)
                 for request in ("Help me set up oryx", "Quiet mode", "Show my roadmap"):
                     _, guidance = self.prompt(client, client, request)
                     self.assertIn("ask one focused question", guidance)
@@ -73,13 +69,7 @@ class ConversationTests(unittest.TestCase):
                     self.assertIn("follow the pm's current request", guidance.lower())
                     if request == "Quiet mode":
                         self.assertIn("Quiet mode is active", guidance)
-                marker = b"## Organisation and scope\n"
-                populated = original.replace(marker, marker + b"\nThe founders worked in billing.\n")
-                self.assertNotEqual(populated, original)
-                overview.write_bytes(populated)
-                start = self.turn(client, "SessionStart", client)["hookSpecificOutput"]["additionalContext"]
-                self.assertIn("Company onboarding phase at session start: existing.", start)
-                self.assertEqual(overview.read_bytes(), populated)
+                self.assertEqual(overview.read_bytes(), original)
 
     def test_company_gap_returns_on_the_agreed_cue_across_client_sessions(self):
         gap = {"question": "What share of revenue comes from renewals?", "why": "Understand the economics.",

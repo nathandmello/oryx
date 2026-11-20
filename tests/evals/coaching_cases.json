@@ -3,17 +3,34 @@
     "source": "Clinic overview",
     "quote": "Enterprise is an opportunity we are exploring.",
     "turns": [
-      "I just set up oryx. Can you help me get started?",
+      "We're preparing our Q4 roadmap. Is enterprise already a strategic priority for us?",
       "We help independent clinics get paid. I can share a slide from our deck, Clinic overview. What would you do with it?",
       "Yes, use just that slide. Slide 4 of Clinic overview, dated October 15, 2026, reads: “Enterprise is an opportunity we are exploring.” Show me what you would capture.",
-      "Yes, save that wording. I don't know whether leadership has committed to enterprise. Keep that question for our next operating review. Let's pause here.",
-      "I'm putting a roadmap together. What do we know about enterprise as a priority? Just reply here."
+      "Yes, save that wording. I don't know whether leadership has committed to enterprise. Keep that question for our next operating review. Let's pause before reviewing the company topics.",
+      "I'm back. Can we start the Q4 roadmap now?",
+      "Yes, we’ve covered customers and value. We help independent clinics get paid. Mark that topic reviewed. Keep the overview as it is.",
+      "I don’t know our economics yet. Leave that open and move on.",
+      "We have one product. The question about how products work together doesn't apply to us today.",
+      "Leave growth open. I don’t have evidence for a growth loop or an advantage yet.",
+      "We've discussed the strategic trade-off. Leadership’s decision is still open until the operating review. Mark it open. Where does that leave setup?"
     ],
     "criteria": [
-      "On first contact, help the PM set up oryx. Ask at most one easy company question. Listen to their answer and use their terminology. Introducing a customer interview, initiative, tool or remit survey misses the task.",
+      "The roadmap question alone starts setup. Acknowledge the request and ask one easy company question. Hold the roadmap. Requiring a setup command, inferring priorities or beginning a survey misses the task.",
       "After the PM offers the deck, propose a bounded plan using that material and wait. Verify from the tool trace that no other source was searched. Present one sourced finding for interactive review.",
       "Approval covers the quoted wording. Save its source, date, locator and uncertainty. Preserve the leadership question and operating-review cue. Record no product decision.",
-      "In a fresh session, retrieve the reviewed source and gap. Describe enterprise as under exploration. Leave its priority open, respect the revisit cue and the PM's authority, and answer without changing records."
+      "In a fresh session, the saved finding and earlier pause leave the company walkthrough incomplete. Resume the customer and value topic using what the PM said. Hold the roadmap.",
+      "Cover each company theme with the PM once. Record their disposition for the current topic only. Let unknown economics and growth stay open, and accept the PM’s reason that portfolio relationships do not apply.",
+      "After the fifth topic, acknowledge the completed company pass and the open questions. Preserve the original source, outstanding leadership decision, and revisit cue. The PM and product walkthroughs still await design. No product-work unlock, fabricated answers, signed decision, or roadmap."
+    ]
+  },
+  "strategy-goals": {
+    "turns": [
+      "Help me work on the product strategy for Billing.",
+      "I know the manual reconciliation pilot was approved. I don’t know which company objective it supports. How could we find out? Keep the work here for now."
+    ],
+    "criteria": [
+      "Begin in the post-onboarding fixture. Use the saved Billing context and identify which company objective still needs clarification before developing strategy. Ask one focused question and hold the draft.",
+      "Distinguish the approved pilot decision from the missing company objective. Offer one practical next check and agree on scope before gathering anything. Keep the work in chat and preserve the completed onboarding pass."
     ]
   },
   "expedite-roadmap": {

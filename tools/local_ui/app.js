@@ -16,6 +16,7 @@ const state = {
   screen: Object.keys(screenPaths).find(screen => screenPaths[screen] === requestedScreen) || "roadmap",
   catalog: null, product: "", cycle: "", area: "", board: null, edit: null, view: null,
   presenting: false, scope: { task: {}, "launch-checklist": {} }, list: null, filter: "",
+  setup: null,
 };
 let dragged = null;
 let boardRequest = 0;
@@ -83,9 +84,15 @@ async function api(endpoint, body = {}) {
     body: JSON.stringify(body),
   });
   const result = await response.json();
+  if (response.status === 409 && result.status === "onboarding_required") {
+    enterSetup(result.onboarding);
+    throw new SetupRequired();
+  }
   if (!response.ok) throw new Error(result.error);
   return result;
 }
+
+class SetupRequired extends Error {}
 
 async function attempt(event, callback) {
   const target = event?.currentTarget;
@@ -96,7 +103,7 @@ async function attempt(event, callback) {
   try {
     await callback();
   } catch (error) {
-    alert(error.message, true, dialog?.open ? dialog : null);
+    if (!(error instanceof SetupRequired)) alert(error.message, true, dialog?.open ? dialog : null);
   } finally {
     if (canDisable) target.disabled = false;
   }
@@ -916,8 +923,37 @@ async function navigate(screen) {
   } finally { render(); }
 }
 
+function enterSetup(current) {
+  state.setup = current;
+  state.board = state.list = state.catalog = state.edit = null;
+  state.presenting = false;
+  boardRequest++;
+  workRequestNumber++;
+  document.querySelectorAll("#dialogs dialog").forEach(dialog => dialog.close());
+  if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
+  render();
+}
+
+function setupScreen() {
+  const current = state.setup;
+  const stage = { company: "Company context", pm: "PM context", product: "Product context" }[current.stage];
+  app.append(heading("Continue onboarding", `You can return to ${screenNames[state.screen]} after the walkthrough.`),
+    node("section", { class: "panel stack" },
+      node("h2", {}, stage || "Your walkthrough"),
+      node("p", {}, current.prompt),
+      current.stage_available !== false && node("p", {}, "Continue in your oryx conversation. You can leave questions open."),
+      actions(button("Check progress", event => attempt(event, openWorkspace)))));
+}
+
 function render() {
   document.body.classList.toggle("presenting", state.presenting);
+  if (state.setup) {
+    nav.replaceChildren();
+    document.querySelector(".header-end").replaceChildren();
+    app.replaceChildren();
+    setupScreen();
+    return;
+  }
   nav.replaceChildren(...Object.entries(screenNames).map(([screen, text]) =>
     button(text, event => attempt(event, () => navigate(screen)), "ghost", {
       "aria-current": state.screen === screen ? "page" : null,
@@ -929,10 +965,13 @@ function render() {
   else workScreen();
 }
 
-attempt(null, async () => {
+async function openWorkspace() {
   state.catalog = await api("catalog");
+  state.setup = null;
   try {
     if (state.screen === "roadmap") await loadBoard();
     else await loadWork();
   } finally { render(); }
-});
+}
+
+attempt(null, openWorkspace);

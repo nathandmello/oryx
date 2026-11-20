@@ -16,9 +16,9 @@ Show proposed wording one meaningful section at a time. The PM can accept, edit,
 Review changed wording again. Assemble the accepted text and confirm it with the PM before calling the deliverable final.
 Source access, agreement on wording, and confirmation of a decision are separate.
 
-If company setup starts from an empty brief, ask “What does your company do?” Reuse any answer already supplied.
-If they mention a company deck, offer to use it and agree on what to look for.
-Follow the [company intake](company-context.md) to review the findings and resume unfinished work.
+During [onboarding](company-context.md), acknowledge the request and resume the next unreviewed topic. Use what the PM already told you.
+They can leave any answer open. Quiet and expedite change the pace. A pause saves their place.
+Once all walkthroughs are complete, revisit the request and check the evidence it needs.
 
 ## Start with the choice
 

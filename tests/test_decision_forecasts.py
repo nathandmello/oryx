@@ -11,6 +11,7 @@ from unittest.mock import patch
 import unittest
 
 import test_pm
+from onboarding_fixtures import reviewed_studio
 import test_opportunities
 import decision_authority
 import decision_forecasts as forecasts
@@ -23,6 +24,7 @@ class ForecastTests(unittest.TestCase):
         self.addCleanup(hub.doCleanups)
         hub.setUp()
         self.root, self.private = hub.root, hub.work
+        reviewed_studio(self.root, self.private)
         self.name = "context/products/billing/overview.md"
         hub.context_record()
         self.record = hub.context_record("product-context", self.name, "[Company](../../company/overview.md)")

@@ -4,11 +4,8 @@ Source: Nathan's framework, supplied in this conversation on 2026-11-18. This fi
 
 ## Product context and remit
 
-Start from the company brief the PM reviewed. Ask which product or area they want to bring into oryx next.
-Trace one customer outcome to that product's contribution. Use the team's terms and identify what evidence supports the link.
-
-Ask which decisions the PM owns. A job title or an organisation chart alone cannot establish decision rights.
-Offer to capture the confirmed remit in the [PM profile](context.md#pm-remit).
+For product work, use the PM’s [confirmed remit](context.md#pm-remit) and their reviewed company and product context.
+Trace a customer outcome to the product's contribution. Clarify decision rights when they matter.
 
 ## Strategy
 
@@ -42,6 +39,10 @@ Use [the brief-review checks](brief-review.md) to assess the frame, wording, and
 Keep user stories, detailed flows, and engineering specifications in the configured delivery system.
 
 ## Goal alignment
+
+Before starting product strategy, check which company objective the product should support and what establishes its current priority.
+If that objective is unclear, explain the gap and offer to clarify it with the PM first.
+Unrelated gaps can wait. A completed onboarding pass preserves the record of what the PM already reviewed.
 
 An outcome has five parts: metric, baseline, target, time horizon, and guardrails.
 

@@ -11,13 +11,15 @@ python3 -B tests/evals/coaching_transcripts.py prepare rushed-plan /tmp/billing-
 python3 -B tests/evals/coaching_transcripts.py turn /tmp/billing-trial 1
 ```
 
-Open the disposable `hub/` beneath that directory. The company onboarding case starts with a freshly initialized Studio. The other cases include two products, dated sources, a Billing decision and a strategy draft.
+Open the disposable `hub/` beneath that directory. The company case uses the current Core frameworks and an empty Studio.
+Cases about later work use fictional PM and product walkthroughs in their disposable checkout.
 
 The driver records system and private file digests before the first turn. Evaluator prompts and grading criteria stay outside the copied Hub.
 
 | Case | Decision under test |
 | --- | --- |
-| `company-first` | Review one slide, preserve its uncertainty, and retrieve the open question in a later roadmap conversation. |
+| `company-first` | Ask for roadmap work, pause after saving one finding, then review all five company topics. Keep PM and product onboarding pending. |
+| `strategy-goals` | After onboarding, propose a scoped way to clarify company objectives before drafting Billing strategy. |
 | `expedite-roadmap` | Help shape a Q4 roadmap under deadline, check the trade-off, and return the PM’s exact line. |
 | `rushed-plan` | Challenge a rushed request, wait through weak answers, retain scope and switch products. |
 | `quiet-lookup` | Answer a direct request and follow-up in quiet mode. |
@@ -35,7 +37,8 @@ The driver records system and private file digests before the first turn. Evalua
 5. For a hooks-disabled run, disable the client's hooks outside the Hub files. Verify the manual context lookup through the tool trace.
 6. Finish a forecast run on its setup date. Its relative dates use the fixture clock.
 
-For `company-first`, the PM supplies the slide in turn three. Switch to a fresh session before the final roadmap turn. Check the company overview, saved gap, and trace of the read-only reply. Grade conversational quality and unsupported strategic claims from the transcript.
+For `company-first`, start a fresh session before turn five. The repeated roadmap question should resume the unfinished company walkthrough.
+Check the discussion of each topic against the recorded outcome. Inspect why the final reply holds the roadmap.
 
 For `expedite-roadmap`, audit every turn for writes. Grade the deadline response, evidence use and final wording from the transcript.
 

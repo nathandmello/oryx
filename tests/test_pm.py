@@ -20,6 +20,7 @@ import records
 import red_team_eval
 import upgrades
 import workspace
+from onboarding_fixtures import reviewed_studio
 
 
 def confirmed_decisions(payload, preview):
@@ -209,6 +210,7 @@ class HubTests(unittest.TestCase):
         self.assertEqual(self.run_hook("invalid json").returncode, 2)
 
     def test_hooks_load_ingestion_and_redirect_new_native_context_files(self):
+        reviewed_studio(self.root, self.work)
         cwd = self.work / "context"
         startup = self.run_hook(json.dumps({"hook_event_name": "SessionStart", "cwd": str(cwd)}))
         self.assertEqual(startup.returncode, 0, startup.stderr)
@@ -241,6 +243,7 @@ class HubTests(unittest.TestCase):
                     self.assertEqual(output, {})
 
     def test_hooks_route_registered_files_and_preserve_plain_work(self):
+        reviewed_studio(self.root, self.work)
         register = self.work / "workspace/backlogs/alpha/initiatives.json"
         register.parent.mkdir(parents=True)
         register.write_text("{}")
@@ -466,6 +469,7 @@ class HubTests(unittest.TestCase):
                     self.assertEqual(errors, [])
 
     def test_context_capture_flags_ambiguous_and_legacy_section_bodies_in_preview(self):
+        reviewed_studio(self.root, self.work)
         target = self.context_record()
         original = target.read_text()
         destination = target.relative_to(self.work).as_posix()
@@ -591,6 +595,7 @@ class HubTests(unittest.TestCase):
         )
 
     def test_capture_routes_mixed_sources_and_writes_only_the_requested_brief(self):
+        reviewed_studio(self.root, self.work)
         stamp = date.today().isoformat()
         exclusion = "We will not enter the data centre business or create or own LLMs."
         rental = "We will rent capacity as required and use existing models."
@@ -646,6 +651,7 @@ class HubTests(unittest.TestCase):
         self.assertEqual(pm.check(self.root), [])
 
     def test_capture_previews_and_reuses_a_custom_section(self):
+        reviewed_studio(self.root, self.work)
         target = self.context_record()
         original = target.read_bytes()
         heading = "UK rollout baseline"
@@ -705,6 +711,7 @@ class HubTests(unittest.TestCase):
         self.assertEqual(pm.check(self.root), [])
 
     def evaluate_real_world_context_capture(self, case_id):
+        reviewed_studio(self.root, self.work)
         manifest = pm.ROOT / red_team_eval.SUITES["context-sections"]
         case = red_team_eval.load_manifest(manifest)["cases"][case_id]
         capture = case["capture"]
@@ -798,6 +805,7 @@ class HubTests(unittest.TestCase):
         self.evaluate_real_world_context_capture("stripe-billing-period-versions")
 
     def test_capture_keeps_open_questions_and_resolves_only_the_addressed_question(self):
+        reviewed_studio(self.root, self.work)
         company = self.context_record()
         prior = company.read_text()
         question = "Who approves capacity purchases?"
@@ -832,6 +840,7 @@ class HubTests(unittest.TestCase):
         self.assertEqual(pm.check(self.root), [])
 
     def test_capture_rejects_companion_files_and_unavailable_citations(self):
+        reviewed_studio(self.root, self.work)
         payload = {"sources": [], "entries": [
             {"scope": "company", "topic": "operations", "question": "Who owns procurement?"}
         ]}
@@ -856,6 +865,7 @@ class HubTests(unittest.TestCase):
         )
 
     def test_pm_remit_changes_relevance_without_moving_records(self):
+        reviewed_studio(self.root, self.work)
         records.create(self.root, "goal", "workspace/goals/checkout.md")
         records.create(self.root, "company-context", "context/company/overview.md")
         remit = {
@@ -906,6 +916,7 @@ class HubTests(unittest.TestCase):
         self.assertEqual(pm.check(self.root), [])
 
     def test_context_capture_reuses_records_and_creates_only_an_authorised_note(self):
+        reviewed_studio(self.root, self.work)
         goal = records.create(self.root, "goal", "workspace/goals/renewal.md")
         original = goal.read_text()
         source = {"reference": "Fixture supplier memo", "date": "undated", "coverage": "read",
@@ -958,6 +969,7 @@ class HubTests(unittest.TestCase):
         self.assertEqual(pm.check(self.root), [])
 
     def test_capture_records_a_product_implication_with_its_source(self):
+        reviewed_studio(self.root, self.work)
         cite = {"reference": "Fixture Billing retirement announcement", "date": "undated",
                 "coverage": "read", "checked_on": date.today().isoformat()}
         quote = "Billing will retire the legacy API in June."
@@ -978,6 +990,7 @@ class HubTests(unittest.TestCase):
         self.assertEqual(pm.check(self.root), [])
 
     def test_lean_context_keeps_optional_sections_out_and_accepts_event_review(self):
+        reviewed_studio(self.root, self.work)
         company = self.context_record()
         text = company.read_text()
         names = set(re.findall(r"^## (.+)$", text, re.M))
@@ -1000,6 +1013,7 @@ class HubTests(unittest.TestCase):
         self.assertTrue(any("complete context needs" in error for error in pm.check(self.root)))
 
     def test_capture_keeps_legacy_product_routes_without_adding_duplicate_sections(self):
+        reviewed_studio(self.root, self.work)
         target = records.create(self.root, "product-context", "context/products/example/overview.md")
         target.write_text(target.read_text().replace("## The product", "## Current offer"))
         stamp = date.today().isoformat()
@@ -1017,6 +1031,7 @@ class HubTests(unittest.TestCase):
         self.assertEqual(pm.check(self.root), [])
 
     def test_capture_routes_structured_context_across_company_product_and_initiative(self):
+        reviewed_studio(self.root, self.work)
         stamp = date.today().isoformat()
         paths = ("context/company/overview.md", "context/products/example/overview.md",
                  "context/products/example/initiatives/renewals/overview.md")
@@ -1072,6 +1087,7 @@ class HubTests(unittest.TestCase):
         self.assertEqual(initiative.read_text(), original)
 
     def test_business_model_question_in_company_only_studio(self):
+        reviewed_studio(self.root, self.work)
         quote = "Subscriptions fund the service."
         packet = {"sources": [{"reference": "Finance briefing", "date": "2025-05-01", "coverage": "read",
                                "checked_on": "2025-05-01", "text": quote}],
@@ -1091,6 +1107,7 @@ class HubTests(unittest.TestCase):
             self.assertFalse(lookup(prompt)["entries"])
 
     def test_recording_decisions_requires_separate_specific_confirmation(self):
+        reviewed_studio(self.root, self.work)
         name = "context/company/overview.md"
         day = date.today().isoformat()
         earlier = (date.today() - timedelta(days=7)).isoformat()

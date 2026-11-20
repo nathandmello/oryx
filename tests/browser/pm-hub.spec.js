@@ -92,6 +92,30 @@ test("the shared launcher opens each named screen and stays there on reload", as
   }
 });
 
+test("an empty Studio opens its agent walkthrough from a task deep link", async ({ hub, page }) => {
+  const studio = path.join(hub.root, "studio");
+  const reviewed = path.join(path.dirname(hub.root), "reviewed-studio");
+  fs.renameSync(studio, reviewed);
+  execFileSync(python, [path.join(hub.root, "tools", "pm.py"), "init-workspace", "--owner", "Fixture PM"],
+    { cwd: hub.root, stdio: "pipe" });
+  const address = new URL(hub.url);
+  address.searchParams.set("screen", "tasks");
+  await page.goto(address.href);
+  await expect(page.getByRole("heading", { name: "Continue onboarding" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Company context" })).toBeVisible();
+  await expect(page.getByText("Continue in your oryx conversation.", { exact: false })).toBeVisible();
+  await expect(page.getByRole("textbox")).toHaveCount(0);
+  await expect(button(page, "New task")).toHaveCount(0);
+  await page.reload();
+  await expect(page.getByRole("heading", { name: "Continue onboarding" })).toBeVisible();
+
+  fs.renameSync(studio, path.join(path.dirname(hub.root), "empty-studio"));
+  fs.renameSync(reviewed, studio);
+  await button(page, "Check progress").click();
+  await expect(page.getByRole("heading", { name: "Tasks", exact: true })).toBeVisible();
+  expect(new URL(page.url()).searchParams.get("screen")).toBe("tasks");
+});
+
 test("compare and sign a cycle, filter the board, and approve a drag change", async ({ hub, page }) => {
   test.setTimeout(75_000);
   const template = path.join(hub.root, "templates", "prioritization.md");

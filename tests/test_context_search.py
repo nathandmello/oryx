@@ -168,9 +168,11 @@ class RetrievalTests(unittest.TestCase):
 
     def test_client_registrations_and_cli_agree(self):
         from test_pm import HubTests
+        from onboarding_fixtures import reviewed_studio
         install = HubTests()
         install.setUp()
         self.addCleanup(install.doCleanups)
+        reviewed_studio(install.root, install.work)
         shutil.copytree(self.private / "context", install.work / "context", dirs_exist_ok=True)
         query = "Company-wide, how often do we revisit what customers pay?"
         cli = [sys.executable, "-B", str(install.root / "tools/pm.py"), "task-context"]

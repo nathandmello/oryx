@@ -98,6 +98,42 @@ def continues_work(prompt):
             or bool(prompt and "?" not in prompt and not DIRECT.match(prompt)))
 
 
+def strategy_activity(prompt, product=None):
+    """Recognise a request to shape strategy, including its published slash command."""
+    prompt = prompt.strip()
+    if re.match(r"^/pm\s+strategy\s+brief\s+draft(?:\s|$)", prompt, re.I):
+        return True
+    product_label = re.escape(product or "").replace(r"\-", "[- ]")
+    scope = rf"(?:{product_label}(?:['’]s)?\s+)?" if product else ""
+    subject = r"(?:(?:a|an|the|my|our|this|new)\s+)*" + scope + r"(?:product\s+)?strategy\b"
+    if re.match(r"^(?:please\s+)?(?:help (?:me|us) with|i(?:['’]m| am) working on)\s+" + subject, prompt, re.I):
+        return True
+    return bool(re.match(
+        r"^(?:(?:please|let['’]s|i (?:want|need|would like) to|(?:can|could|would) (?:you|we)|"
+        r"help me|help us)\s+)*(?:draft|write|build|develop|shape|create|define|formulate|revise|"
+        r"update|work on|revisit)\s+" + subject, prompt, re.I))
+
+
+def strategy_prerequisite(result):
+    """Point to potential evidence. Only the PM and source establish the applicable objective."""
+    candidates = [row for row in result["entries"]
+                  if row["record"] == layout.COMPANY and row["sources"]
+                  and row["section"] in {"Direction and goals", "Decisions already closed"}
+                  and row["evidence_status"] in {"recorded decision", "source statement", "sourced rule"}
+                  and all(source.get("coverage") != "unavailable" for source in row["sources"])]
+    return {
+        "activity": "product-strategy", "prerequisite": "Current company objective this product should support",
+        "status": "check_source_and_scope" if candidates else "clarify_if_unknown",
+        "evidence_sections": list(dict.fromkeys(row["section"] for row in candidates)),
+        "next_action": (
+            "Check the scoped company evidence, its owner and period, linked goals, and anything the PM already confirmed. "
+            "Use the objective if it is clear and applies to this product. Otherwise pause the strategy draft, "
+            "explain the gap and offer to help clarify the objective. Leave proposed opportunities open."
+        ),
+        "question_if_unclear": "Which company outcome should this product strategy help deliver?",
+    }
+
+
 def fingerprint(text):
     return sha256(text.encode("utf-8")).hexdigest()
 

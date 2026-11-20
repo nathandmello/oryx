@@ -1,6 +1,6 @@
 # Evidence and frameworks for company context
 
-Use the five questions below to guide selection. The examples suggest where to look after the PM describes their sources.
+Visit each of the five topics during the company walkthrough. The examples suggest where to look after the PM describes their sources.
 
 | Question | Evidence to look for |
 | --- | --- |

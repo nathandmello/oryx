@@ -50,9 +50,8 @@ Run `pm.py task-context "TASK"` if hooks are unavailable. Use `--product`, `--ar
 Add `--work-record workspace/problems/export.md` to read the checkpoint and effective mode. Use the resolved reply preferences.
 Use [the numerical evidence procedure](numbers.md) before relying on material figures from any source.
 
-Start an empty Studio with [company setup](company-context.md). Use `pm.py company-onboarding status` to resume progress.
-Follow the current request and respect quiet mode. Raise an agreed follow-up when its cue occurs.
-Ask about remit when ownership matters. Capture confirmed responsibilities in the [PM profile](context.md#pm-remit).
+Check [setup](company-context.md) before PM work. Run `pm.py onboarding status` yourself when hooks are disabled.
+Resume the next unreviewed topic. After onboarding, check the evidence the requested activity needs.
 
 For area work, use `pm.py area-context PRODUCT AREA` to locate the product overview, area brief, and inline evidence.
 

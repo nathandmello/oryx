@@ -432,6 +432,8 @@ def resolve_inventory(private, prompt, *, cwd, previous, explicit, explain, incl
             scope = scope or record_scope or None
         result = resolve_current(private, prompt, location, prior, scope, explain, include_history, through,
                                  index, docs, loaded, stamps)
+        if conversation.strategy_activity(prompt, result["scope"].get("product")):
+            result["activity_check"] = conversation.strategy_prerequisite(result)
         return result, docs
 
     with context_index.opened(private) as index:

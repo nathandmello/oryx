@@ -7,7 +7,7 @@ from pathlib import Path
 import shutil
 import subprocess
 
-from meeting_transcripts import ROOT, hub_command, pm, snapshot
+from meeting_transcripts import ROOT, hub_command, pm, reviewed_studio, snapshot
 
 
 CASES = json.loads(Path(__file__).with_name("coaching_cases.json").read_text(encoding="utf-8"))
@@ -49,6 +49,7 @@ def prepare(run, case):
 
 
 def seed_product_work(hub, day):
+    reviewed_studio(hub, hub / "studio")
     hub_command(hub, "set-remit", data=json.dumps({"status": "confirmed", "follow": [],
                 "responsibilities": [{"subject": "product/" + name, "role": "owner", "depends_on": [], "goals": []}
                                      for name in ("billing", "shipping")]}))
@@ -81,12 +82,25 @@ def seed_product_work(hub, day):
 def company_review_checks(hub, turn):
     case = CASES["company-first"]
     status = json.loads(hub_command(hub, "company-onboarding", "status"))
+    readiness = json.loads(hub_command(hub, "onboarding", "status"))
+    outcomes = [("customers", "reviewed"), ("economics", "open"), ("portfolio", "not_applicable"),
+                ("growth", "open"), ("tradeoffs", "open")]
+    covered = max(0, turn - 5)
+    company = readiness["walkthroughs"]["company"]
+    complete = covered == len(outcomes)
+    stage = "pm" if complete else "company"
+    checks = {"setup_stage": readiness["stage"] == stage, "product_work_held": not readiness["ready"],
+              "reviewed_points": company["reviewed"] == dict(outcomes[:covered]),
+              "company_walkthrough_complete": company["complete"] == complete}
+    if complete:
+        checks["next_stage_pending_design"] = not readiness["stage_available"]
     if turn == 1:
-        return {"fresh_studio": status["phase"] == "welcome" and status["revision"] == 0}
+        checks["fresh_studio"] = status["phase"] == "welcome" and status["revision"] == 0
+        return checks
     if turn in (2, 3):
         plan = status["plan"] or {}
         scopes = plan.get("sources", [])
-        checks = {"single_deck_scope": len(scopes) == 1 and case["source"].lower() in scopes[0].lower()}
+        checks["single_deck_scope"] = len(scopes) == 1 and case["source"].lower() in scopes[0].lower()
         if turn == 2:
             checks["waiting_for_approval"] = status["phase"] == "plan"
         else:
@@ -101,7 +115,7 @@ def company_review_checks(hub, turn):
     errors = []
     if pm.records.section(text, heading) is not None:
         decisions, errors = pm.records.table(text, heading, pm.records.CONTEXT_TABLES[heading])
-    return {
+    checks.update({
         "attributed_finding": all(s.lower() in text.lower() for s in
                                  (case["source"], case["quote"], "slide 4", "2026-10-15")),
         "no_product_decision": not errors and all(pm.records.PLACEHOLDER.search(row[0]) for row in decisions),
@@ -109,7 +123,8 @@ def company_review_checks(hub, turn):
                                    and "operating review" in g["resume_when"].lower()
                                    and g["next_action"].strip() for g in status["gaps"]),
         "review_finished": status["phase"] == "existing" and status["pending"] is None,
-    }
+    })
+    return checks
 
 
 def audit(run, baseline, turn):
@@ -152,13 +167,17 @@ def audit(run, baseline, turn):
         files = {"workspace/onboarding/company.json"} if turn >= 2 else set()
         if turn >= 4:
             files.add("context/company/overview.md")
+        if turn >= 6:
+            files.add("workspace/onboarding/review.json")
         checks["only_authorized_changes"] = changed == files
         checks.update(company_review_checks(hub, turn))
         receipt = run / "accepted-company.json"
         if turn == 4 and all(checks.values()):
-            receipt.write_text(json.dumps(current, sort_keys=True), encoding="utf-8")
-        if turn == 5:
-            checks["read_only_roadmap_reply"] = receipt.is_file() and json.loads(receipt.read_text()) == current
+            overview = "context/company/overview.md"
+            receipt.write_text(json.dumps({overview: current[overview]}), encoding="utf-8")
+        if turn >= 5:
+            saved = json.loads(receipt.read_text()) if receipt.is_file() else {}
+            checks["company_context_preserved"] = bool(saved) and all(current.get(name) == value for name, value in saved.items())
     print(json.dumps({"checks": checks, "changed": sorted(changed)}, indent=2))
     return all(checks.values())
 

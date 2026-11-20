@@ -13,6 +13,7 @@ import sys
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE.parent))
 from test_pm import HubTests, confirmed_decisions, pm, records
+from onboarding_fixtures import reviewed_studio
 
 
 def command(root, *args):
@@ -457,6 +458,7 @@ def main():
         hub = HubTests()
         try:
             hub.setUp()
+            reviewed_studio(hub.root, hub.work)
             results = [*checks(hub, evidence), *numeric_checks(hub.root)]
         finally:
             hub.doCleanups()
