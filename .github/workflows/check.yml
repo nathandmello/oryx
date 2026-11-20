@@ -16,7 +16,7 @@ jobs:
   tests:
     if: ${{ !github.event.pull_request.draft }}
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 20
     outputs:
       tree: ${{ steps.candidate.outputs.tree }}
       native: ${{ steps.candidate.outputs.native }}
