@@ -11,10 +11,13 @@ python3 -B tests/evals/coaching_transcripts.py prepare rushed-plan /tmp/billing-
 python3 -B tests/evals/coaching_transcripts.py turn /tmp/billing-trial 1
 ```
 
-Open the disposable `hub/` beneath that directory. It contains two products, dated sources, an accepted Billing decision and an editable strategy. The driver records the system and private file digests before the first turn. It keeps evaluator prompts and grading criteria outside the copied Hub.
+Open the disposable `hub/` beneath that directory. The company onboarding case starts with a freshly initialized Studio. The other cases include two products, dated sources, a Billing decision and a strategy draft.
+
+The driver records system and private file digests before the first turn. Evaluator prompts and grading criteria stay outside the copied Hub.
 
 | Case | Decision under test |
 | --- | --- |
+| `company-first` | Review one slide, preserve its uncertainty, and retrieve the open question in a later roadmap conversation. |
 | `rushed-plan` | Challenge a rushed request, wait through weak answers, retain scope and switch products. |
 | `quiet-lookup` | Answer a direct request and follow-up in quiet mode. |
 | `informed-draft` | Move from sufficient evidence to the requested draft with minimal repetition. |
@@ -30,6 +33,8 @@ Open the disposable `hub/` beneath that directory. It contains two products, dat
 4. For `defer-and-resume`, switch clients before turn three and reuse the same fixture. Start a fresh session with the original client's cache unavailable. Repeat in the opposite direction.
 5. For a hooks-disabled run, disable the client's hooks outside the Hub files. Verify the manual context lookup through the tool trace.
 6. Finish a forecast run on its setup date. Its relative dates use the fixture clock.
+
+For `company-first`, the PM supplies the slide in turn three. Switch to a fresh session before the final roadmap turn. Check the company overview, saved gap, and trace of the read-only reply. Grade conversational quality and unsupported strategic claims from the transcript.
 
 ```sh
 python3 -B tests/evals/coaching_transcripts.py audit /tmp/billing-trial 1

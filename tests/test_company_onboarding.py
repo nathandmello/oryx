@@ -109,6 +109,38 @@ class CompanyOnboardingTests(unittest.TestCase):
         self.assertEqual(json.loads(resumed.stdout)["gaps"], result["gaps"])
         self.assertFalse((self.work / context_capture.COMPANY_PATH).exists())
 
+    def test_separate_current_gap_survives_retrieval_until_reviewed_resolution(self):
+        self.plan()
+        self.change("approve")
+        source = self.draft()
+        self.change("propose", **source)
+        self.change("accept")
+        question = "Has leadership committed to enterprise?"
+        self.change("gap", question=question, why="Shapes the segment we target.",
+                    next_action="Ask Finance for the operating plan.", resume_when="Next operating review")
+        self.change("finish")
+
+        def lookup(prompt):
+            return pm.task_context.resolve(self.work, prompt)
+        prompt = "Did our company choose enterprise as its priority for the roadmap?"
+        result = lookup(prompt)
+        self.assertIn(source["entries"][0]["quote"], result["entries"][0]["text"])
+        gap, = result["unresolved_company_questions"]
+        self.assertEqual(gap["question"], question)
+        self.assertEqual(gap["resume_when"], "Next operating review")
+        self.assertNotIn("next_action", gap)
+        for unrelated in ("How does the company earn its subscription revenue?", prompt + " As of 2025-01-02.",
+                          "Does product/checkout target enterprise?", "What was our company selling last year?"):
+            self.assertNotIn("unresolved_company_questions", lookup(unrelated))
+        self.plan()
+        self.change("approve")
+        answer = self.draft()
+        answer["entries"][0].update(answers=question, quote="The board deferred the enterprise investment.")
+        answer["sources"][0]["text"] = answer["entries"][0]["quote"]
+        self.change("propose", **answer)
+        self.change("resolve", question=question)
+        self.assertNotIn("unresolved_company_questions", lookup(prompt))
+
     def test_plain_capture_cannot_skip_review_and_resolution_requires_evidence(self):
         self.plan()
         self.change("approve")

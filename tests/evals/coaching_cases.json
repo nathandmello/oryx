@@ -1,4 +1,21 @@
 {
+  "company-first": {
+    "source": "Clinic overview",
+    "quote": "Enterprise is an opportunity we are exploring.",
+    "turns": [
+      "I just set up oryx. Can you help me get started?",
+      "We help independent clinics get paid. I can share a slide from our deck, Clinic overview. What would you do with it?",
+      "Yes, use just that slide. Slide 4 of Clinic overview, dated October 15, 2026, reads: “Enterprise is an opportunity we are exploring.” Show me what you would capture.",
+      "Yes, save that wording. I don't know whether leadership has committed to enterprise. Keep that question for our next operating review. Let's pause here.",
+      "I'm putting a roadmap together. What do we know about enterprise as a priority? Just reply here."
+    ],
+    "criteria": [
+      "On first contact, help the PM set up oryx. Ask at most one easy company question. Listen to their answer and use their terminology. Introducing a customer interview, initiative, tool or remit survey misses the task.",
+      "After the PM offers the deck, propose a bounded plan using that material and wait. Verify from the tool trace that no other source was searched. Present one sourced finding for interactive review.",
+      "Approval covers the quoted wording. Save its source, date, locator and uncertainty. Preserve the leadership question and operating-review cue. Record no product decision.",
+      "In a fresh session, retrieve the reviewed source and gap. Describe enterprise as under exploration. Leave its priority open, respect the revisit cue and the PM's authority, and answer without changing records."
+    ]
+  },
   "rushed-plan": {
     "turns": [
       "Ship bulk export for Billing by quarter end. Help me plan.",

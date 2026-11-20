@@ -12,6 +12,7 @@ It checks selected notes against the current source file and returns the complet
 Company boundaries, applicable rules, and closed decisions have first claim on the available space.
 
 Use each entry’s `evidence_status`, exact wording, source date, and scope when explaining it.
+Company lookups also surface relevant, unresolved onboarding questions. Preserve their follow-up cues.
 Carry an attached open question alongside its claim into later conversations. Ask before relying on conflicting or incomplete evidence.
 
 Risk reviews use the evidence journal and signed initiative records. They can apply even when a passage ranks below the search cutoff.

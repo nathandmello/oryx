@@ -445,6 +445,41 @@ def resolve_inventory(private, prompt, *, cwd, previous, explicit, explain, incl
             return collect(context_index.Index(), docs, loaded, {})
 
 
+def relevant_company_questions(private, prompt):
+    """Retrieve present uncertainties as context. Follow-up timing belongs to the coaching hook."""
+    import company_onboarding
+
+    if not (private / company_onboarding.FILE).exists():
+        return []
+    # Checkpoints contain current gaps and carry no historical validity interval.
+    if re.search(r"\b(as of|at the time|previously|historical(?:ly)?|last (?:week|month|quarter|year)|in (?:19|20)\d{2})\b",
+                 prompt, re.I):
+        return []
+    terms = words(prompt) - {"company", "business", "does", "will", "did", "know", "would", "has",
+                             "question", "their", "about", "there", "find", "understand"}
+    if not terms:
+        return []
+    _, state = company_onboarding.read(private)
+    ranked = []
+    for gap in state["gaps"]:
+        subject = terms.intersection(words(gap["question"]))
+        reason = terms.intersection(words(gap["why"]))
+        if subject or len(reason) >= 2:
+            # An exact topical match to the question outranks a match to its rationale.
+            ranked.append(((len(subject), len(reason)), gap))
+    ranked.sort(key=lambda pair: pair[0], reverse=True)
+    remaining, results = 1800, []
+    for _, gap in ranked:
+        row = {field: gap[field] for field in ("question", "why", "resume_when")}
+        size = len(json.dumps(row, ensure_ascii=False))
+        if size <= remaining:
+            results.append(row)
+            remaining -= size
+            if len(results) == 3:
+                break
+    return results
+
+
 def resolve_current(private, prompt, cwd, previous, explicit, explain, include_history, through,
                     index, docs, loaded, stamps):
     scope, choices = choose_scope(private, docs, prompt, cwd, previous, explicit)
@@ -479,6 +514,14 @@ def resolve_current(private, prompt, cwd, previous, explicit, explain, include_h
         if selected_metrics:
             result["metrics"] = selected_metrics
         return result
+    if scope.get("company") and through == date.today():
+        try:
+            gaps = relevant_company_questions(private, prompt)
+        except (OSError, ValueError):
+            result["warnings"].append("Company onboarding questions could not be checked. Review the saved checkpoint.")
+        else:
+            if gaps:
+                result["unresolved_company_questions"] = gaps
     product, area, initiative = (scope.get(key) for key in ("product", "area", "initiative"))
     areas = {area} if area else set()
     signed_reviews = []

@@ -46,6 +46,7 @@ CONVERSATION_GUIDANCE = (
     "and explicit confirmation of a specific product decision distinct. Offer feedback and alternatives. "
     "The PM owns the choice. Preserve source, date, scope, attribution and uncertainty when reusing claims. "
     "For company setup, relevant new evidence, or an agreed follow-up, check pm.py company-onboarding status. "
+    "Use unresolved_company_questions to qualify the answer. Offer follow-up on the agreed cue or at the PM’s request. "
     "Honor quiet mode, other active work, and deferral cues."
 )
 

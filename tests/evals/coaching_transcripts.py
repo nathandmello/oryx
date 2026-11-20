@@ -39,11 +39,20 @@ def prepare(run, case):
             shutil.copyfile(source, target)
     subprocess.run(["git", "init", "-q", str(hub)], check=True)
     hub_command(hub, "init-workspace", "--owner", "Eval PM")
+    day = date.today().isoformat()
+    if case != "company-first":
+        seed_product_work(hub, day)
+    print(hub_command(hub, "check").strip())
+    baseline = {"case": case, "made_on": day, "resolve_on": (date.today() + timedelta(days=30)).isoformat(),
+                "system": snapshot(hub), "private": snapshot(hub / "studio")}
+    (run / "baseline.json").write_text(json.dumps(baseline), encoding="utf-8")
+
+
+def seed_product_work(hub, day):
     hub_command(hub, "set-remit", data=json.dumps({"status": "confirmed", "follow": [],
                 "responsibilities": [{"subject": "product/" + name, "role": "owner", "depends_on": [], "goals": []}
                                      for name in ("billing", "shipping")]}))
     hub_command(hub, "new", "company-context", "context/company/overview.md")
-    day = date.today().isoformat()
     capture(hub, "product", "Ledger interviews", "Operators merge two invoice exports by hand.",
             day, product="billing", topic="offer")
     capture(hub, "product", "Billing staffing review", "A pilot would take a pod off the dispute queue.",
@@ -67,10 +76,40 @@ def prepare(run, case):
     text = text.replace("{{date and result}}", f"{day}. The cost to the dispute queue is still open.")
     text = text.replace("{{one concrete step}}", "Confirm pilot staffing before choosing rollout scope.")
     strategy.write_text(text, encoding="utf-8")
-    print(hub_command(hub, "check").strip())
-    baseline = {"case": case, "made_on": day, "resolve_on": (date.today() + timedelta(days=30)).isoformat(),
-                "system": snapshot(hub), "private": snapshot(hub / "studio")}
-    (run / "baseline.json").write_text(json.dumps(baseline), encoding="utf-8")
+
+
+def company_review_checks(hub, turn):
+    case = CASES["company-first"]
+    status = json.loads(hub_command(hub, "company-onboarding", "status"))
+    if turn == 1:
+        return {"fresh_studio": status["phase"] == "welcome" and status["revision"] == 0}
+    if turn in (2, 3):
+        plan = status["plan"] or {}
+        scopes = plan.get("sources", [])
+        checks = {"single_deck_scope": len(scopes) == 1 and case["source"].lower() in scopes[0].lower()}
+        if turn == 2:
+            checks["waiting_for_approval"] = status["phase"] == "plan"
+        else:
+            item = status["pending"] or {}
+            checks["finding_in_review"] = (status["phase"] == "review"
+                                           and item.get("entry", {}).get("quote") == case["quote"])
+        return checks
+    path = hub / "studio/context/company/overview.md"
+    text = path.read_text(encoding="utf-8") if path.is_file() else ""
+    heading = "Decisions already closed"
+    decisions = []
+    errors = []
+    if pm.records.section(text, heading) is not None:
+        decisions, errors = pm.records.table(text, heading, pm.records.CONTEXT_TABLES[heading])
+    return {
+        "attributed_finding": all(s.lower() in text.lower() for s in
+                                 (case["source"], case["quote"], "slide 4", "2026-10-15")),
+        "no_product_decision": not errors and all(pm.records.PLACEHOLDER.search(row[0]) for row in decisions),
+        "unresolved_priority": any("enterprise" in g["question"].lower()
+                                   and "operating review" in g["resume_when"].lower()
+                                   and g["next_action"].strip() for g in status["gaps"]),
+        "review_finished": status["phase"] == "existing" and status["pending"] is None,
+    }
 
 
 def audit(run, baseline, turn):
@@ -108,6 +147,18 @@ def audit(run, baseline, turn):
             expected = False
     checks = {"system_intact": snapshot(hub) == baseline["system"],
               "only_authorized_changes": changed <= allowed, "expected_write": expected}
+    if case == "company-first":
+        # No sourced claim may reach the overview before acceptance on turn four.
+        files = {"workspace/onboarding/company.json"} if turn >= 2 else set()
+        if turn >= 4:
+            files.add("context/company/overview.md")
+        checks["only_authorized_changes"] = changed == files
+        checks.update(company_review_checks(hub, turn))
+        receipt = run / "accepted-company.json"
+        if turn == 4 and all(checks.values()):
+            receipt.write_text(json.dumps(current, sort_keys=True), encoding="utf-8")
+        if turn == 5:
+            checks["read_only_roadmap_reply"] = receipt.is_file() and json.loads(receipt.read_text()) == current
     print(json.dumps({"checks": checks, "changed": sorted(changed)}, indent=2))
     return all(checks.values())
 
