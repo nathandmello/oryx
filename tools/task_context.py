@@ -824,6 +824,11 @@ def turn_context(private, prompt, *, cwd=None, saved=None, explicit=None, work_r
         offer = conversation.context_offer(prompt, result, deferrals, mode in {"quiet", "expedite"})
         if offer is not None:
             turn["suggestion"] = offer
+    if mode not in {"quiet", "expedite"}:
+        import company_onboarding
+        cue = company_onboarding.followup(private, prompt, company_scope=scope.get("company"))
+        if cue:
+            turn["company_followup"] = cue
     result["conversation"] = turn
     record = previous.get("record") if same_work and not scope and not selected_new_owner else None
     if checkpoint:

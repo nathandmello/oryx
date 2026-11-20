@@ -44,6 +44,8 @@ Before starting product strategy, check which company objective the product shou
 If that objective is unclear, explain the gap and offer to clarify it with the PM first.
 Unrelated gaps can wait. A completed onboarding pass preserves the record of what the PM already reviewed.
 
+When the founder owns the company objective, their confirmed account can establish it. If their priority is learning, ask what decision that learning will inform.
+
 An outcome has five parts: metric, baseline, target, time horizon, and guardrails.
 
 Use [the metric registry](metrics.md) for the effective calculation and population.

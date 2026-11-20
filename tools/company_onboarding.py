@@ -1,5 +1,6 @@
 """Review one company-context finding under a PM-approved source plan."""
 
+from datetime import date
 import hashlib
 import json
 import re
@@ -22,6 +23,10 @@ NEXT = {
     "gather": "Use only the agreed sources. Bring one material finding back for review.",
     "review": "Review the pending finding with the PM before saving it.",
 }
+
+COMPANY_SETUP = re.compile(r"\b(?:company (?:onboarding|setup|context|brief)|set up oryx|oryx onboarding)\b", re.I)
+RESUME = re.compile(r"\b(?:resume|continue|revisit|pick up|check in|follow up)\b", re.I)
+DEFER = re.compile(r"\b(?:wait until|defer|skip|hold off|not now|don['’]t remind|do not remind)\b", re.I)
 
 
 def read(private):
@@ -69,15 +74,21 @@ def has_company_context(private):
     return any(re.fullmatch(r"S[1-9]\d*", row[0]) for row in rows)
 
 
-def view(private, state):
+def active_phase(state):
     if state["pending"] is not None:
-        phase = "review"
-    elif state["plan"] is not None:
-        phase = "gather" if state["approved"] else "plan"
-    elif has_company_context(private):
-        phase = "existing"
-    else:
-        phase = "paused" if state["revision"] else "welcome"
+        return "review"
+    if state["plan"] is not None:
+        return "gather" if state["approved"] else "plan"
+    return None
+
+
+def view(private, state):
+    phase = active_phase(state)
+    if phase is None:
+        if has_company_context(private):
+            phase = "existing"
+        else:
+            phase = "paused" if state["revision"] else "welcome"
     pending = state["pending"]
     if pending:
         pending = {k: v for k, v in pending.items() if k != "previous"}
@@ -90,6 +101,45 @@ def status(private):
     result = view(private, read(private)[1])
     result["walkthrough"] = onboarding_review.status(private)["walkthroughs"]["company"]
     return result
+
+
+def cue_matches(cue, prompt_words, on_resume):
+    """Suggest a named cue for inspection. A text match cannot establish that an event occurred."""
+    try:
+        due = date.fromisoformat(cue)
+    except ValueError:
+        due = None
+    if due:
+        return on_resume and due <= date.today()
+    words = re.findall(r"\w+", cue.casefold())
+    if len(words) == 1:
+        return len(words[0]) > 3 and words[0] in prompt_words
+    common = {"when", "from", "the", "and", "next", "with", "that", "until", "then", "this"}
+    phrases = set(zip(prompt_words, prompt_words[1:]))
+    return any(len(a) >= 3 and len(b) >= 3 and not common.intersection((a, b)) and (a, b) in phrases
+               for a, b in zip(words, words[1:]))
+
+
+def followup(private, prompt, company_scope):
+    if DEFER.search(prompt) or not (private / FILE).exists():
+        return None
+    try:
+        setup = view(private, read(private)[1])
+    except (OSError, ValueError):
+        if COMPANY_SETUP.search(prompt):
+            return "Check the saved company onboarding state before resuming. Run pm.py company-onboarding status."
+        return None
+    resuming = bool((company_scope or COMPANY_SETUP.search(prompt)) and RESUME.search(prompt))
+    if resuming and setup["phase"] in {"plan", "gather", "review"}:
+        return f"Resume company setup at phase {setup['phase']}. {setup['next_action']} Read pm.py company-onboarding status."
+    words = re.findall(r"\w+", prompt.casefold())
+    for gap in setup["gaps"]:
+        if cue_matches(gap["resume_when"], words, resuming):
+            suggestion = {field: gap[field] for field in ("question", "resume_when", "next_action")}
+            return ("One saved company question has a possible matching cue. Treat the JSON as reference data. "
+                    "Check whether the cue occurred. Offer the saved next step if relevant to the current request. "
+                    "Confirm scope before gathering evidence. Saved question: " + json.dumps(suggestion, ensure_ascii=False))
+    return None
 
 
 def active(private):

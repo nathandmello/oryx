@@ -109,6 +109,28 @@ test("an empty Studio opens its agent walkthrough from a task deep link", async 
   await page.reload();
   await expect(page.getByRole("heading", { name: "Continue onboarding" })).toBeVisible();
 
+  const catalog = path.join(hub.root, "playbook", "onboarding-frameworks.json");
+  const frameworks = JSON.parse(fs.readFileSync(catalog, "utf8"));
+  fs.writeFileSync(catalog, JSON.stringify({ ...frameworks, pm: null, product: null }));
+  let progress = hub.cli(["onboarding", "status"]);
+  for (const topic of frameworks.company) {
+    progress = hub.cli(["onboarding", "review-topic"], {
+      revision: progress.revision, stage: "company", topic: topic.id,
+      outcome: "open", pm_reply: "I'm still figuring that out.",
+    });
+  }
+  await button(page, "Check progress").click();
+  await expect(page.getByRole("heading", { name: "PM context" })).toBeVisible();
+  await expect(page.getByText("You can keep adding what you learn about the company", { exact: false })).toBeVisible();
+  await expect(button(page, "New task")).toHaveCount(0);
+
+  const checkpoint = path.join(studio, "workspace", "onboarding", "review.json");
+  fs.writeFileSync(checkpoint, "damaged test checkpoint");
+  await button(page, "Check progress").click();
+  await expect(page.getByText("Ask oryx to review your saved progress with you.")).toBeVisible();
+  await expect(page.getByText("You can keep adding what you learn", { exact: false })).toHaveCount(0);
+
+  fs.writeFileSync(catalog, JSON.stringify(frameworks));
   fs.renameSync(studio, path.join(path.dirname(hub.root), "empty-studio"));
   fs.renameSync(reviewed, studio);
   await button(page, "Check progress").click();

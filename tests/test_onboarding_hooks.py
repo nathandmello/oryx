@@ -1,5 +1,6 @@
 """Exercise required setup and handoff through the registered agent hooks."""
 
+import json
 import unittest
 
 import test_conversation
@@ -10,6 +11,7 @@ from onboarding_fixtures import define_fixture_frameworks, review_current_topic
 
 
 class OnboardingHookTests(unittest.TestCase):
+    cli = test_conversation.ConversationTests.cli
     turn = test_conversation.ConversationTests.turn
     prompt = test_conversation.ConversationTests.prompt
 
@@ -34,7 +36,10 @@ class OnboardingHookTests(unittest.TestCase):
                     self.assertNotIn("entries", route)
                     self.assertNotIn("Expedite mode is active", guidance)
                     self.assertNotIn("Use conversation data for continuity", guidance)
-                    self.assertEqual(task_context.previous_scope(self.work, client), {"setup_stage": stage})
+                    saved = {"setup_stage": stage}
+                    if stage == "product":
+                        saved["setup_mode"] = "expedite"
+                    self.assertEqual(task_context.previous_scope(self.work, client), saved)
                 review_current_topic(self.work)
 
         self.assertTrue(onboarding_review.status(self.work)["ready"])
@@ -46,6 +51,70 @@ class OnboardingHookTests(unittest.TestCase):
                 result, guidance = self.prompt(client, session, "Show the Billing roadmap")
                 self.assertNotEqual(result.get("status"), "onboarding_required")
                 self.assertNotIn("offer to resume it once", guidance)
+
+    def test_agreed_company_followup_is_available_between_walkthroughs_and_after_setup(self):
+        gap = {"question": "How do independent shops handle deposits?", "why": "Qualify the proposed market.",
+               "next_action": "Review one firsthand account.", "resume_when": "After the merchant interviews."}
+        self.cli("company-onboarding", "gap", payload={"revision": 0, **gap})
+        self.cli("company-onboarding", "plan", payload={
+            "revision": 1, "purpose": "Review what one shop told the founder.", "sources": ["Founder conversation"],
+        })
+        while onboarding_review.status(self.work)["stage"] == "company":
+            review_current_topic(self.work)
+        manifest = self.root / onboarding_review.MANIFEST
+        manifest.write_text(json.dumps(dict(self.frameworks, pm=None)))
+        learning = "I finished the merchant interviews. One shop told me how they handle deposits."
+        checkpoint = self.work / onboarding_review.FILE
+        for stage in ("pending-pm", "pm", "product", "ready"):
+            with self.subTest(stage=stage):
+                before = checkpoint.read_bytes()
+                if stage == "pm":
+                    manifest.write_text(json.dumps(self.frameworks))
+                expected = self.cli("task-context", learning)
+                for client in ("Codex", "Claude"):
+                    route, _ = self.prompt(client, client, learning)
+                    if stage == "ready":
+                        self.assertIn(gap["next_action"], route["conversation"]["company_followup"])
+                        self.assertEqual(route["conversation"]["company_followup"],
+                                         expected["conversation"]["company_followup"])
+                    else:
+                        self.assertEqual(route["onboarding"], expected["onboarding"])
+                        state = route["onboarding"]
+                        self.assertIn(gap["next_action"], state["company_followup"])
+                        self.assertIn("Check whether the cue occurred", state["company_followup"])
+                        self.assertEqual(state["company_phase"], "plan")
+                        self.assertIn("proposed source plan", state["capture_next_action"])
+                        self.assertIn("hypothesis", state["company_updates"])
+                        self.assertNotIn("Founder conversation", str(route))
+                self.assertEqual(checkpoint.read_bytes(), before)
+                if stage in {"pm", "product"}:
+                    for prompt in ("Show me the roadmap.", "Quiet mode. I finished the merchant interviews.",
+                                   "Wait until the merchant interviews."):
+                        result = self.cli("task-context", prompt)
+                        self.assertNotIn("company_followup", result["onboarding"])
+                    review_current_topic(self.work)
+
+    def test_setup_pace_suppresses_offers_until_coaching_resumes_in_the_same_session(self):
+        gap = {"question": "How do merchants handle deposits?", "why": "Qualify the market.",
+               "next_action": "Review one firsthand account.", "resume_when": "After the merchant interviews."}
+        self.cli("company-onboarding", "gap", payload={"revision": 0, **gap})
+        learning = "I finished the merchant interviews."
+        for client in ("Codex", "Claude"):
+            for directive, mode in (("Quiet mode", "quiet"), ("Expedite mode", "expedite")):
+                session = client + mode
+                self.prompt(client, session, directive)
+                route, guidance = self.prompt(client, session, learning)
+                self.assertEqual(route["onboarding"]["conversation_mode"], mode)
+                self.assertNotIn("company_followup", route["onboarding"])
+                self.assertNotIn(gap["question"], guidance)
+                self.assertIn("omit unsolicited offers", guidance)
+                independent, _ = self.prompt(client, session + "-other", learning)
+                self.assertIn(gap["question"], independent["onboarding"]["company_followup"])
+                self.prompt(client, session, "Resume coaching.")
+                resumed, _ = self.prompt(client, session, learning)
+                self.assertIn(gap["question"], resumed["onboarding"]["company_followup"])
+        self.cli("task-context", "Quiet mode")
+        self.assertIn("company_followup", self.cli("task-context", learning)["onboarding"])
 
     def test_existing_and_new_work_files_wait_for_required_setup(self):
         existing = self.work / "workspace" / "roadmaps" / "q4.md"

@@ -946,7 +946,9 @@ def main() -> int:
         args = build_parser().parse_args(argv)
         setup = check_command_setup(args)
         if args.command == "task-context" and setup:
-            print(json.dumps(onboarding.required(setup), indent=2, ensure_ascii=False))
+            private = workspace.repo(ROOT, "workspace")
+            state = onboarding.for_request(private, setup, args.prompt)
+            print(json.dumps(onboarding.required(state), indent=2, ensure_ascii=False))
             return 0
         if args.command == "onboarding":
             if args.operation == "review-topic":

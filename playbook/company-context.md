@@ -9,24 +9,26 @@ Use existing records to prepare each discussion. Saved context alone leaves the 
 
 ## Start where the PM is
 
-Pick up where the PM left off. Connect the first question to what they came to do.
+Connect the first question to what the PM has already said. Ask one question at a time.
 
-> We can come back to your Q4 roadmap. First, what does your company do?
+> **Founder:** It’s just me. I have an idea for independent clinics.
+>
+> **Oryx:** Let’s start there. What problem are you hoping to solve for them?
 
-Follow their answer. If they mention a deck, offer to work from it. If they prefer talking, ask one relevant question at a time. They can also write directly or supply an excerpt. Attribute an interview answer to the speaker, date and discussion.
+The founder’s own words can be the first source. Ask before capturing them. Attribute the account to the speaker, date and conversation.
+If the PM already has a brief, offer to use it. They can also write directly or share an excerpt.
 
-Learn how this company shares information before suggesting a tool. Offer public research or a connected internal source when it helps. Agree on the question, the source or search boundary, and what you will bring back. A connector's availability says nothing about permission. Ask before expanding the plan. Keep work moving with available sources if one is unavailable.
+Learn where this company keeps information before suggesting a tool. Offer public research or a connected source when useful.
+Agree on the question, source scope and what you will bring back. Ask before expanding the search.
 
 ## Decide what to capture
 
-Work through the [five company questions](company-frameworks.md) in order with the PM.
-Use the coaching framework that helps explain the current topic. If earlier evidence covers this topic, reflect it briefly and invite correction.
-The PM can share what they know, leave a topic open, or say it does not apply.
-All five topics can remain open after a complete pass. Ask one question at a time.
+Discuss the [five company topics](company-frameworks.md) in order. Adapt each opener to what exists today.
+Reflect relevant evidence and invite correction. A PM can leave every topic open or mark a topic inapplicable.
 
 Keep a standing claim in the overview when it changes how oryx would guide company or product work. Preserve the source, scope, date, qualifications and unresolved conflicts.
 
-Give recurring detail a [supplementary company note](filing.md#when-a-file-earns-its-place) when it has its own reader need and review trigger. Show the note’s proposed link and the implication it explains. With the PM’s approval, add the link to the overview during maintenance. Route product detail to its product. Leave other detail with its source.
+Give recurring detail a [supplementary company note](filing.md#when-a-file-earns-its-place) when it has its own reader need and review trigger. Show the proposed link and its purpose. Add it to the overview with the PM’s approval. Keep product detail with its product.
 
 ## Review and resume
 
@@ -72,7 +74,8 @@ Show the plan. After the PM approves it, send `{"revision":1}` to `company-onboa
 
 If the PM agrees, send `{"revision":3}` to `company-onboarding accept`. Use the actual returned revision and dates in a live session.
 
-Use `propose` for one finding from an approved source. Show its wording, attribution and anything that would change its meaning. Offer to save, correct, or leave it open. Preview a correction again. Use `accept` for the specific finding the PM agreed to save. Acknowledging what a deck says leaves any strategic choice with its owner.
+Show one finding with its wording, attribution and qualifications. Offer to save it, correct it, or leave it open.
+Preview corrections. Accept only wording the PM approves. The PM retains each strategic choice.
 
 Use `defer` for a pending finding or `gap` for a material unknown. Keep the question, its consequence, a feasible next action and a revisit cue. Offer a source check when relevant new evidence arrives or the PM reaches the agreed cue. Skip unsolicited offers in quiet mode.
 
@@ -88,9 +91,13 @@ Run `pm.py onboarding review-topic` with the onboarding revision, stage, topic, 
 | `outcome` | `reviewed`, `open`, or `not_applicable`. |
 | `pm_reply` | The PM’s actual reply about this topic. |
 
-If the PM says “I don’t know our margins,” the economics topic can remain open.
-Save its next evidence check with `gap` if the PM agrees.
-Use `finish` to end a source capture round. A pause preserves the next topic for a later conversation.
+Use `finish` to end a source capture round. A pause preserves the next walkthrough topic.
 
-After all five topics, acknowledge the company pass and keep the PM and product stages pending until their workflows exist.
-After onboarding, revisit an open item when it matters to the requested work. See [goal alignment](framework.md#goal-alignment) for strategy.
+## When the PM brings back new learning
+
+A company update can happen between walkthroughs or after onboarding. Keep the completed pass.
+If a founder comes back from a pilot call, surface the relevant open question. Offer to review what that conversation establishes.
+Show the earlier hypothesis alongside the new observation. Review one change together and preserve anything the evidence leaves open.
+
+Keep product work on hold until the PM and product walkthroughs are complete. Then check the needs of the requested activity.
+See [goal alignment](framework.md#goal-alignment) for strategy.

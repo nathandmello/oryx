@@ -47,6 +47,7 @@ class OnboardingCommandTests(unittest.TestCase):
         path.write_bytes(b"broken walkthrough")
         state = self.cli("onboarding", "status")
         self.assertEqual(state["stage"], "repair")
+        self.assertNotIn("company_updates", state)
         self.assertEqual(self.cli("roadmap", ok=False)["onboarding"], state)
         self.assertEqual(path.read_bytes(), b"broken walkthrough")
 

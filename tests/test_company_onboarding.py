@@ -107,7 +107,74 @@ class CompanyOnboardingTests(unittest.TestCase):
         command = [sys.executable, str(self.root / "tools/pm.py"), "company-onboarding", "status"]
         resumed = subprocess.run(command, capture_output=True, check=True, text=True)
         self.assertEqual(json.loads(resumed.stdout)["gaps"], result["gaps"])
+        cue = onboarding.followup(self.work, "I finished the operating review.", company_scope=False)
+        self.assertIn(gap["next_action"], cue)
+        self.assertNotIn("Board deck", cue)
+        self.assertNotIn(self.draft()["entries"][0]["quote"], cue)
+        self.assertEqual(json.loads(resumed.stdout)["gaps"][0]["basis"]["quote"], self.draft()["entries"][0]["quote"])
         self.assertFalse((self.work / context_capture.COMPANY_PATH).exists())
+
+    def test_founder_can_revisit_a_hypothesis_after_the_company_pass(self):
+        def cli(*args, payload=None):
+            result = subprocess.run([sys.executable, str(self.root / "tools/pm.py"), *args],
+                                    input=json.dumps(payload), text=True, capture_output=True, check=True)
+            return json.loads(result.stdout)
+
+        def preview(reference, day, location, quote, **fields):
+            self.change("plan", purpose="Understand how independent clinics follow up on unpaid invoices.",
+                        sources=[reference])
+            self.change("approve")
+            return self.change("propose", source_scope=reference, sources=[{
+                "reference": reference, "date": day, "checked_on": day, "coverage": "partial", "text": quote,
+            }], entries=[{
+                "scope": "company", "topic": "markets", "source": 1, "quote": quote, "location": location, **fields,
+            }])
+
+        brief = self.work / context_capture.COMPANY_PATH
+        belief = "I think independent clinics lose track of unpaid invoices."
+        question = "How common is missed follow-up among independent clinics?"
+        first = preview("Founder setup conversation", "2025-03-03", "Founder's opening account", belief,
+                        interpretation="Founder hypothesis about unpaid invoice follow-up.", uncertainty=question)
+        self.assertFalse(brief.exists())
+        self.change("accept", revision=first["revision"])
+        self.change("gap", question=question, why="The founder is choosing whom to serve.",
+                    next_action="Review the founder's first clinic conversation.", resume_when="First clinic conversation")
+        self.change("finish")
+
+        walkthrough = cli("onboarding", "status")
+        for topic, outcome, reply in (
+            ("customers", "open", belief),
+            ("economics", "open", "I haven't chosen a business model."),
+            ("portfolio", "not_applicable", "I haven't built a product yet."),
+            ("growth", "open", "I don't know how I'll reach clinics."),
+            ("tradeoffs", "reviewed", "I have time to explore just one customer segment."),
+        ):
+            self.assertEqual(walkthrough["walkthroughs"]["company"]["next_topic"]["id"], topic)
+            walkthrough = cli("onboarding", "review-topic", payload={
+                "revision": walkthrough["revision"], "stage": "company", "topic": topic,
+                "outcome": outcome, "pm_reply": reply,
+            })
+        self.assertEqual(walkthrough["stage"], "pm")
+        accepted = brief.read_text()
+        self.assertIn("Interpretation: Founder hypothesis", accepted)
+        self.assertIn(belief, accepted)
+
+        quote = "At my clinic I check unpaid invoices with a spreadsheet every Friday."
+        follow_up = preview("Clinic operator conversation", "2025-03-06", "One operator's account", quote)
+        self.assertEqual(brief.read_text(), accepted)
+        with self.assertRaisesRegex(ValueError, "exact open question"):
+            self.change("resolve", question=question)
+        cli("company-onboarding", "accept", payload={"revision": follow_up["revision"]})
+        updated = brief.read_text()
+        for label in ("Interpretation: Founder hypothesis", belief, "Founder setup conversation", quote,
+                      "One operator's account", "Clinic operator conversation", "2025-03-06"):
+            self.assertIn(label, updated)
+        company = cli("company-onboarding", "status")
+        self.assertEqual([gap["question"] for gap in company["gaps"]], [question])
+        current = cli("onboarding", "status")
+        self.assertEqual(current["walkthroughs"], walkthrough["walkthroughs"])
+        self.assertEqual(current["stage"], "pm")
+        self.assertFalse(current["ready"])
 
     def test_separate_current_gap_survives_retrieval_until_reviewed_resolution(self):
         self.plan()

@@ -27,7 +27,8 @@ When a release flags older records, follow [the context cleanup procedure](../..
 - Keep actors, negation, conditions, exceptions, numbers, and locators. Record material implications with [evidence reviews](../../../playbook/evidence-reviews.md).
 - Inspect `risk_preview`. State material warnings in quiet mode. File risk history with the authorized source record.
 - Use one short excerpt per claim. Include every material commitment or exclusion, even when a source already supplies enough general facts.
-- Treat draft proposals and personal views as such. Flag unresolved authority or conflicts in the reply.
+- Attribute hypotheses to their owners in `interpretation`. Keep tentative wording, open questions, and each observation’s original scope.
+- Flag proposals, uncertain authority, and conflicts for review.
 
 ## Route
 

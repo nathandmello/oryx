@@ -1,10 +1,10 @@
 {
   "company": [
-    {"id": "customers", "question": "Who does your company help, and what do they get from it?"},
-    {"id": "economics", "question": "How does the business make money?"},
-    {"id": "portfolio", "question": "How do your products work together for customers?"},
-    {"id": "growth", "question": "What brings customers to you and keeps them choosing you?"},
-    {"id": "tradeoffs", "question": "Which opportunities or risks are shaping the company's choices?"}
+    {"id": "customers", "question": "Who are you trying to help?"},
+    {"id": "economics", "question": "How are you thinking about revenue?"},
+    {"id": "portfolio", "question": "What are you building or offering so far?"},
+    {"id": "growth", "question": "What have you learned so far about reaching customers?"},
+    {"id": "tradeoffs", "question": "What choice about the business is on your mind right now?"}
   ],
   "pm": null,
   "product": null

@@ -6,9 +6,21 @@ Visit each of the five topics during the company walkthrough. The examples sugge
 | --- | --- |
 | Who are the customers, and what value does each receive? | Research or support evidence for experienced value. A company deck can establish the intended segment and promise. Distinguish the buyer, user and beneficiary when they differ. |
 | How does the company make money, and what drives its economics? | Pricing establishes the offer. Finance or billing records can establish realised revenue, concentration and costs within a stated period. |
-| How do products work together? | A portfolio map or observed customer journey can show how two offerings depend on each other. Verify whether customers actually use them together. |
+| How do products work together? | Start with what exists or is planned. With several offerings, a portfolio map or observed journey can show where they depend on each other. |
 | What drives growth and competitive advantage? | Cohorts, channel records and win/loss evidence can explain repeat acquisition, retention or purchasing choices. A growth rate alone leaves the mechanism open. |
 | Where are the opportunities, risks and strategic trade-offs? | Approved plans, operating reviews, commitments or constraints can identify competing choices. Attribute any ranking and the reason to its owner. |
+
+## When a founder is still figuring it out
+
+Let the founder describe where things stand. Their title alone tells you little about the maturity of the business.
+If they have an idea, ask who they hope it will help. If they mention a pilot, ask what the pilot customer actually did.
+For one planned product, discuss its intended value and move on once the founder has covered it.
+Pricing or acquisition can stay open until there is something to learn from.
+
+“We haven't charged anyone yet” establishes the founder's account of revenue to date.
+“I think clinics would pay” is a hypothesis. Preserve the quote and name the founder's hypothesis in `interpretation`.
+If the founder agrees, use `uncertainty` to name the question that remains.
+A later remark from one clinic belongs to that conversation. Ask what it changes before revising the brief.
 
 ## Coach from the evidence
 

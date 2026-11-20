@@ -937,11 +937,17 @@ function enterSetup(current) {
 function setupScreen() {
   const current = state.setup;
   const stage = { company: "Company context", pm: "PM context", product: "Product context" }[current.stage];
+  let handoff = "Continue in your oryx conversation. You can leave questions open.";
+  if (current.stage === "repair") {
+    handoff = "Ask oryx to review your saved progress with you.";
+  } else if (!current.stage_available && ["pm", "product"].includes(current.stage)) {
+    handoff = "You can keep adding what you learn about the company in your oryx conversation.";
+  }
   app.append(heading("Continue onboarding", `You can return to ${screenNames[state.screen]} after the walkthrough.`),
     node("section", { class: "panel stack" },
       node("h2", {}, stage || "Your walkthrough"),
       node("p", {}, current.prompt),
-      current.stage_available !== false && node("p", {}, "Continue in your oryx conversation. You can leave questions open."),
+      node("p", {}, handoff),
       actions(button("Check progress", event => attempt(event, openWorkspace)))));
 }
 

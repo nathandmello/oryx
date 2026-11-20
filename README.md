@@ -1,6 +1,6 @@
 # oryx
 
-**A personal workspace for product managers who use Codex or Claude Code.**
+**A personal workspace for PMs and founders who manage their own products with Codex or Claude Code.**
 
 A customer asks for better reporting. You remember passing on it last quarter. What changed? With oryx, you can put today's interview beside the original decision and see whether the case is any stronger. Your evidence and decisions live in a private Git repository on your machine. Either client can pick up the thread next time.
 
@@ -29,10 +29,10 @@ The local browser app lets you present the roadmap, review priorities, and work 
 Install Git, Python 3.9 or later, and either Codex CLI or Claude Code. On Linux or WSL2, protected sessions need bubblewrap with working user namespaces. On macOS, they use `sandbox-exec`.
 
 1. Clone this repository using GitHub’s **Code** button and open a terminal in the checkout.
-2. Create your private workspace. Replace the examples with your name and the system your engineers use.
+2. Create your private workspace with your name. If you use a delivery tool, you can add `--delivery-system "Tool name"`.
 
    ```sh
-   python3 tools/pm.py init-workspace --owner "Your name" --delivery-system "Linear"
+   python3 tools/pm.py init-workspace --owner "Your name"
    ```
 
 3. Start a protected session with your preferred client.
@@ -46,6 +46,7 @@ Install Git, Python 3.9 or later, and either Codex CLI or Claude Code. On Linux 
 
 Your first request starts a walkthrough with oryx. You can share a source or explain the business in your own words.
 Together you review customers, economics, the product portfolio, growth, and strategic trade-offs. You can leave questions open or say a topic does not apply.
+If you’re a founder starting with an idea, your own account is enough to begin. Bring back what you learn and review what it changes.
 
 The company walkthrough is available now. Product work stays on hold until the PM and product walkthroughs are available and complete.
 After onboarding, each activity checks the evidence it needs. [Onboarding](playbook/company-context.md)

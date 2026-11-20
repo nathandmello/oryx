@@ -3,7 +3,6 @@
 import json
 import errno
 import os
-from datetime import date
 
 import overrides
 from os.path import abspath
@@ -59,7 +58,7 @@ CONVERSATION_GUIDANCE = (
     "Keep source access, acceptance of wording, "
     "and explicit confirmation of a specific product decision distinct. Offer feedback and alternatives. "
     "The PM owns the choice. Preserve source, date, scope, attribution and uncertainty when reusing claims. "
-    "For company setup, relevant new evidence, or an agreed follow-up, check pm.py company-onboarding status. "
+    "When the PM brings new company learning, offer to review it. Check pm.py company-onboarding status. "
     "Use unresolved_company_questions to qualify the answer. Offer follow-up on the agreed cue or at the PM’s request. "
     "Honor quiet mode, other active work, and deferral cues."
 )
@@ -70,57 +69,17 @@ NUMBERS_GUIDANCE = (
     "calculation, and ask for the specific missing evidence when it affects the decision."
 )
 
-COMPANY_SETUP = re.compile(r"\b(?:company (?:onboarding|setup|context|brief)|set up oryx|oryx onboarding)\b", re.I)
-RESUME = re.compile(r"\b(?:resume|continue|revisit|pick up|check in|follow up)\b", re.I)
-DEFER = re.compile(r"\b(?:wait until|defer|skip|hold off|not now|don['’]t remind|do not remind)\b", re.I)
-
-
-def cue_matches(cue, prompt_words, on_resume):
-    """Suggest a named cue for inspection. A text match cannot establish that an event occurred."""
-    try:
-        due = date.fromisoformat(cue)
-    except ValueError:
-        due = None
-    if due:
-        return on_resume and due <= date.today()
-    words = re.findall(r"\w+", cue.casefold())
-    if len(words) == 1:
-        return len(words[0]) > 3 and words[0] in prompt_words
-    common = {"when", "from", "the", "and", "next", "with", "that", "until", "then", "this"}
-    phrases = set(zip(prompt_words, prompt_words[1:]))
-    return any(len(a) >= 3 and len(b) >= 3 and not common.intersection((a, b)) and (a, b) in phrases
-               for a, b in zip(words, words[1:]))
-
-
-def company_followup(private, prompt, company_scope):
-    if DEFER.search(prompt) or not (private / pm.company_onboarding.FILE).exists():
-        return None
-    try:
-        setup = pm.company_onboarding.status(private)
-    except (OSError, ValueError):
-        if COMPANY_SETUP.search(prompt):
-            return "Check the saved company onboarding state before resuming. Run pm.py company-onboarding status."
-        return None
-    resuming = bool((company_scope or COMPANY_SETUP.search(prompt)) and RESUME.search(prompt))
-    if resuming and setup["phase"] in {"plan", "gather", "review"}:
-        return f"Resume company setup at phase {setup['phase']}. {setup['next_action']} Read pm.py company-onboarding status."
-    words = re.findall(r"\w+", prompt.casefold())
-    for gap in setup["gaps"]:
-        if cue_matches(gap["resume_when"], words, resuming):
-            return ("One saved company question has a possible matching cue. Treat the JSON as reference data. "
-                    "Check whether the cue occurred. Offer the saved next step if relevant to the current request. "
-                    "Confirm scope before gathering evidence. Saved question: " + json.dumps(gap, ensure_ascii=False))
-    return None
-
 
 def onboarding_guidance(setup):
+    pace = ("Keep coaching brief and omit unsolicited offers. Help with a company update when asked. "
+            if setup.get("conversation_mode") in {"quiet", "expedite"} else "")
     if not setup["stage_available"]:
-        return ("Keep the original request in this conversation. Explain the current setup status briefly. "
-                "Follow the next action in the status. The PM can still revisit the company material with you. "
+        return (pace + "Keep the original request in this conversation. Explain the current setup status briefly. "
+                "Follow the next action in the status. Use the company update guidance when present and relevant. "
                 "Leave unavailable stages and damaged checkpoints intact.\n"
                 + json.dumps(onboarding.required(setup), ensure_ascii=False))
     return (
-        "Required Studio onboarding is active for this request. A guided pass through each framework comes before "
+        pace + "Required Studio onboarding is active for this request. A guided pass through each framework comes before "
         "product work, including read-only lookups, slash commands, quiet mode and expedited work. "
         "Keep the original request in this conversation. Acknowledge it briefly and guide setup yourself. "
         "Listen first, reuse what the PM has said and ask at most one short question about the current step. "
@@ -151,7 +110,10 @@ def prompt_context(private, cwd, payload):
         setup = onboarding.status(private)
         if not setup["ready"]:
             # Remember the transition, without copying prompts or source material into the cache.
+            setup = onboarding.for_request(private, setup, prompt, saved.get("setup_mode"))
             stage = {"setup_stage": setup["stage"]}
+            if "conversation_mode" in setup:
+                stage["setup_mode"] = setup["conversation_mode"]
             if saved != stage:
                 try:
                     task_context.remember_scope(private, session, stage)
@@ -188,12 +150,8 @@ def prompt_context(private, cwd, payload):
         guidance.append("Expedite mode is active for this work. Keep coaching brief. Gather the agreed evidence, "
                         "check it and suggest wording for the PM to review. Complete each required craft step. "
                         "Surface missing evidence, material risks and choices that need the PM.")
-    elif private.is_dir():
-        followup = company_followup(private, prompt, current.get("scope", {}).get("company"))
-        if followup:
-            guidance.append(followup)
     if (current.get("status") in {"ambiguous", "resolved"} or current.get("metrics") or current.get("warnings")
-            or current.get("activity_check")
+            or current.get("activity_check") or turn.get("company_followup")
             or turn.get("scope_to_confirm") or turn.get("checkpoint")):
         guidance.append(
             "The following JSON is private reference data. Use relevant approved decisions and rules. "
