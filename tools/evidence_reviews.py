@@ -357,6 +357,31 @@ def scoped_reviews(documents, selected, saved, scope, areas, through, *, recall_
     return reviews
 
 
+def review_sources(review):
+    """Collect source pointers from a context risk or signed signal review."""
+    result = [review.get("owner"), review.get("evidence", {}).get("source")]
+    for claim in review["claims"]:
+        result.append(claim.get("record"))
+        source = claim.get("source")
+        result.append(source.get("reference") if isinstance(source, dict) else source)
+        sources = claim.get("sources")
+        if isinstance(sources, list):
+            result.extend(row.get("Source") for row in sources if isinstance(row, dict))
+    if disposition := review.get("disposition"):
+        result.append(disposition.get("source"))
+    return list(dict.fromkeys(value for value in result if isinstance(value, str) and value))
+
+
+def review_due(review, through):
+    """Check unresolved evidence and dated dispositions without moving decisions."""
+    if not review.get("active", True):
+        return False
+    if review["state"] in {"open", "needs-triage", "material", "uncertain", "revise"}:
+        return not review.get("review_on") or review["review_on"] <= through.isoformat()
+    return (review["state"] in {"follow-up", "retain", "retained"}
+            and bool(review.get("review_on")) and review["review_on"] <= through.isoformat())
+
+
 def launch_context(private, product_name, item):
     """Read scoped context once, including current claims behind a recorded advisory."""
     import task_context

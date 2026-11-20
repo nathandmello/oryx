@@ -37,18 +37,17 @@ Review a sample with `preview`, then save when ready. You can also ask for chang
 Each save affects only the supplied fields. A failed save keeps the previous settings.
 
 The PM's profile stores the choices. With trusted hooks, each new turn uses the latest valid settings in the open checkout.
-If the hooks are disabled, invoke the `pm` skill and use `preferences show` to load the current choices.
 
 Hub rules and required artifact content govern all work. For a single task, the PM can override a saved presentation choice.
 An invalid saved block uses defaults and produces a check error. Use `preferences reset all` to restore a valid block with complete markers.
 
 ## Resume
 
-Read the record in `private/workspace/`, its checkpoint, and linked context. Use headings and section leads to find context that applies to the work.
-Read the relevant entries and applicable parent rules before acting. Check the sources behind accepted decisions. Report only changes or gaps that matter now.
+Read the owning record, its checkpoint, and applicable parent rules. Check sources behind accepted decisions. Report material changes and gaps.
 
-Resolve context for each workspace task, including drafts and replies. Repeat the lookup when scope or evidence changes. Both agents use [local semantic search](context-search.md).
+Use [local semantic search](context-search.md) for each task and material scope or evidence change.
 Run `pm.py task-context "TASK"` if hooks are unavailable. Use `--product`, `--area`, or `--initiative` when scope is known.
+Add `--work-record workspace/problems/export.md` to read the checkpoint and effective mode. Use the resolved reply preferences.
 Use [the numerical evidence procedure](numbers.md) before relying on material figures from any source.
 
 At startup, ask once about any `remit_prompt` from `pm.py align` when questions are welcome. Respect quiet mode and deferrals. Capture agreed responsibilities in the [PM profile](context.md#pm-remit).
@@ -83,6 +82,29 @@ Record the current state:
 Keep a wait visible. Do not invent evidence, advance to the next activity, or complete a discovery process to finish a session.
 
 Resume on The PM's request. Dates and events guide review; they do not create background jobs or permission for external actions.
+
+### Save a reviewed checkpoint
+
+Use `pm.py conversation checkpoint show RECORD` to read the owning Work state.
+Use `preview RECORD` with JSON updates on stdin. Review the result. Use `apply RECORD` with that receipt to save.
+
+Set the permitted fields the PM confirmed. A pause might use:
+
+```json
+{
+  "state": "waiting",
+  "last_checkpoint": "2026-11-19: Confirmed the export issue in two support cases.",
+  "next_action": "Compare access failure and format failure.",
+  "waiting_on": "Support case transcripts",
+  "resume_when": "Support provides the case references."
+}
+```
+
+An explicit deferral can save `deferral` with the offered workflow, scope, source, evidence revision, and `review_on`.
+Use an ISO date or null to revisit on changed evidence. Copy the chosen entry into `clear_deferral` when the PM asks.
+
+Keep the open question, agreed facts, and sources beside the work. Use an editable owner when a signature binds the current file.
+A stale preview needs a new review. A permission error leaves the checkpoint unsaved.
 
 ## Templates and review
 

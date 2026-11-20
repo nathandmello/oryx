@@ -54,12 +54,20 @@ class ContextRiskTests(unittest.TestCase):
         self.assertTrue(all(c["sources"] for c in event["claims"]))
         self.assertNotIn("Extra transcript detail", (h.work / owner).read_text())
         recorded = (h.work / owner).read_bytes()
-        self.assertEqual(self.lookup()["risks"][0]["id"], event["id"])
+        scoped = self.lookup()
+        self.assertEqual(scoped["risks"][0]["id"], event["id"])
+        self.assertEqual(scoped["conversation"]["suggestion"]["source"], event["id"])
+        weekly = json.loads(h.cli("decision-review", "--product", "example"))
+        weekly_conflicts = [row["risk_id"] for row in weekly["findings"] if row["kind"] == "possible-conflict"]
+        self.assertEqual(weekly_conflicts, [event["id"]])
         hooks = subprocess.run([sys.executable, str(h.root / "tools/hook.py")], cwd=h.root, input=json.dumps({
             "hook_event_name": "UserPromptSubmit", "session_id": "risk-fixture",
             "cwd": str(h.root), "prompt": "Quiet. Draft a customer update for product/example EU bulk export."}),
             env=h.env, capture_output=True, text=True, check=True)
         self.assertIn(event["id"], hooks.stdout)
+        context = json.loads(json.loads(hooks.stdout)["hookSpecificOutput"]["additionalContext"].splitlines()[-1])
+        self.assertEqual(context["conversation"]["mode"], "quiet")
+        self.assertNotIn("suggestion", context["conversation"])
         self.assertEqual(self.capture(*second)["written"], None)
         self.assertEqual((h.work / owner).read_bytes(), recorded)
         response = {"id": event["id"], "record": owner, "state": "dismiss",
@@ -69,6 +77,7 @@ class ContextRiskTests(unittest.TestCase):
         h.cli("route-context", "--write", h.company, value=dict(replies, responses=[wrong]), error="owning context")
         self.capture(owner, replies)
         self.assertNotIn(event["id"], str(self.lookup().get("risks", [])))
+        self.assertNotIn(event["id"], h.cli("decision-review", "--product", "example"))
         self.assertEqual(self.capture(owner, replies)["written"], None)
         recalled = json.loads(h.cli("task-context", "Show " + event["id"]))
         self.assertEqual([e["state"] for e in recalled["risk_history"][0]["history"]], ["open", "dismiss"])

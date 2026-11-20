@@ -7,6 +7,8 @@ description: Draft or review an Initiative Brief for the existing initiative ID 
 
 Read [the initiative workflow](../../../playbook/opportunities.md). Use `initiative show` to read the established problem, audience, outcome, evidence, and any discovery findings. Read the linked company, product, and applicable area evidence. Keep area membership on the registered initiative.
 
+Use the [conversation guide](../../../playbook/conversation.md) to compare credible alternatives before drafting.
+
 1. Start or resume the [Initiative Brief](../../../templates/initiative-brief.md) using the registered initiative ID. Enter known facts and leave gaps open.
 2. Propose `prepare-brief` when the PM chooses definition. Cite the discovery findings or the evidence supporting direct definition.
 3. Describe the solution, customer benefit, business value, and credible options.

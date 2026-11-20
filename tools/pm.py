@@ -17,8 +17,11 @@ import red_team_eval
 import workspace
 import git_ops
 import context_capture
+import conversation
 import task_context
 import metric_checks
+import decision_forecasts
+import decision_review
 import metric_registry
 import storage
 import snapshots
@@ -45,7 +48,9 @@ REQUIRED = (
     "tools/layout.py", "tools/layout_upgrade.py", "tools/pm_profile.py", "playbook/workspace-format.json", "tools/filing.py", "tools/conversion.py", "tools/snapshots.py", "playbook/filing.md", "playbook/writing.md",
     "tools/context_capture.py", "tools/evidence_reviews.py", "playbook/evidence-reviews.md", "tools/task_context.py", "tools/metric_checks.py", "tools/storage.py", "tools/upgrades.py",
     "playbook/numbers.md", "playbook/metrics.md", "playbook/saas-metrics.json", "tools/metric_registry.py",
+    "tools/decision_authority.py", "tools/decision_review.py", "tools/decision_forecasts.py", "playbook/decision-review.md", "playbook/decision-forecasts.md",
     "tools/preferences.py", ".agents/skills/pm/SKILL.md", ".claude/skills/pm/SKILL.md",
+    "tools/conversation.py", conversation.GUIDE,
     "tools/hub_commands.py", "playbook/commands.md", hub_commands.CATALOG,
     ".agents/skills/extend-hub/SKILL.md", ".claude/skills/extend-hub/SKILL.md",
     ".agents/skills/ingest-context/SKILL.md", ".claude/skills/ingest-context/SKILL.md",
@@ -313,6 +318,7 @@ def check_workspace(root: Path, system_texts: dict[str, str]) -> list[str]:
         preferences.load(private)
     except (OSError, ValueError) as exc:
         errors.append(f"{preferences.CHECK_PREFIX}{exc}")
+    errors.extend(decision_forecasts.check_workspace(private))
     files = inventory(private)
     initiative_work_homes = set()
     for path in files:
@@ -327,6 +333,8 @@ def check_workspace(root: Path, system_texts: dict[str, str]) -> list[str]:
         if not path.is_file():
             continue
         parts = path.relative_to(private).parts
+        if (len(parts) == 3 and parts[:2] == ("workspace", "forecasts") and path.suffix == ".json"):
+            continue  # The forecast checker validates every receipt in this directory.
         if rel == metric_registry.PRIVATE:
             continue
         if parts[0] in {"context", "products", "workspace"} and any(part.startswith(".") for part in parts[1:]):
@@ -728,6 +736,8 @@ def build_parser():
     new.add_argument("--trigger")
     initiatives_cli.add_commands(commands)
     initiative_work.add_commands(commands)
+    decision_review.add_commands(commands)
+    decision_forecasts.add_commands(commands)
     ui = commands.add_parser("ui", help="Open the local PM Hub browser app")
     ui.add_argument("--screen", choices=("roadmap", "tasks", "launch-checklists"), default="roadmap",
                     help="Choose the first screen (default: roadmap)")
@@ -744,6 +754,7 @@ def build_parser():
     task.add_argument("--area", type=layout.slug)
     task.add_argument("--initiative", type=layout.slug)
     task.add_argument("--company", action="store_true")
+    task.add_argument("--work-record", help="Use an existing workspace work-state checkpoint")
     task.add_argument("--history", action="store_true", help="Include recorded risk dispositions in this scope")
     task.add_argument("--explain", action="store_true", help="Include local retrieval diagnostics")
     commands.add_parser("catalog", help="List private records by title, type, state, and scope")
@@ -766,6 +777,7 @@ def build_parser():
     git = commands.add_parser("git")
     git.add_argument("role", choices=("system", "workspace"))
     git.add_argument("operation", choices=("status", "fetch", "pull", "push"))
+    conversation.add_commands(commands)
     red_team_eval.register(commands)
     return parser
 
@@ -780,6 +792,9 @@ def main() -> int:
         args = build_parser().parse_args(argv)
         if hasattr(args, "hub_action"):
             args.hub_action(ROOT, args, prepare_private_write)
+            return 0
+        if args.command == "forecast":
+            decision_forecasts.run(ROOT, args, prepare_private_write)
             return 0
         if args.command == "align":
             if args.preview_plan or args.apply_plan:
@@ -888,8 +903,9 @@ def main() -> int:
                 explicit = {"company": True} if args.company else (
                     {"product": args.product, "area": args.area, "initiative": args.initiative} if args.product else None
                 )
-                result = task_context.resolve(private, args.prompt, cwd=Path.cwd().resolve(), explicit=explicit,
-                                              include_history=args.history, explain=args.explain)
+                result, _ = task_context.turn_context(private, args.prompt, cwd=Path.cwd().resolve(),
+                                                      explicit=explicit, work_record=args.work_record,
+                                                      include_history=args.history, explain=args.explain)
             print(json.dumps(result, indent=2, ensure_ascii=False))
             return 0
         if args.command == "check-metric":

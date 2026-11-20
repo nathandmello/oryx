@@ -44,6 +44,7 @@ Keep only `README.md`, `AGENTS.md`, `CLAUDE.md`, and `.gitignore` as root files.
 | `private/workspace/initiatives/<product>/<initiative>/` | Discovery Brief and Initiative Brief for the same initiative ID | Private |
 | `private/workspace/initiatives/<product>/<initiative>/{tasks,launch-checklist}.json` | PM tasks and launch checkpoints | Private |
 | `private/workspace/experiments/<product>/<initiative>/` | Editable metric-linked experiment drafts | Private |
+| `private/workspace/forecasts/<id>.json` | Confirmed forecasts linked to existing decisions | Private |
 | `private/workspace/roadmaps/<product>/<cycle>.md` | Comparison of candidates for the planning cycle | Private |
 | `private/settings.json` | Installation settings and expected remotes | Private |
 | `private/.hub-history/` | Recovery copies for reviewed filing conversions | Private |
@@ -69,6 +70,7 @@ Start reference material in the entity overview. Create a topic folder only for 
 - [Templates](templates/README.md): company context, product context, and PM artifacts.
 - [Context rules](playbook/context.md) cover routing, sources, parent links, dates, and gaps.
 - [Hub commands](playbook/commands.md) and [working practices](playbook/working.md) cover actions, preferences, and checkpoints.
+- [Decision coaching](playbook/conversation.md).
 - [Git rules](playbook/git.md): the correct repository for saves, updates, and contributions.
 
 The Git command name `workspace` selects the entire private repository.
@@ -86,7 +88,7 @@ python3 tools/pm.py new company-context context/company/overview.md --title "Com
 ```
 
 Run the [context evaluations](tests/context-evals/README.md) to test artifact structure, context use, and fresh tasks after capture.
-Both agents retrieve cited passages through [local semantic search](playbook/context-search.md). Use `pm.py catalog` for records.
+Retrieve passages with [local semantic search](playbook/context-search.md). List records with `pm.py catalog`.
 Apply [the numerical evidence checks](playbook/numbers.md) to material numbers in any task.
 Find SaaS defaults and PM-approved definitions in the [metric registry](playbook/metrics.md).
 

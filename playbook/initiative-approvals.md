@@ -58,7 +58,7 @@ Run `python3 tools/pm.py initiative schema` for accepted fields and transitions.
 python3 tools/pm.py initiative propose example < changes.json > proposal.json
 ```
 
-Review each transaction and document. Verify evidence at its source. Stop when a gate requires missing facts.
+Review each transaction, [decision rationale](decision-forecasts.md), and cited source. Stop when a gate requires missing facts.
 
 From the trusted PM account, apply the reviewed proposal. Use the PM signing key's absolute path.
 

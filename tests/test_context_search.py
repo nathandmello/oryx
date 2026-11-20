@@ -188,6 +188,16 @@ class RetrievalTests(unittest.TestCase):
                 self.assertEqual(context.previous_scope(install.work, config)["binding"],
                                  [{"record": "context/company/overview.md", "section": "Data boundaries"}])
 
+        owner = "workspace/problems/customer-pricing.md"
+        subprocess.run([sys.executable, "-B", str(install.root / "tools/pm.py"), "new", "problem", owner],
+                       cwd=install.root, check=True, capture_output=True)
+        scoped = json.loads(subprocess.check_output(
+            cli + [query, "--company", "--work-record", owner, "--explain", "--history"], cwd=install.root))
+        self.assertEqual(scoped["conversation"]["checkpoint"]["record"], owner)
+        self.assertEqual(scoped["risk_history"], [])
+        self.assertEqual(scoped["entries"][1]["record"], "context/company/a.md")
+        self.assertIn("retrieval", scoped)
+
     def test_scopes_shared_titles_and_time_limited_lookup(self):
         for product in ("atlas", "orchid"):
             self.add(f"products/{product}/overview", product.title(), "Product overview.", kind="product-context")
@@ -200,6 +210,11 @@ class RetrievalTests(unittest.TestCase):
             named = context.resolve(self.private, "For Atlas, who handles damaged goods?")
         self.assertEqual(named["scope"]["product"], "atlas")
         unrelated = self.private / "context/products/orchid/returns.md"
+        self.assertNotIn(unrelated, {call.args[1] for call in opened.call_args_list})
+        with patch.object(context, "read_document", wraps=context.read_document) as opened:
+            coached, state = context.turn_context(self.private, "For Atlas, who handles damaged goods?")
+        self.assertEqual(coached["scope"]["product"], "atlas")
+        self.assertEqual(state["scope"]["product"], "atlas")
         self.assertNotIn(unrelated, {call.args[1] for call in opened.call_args_list})
         self.add("products/orchid/overview", "Atlas", "An overlapping title.", kind="product-context")
         self.assertEqual(context.resolve(self.private, "For Atlas, who handles damaged goods?")["status"], "ambiguous")

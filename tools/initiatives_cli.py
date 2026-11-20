@@ -4,7 +4,7 @@ import json
 import sys
 
 from initiative_events import (DECISION_FIELDS, EVALUATION_FIELDS, FIELDS, HORIZONS, OPTIONAL_FIELDS,
-                               OUTCOME_STATUSES, PHASES, RESULTS, RISKS, SIGNAL_ACTIONS, SIGNAL_IMPACTS, TRANSITIONS)
+                               RATIONALE_FIELDS, OUTCOME_STATUSES, PHASES, RESULTS, RISKS, SIGNAL_ACTIONS, SIGNAL_IMPACTS, TRANSITIONS)
 import experiment_drafts
 import initiative_areas
 import storage
@@ -69,6 +69,9 @@ def run(root, args):
                 "recorded_on": "The Hub supplies the date of signing for new evidence transactions.",
             },
             "evaluation_fields": EVALUATION_FIELDS,
+            "optional_decision_rationale": {"required": RATIONALE_FIELDS, "optional": ["review_on"],
+                "alternatives": "nonempty list distinct from choice; decision source also covers rationale",
+                "storage": "reviewed as part of the signed reason"},
             "target_review_fields": {
                 "status": "PM judgment using an allowed outcome status",
                 "measurements": "distinct release measurement IDs for this initiative and target; met, missed and inconclusive require evidence",

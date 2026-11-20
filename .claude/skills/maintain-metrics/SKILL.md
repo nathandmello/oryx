@@ -7,6 +7,8 @@ description: Use when the PM asks to define, review, or change a business metric
 
 Read [the registry procedure](../../../playbook/metrics.md) and [the numerical evidence procedure](../../../playbook/numbers.md).
 
+Use the [conversation guide](../../../playbook/conversation.md) when a metric choice changes a consequential product decision.
+
 1. Find the current definition and its scope with `pm.py metric list` or `pm.py metric show`.
 2. Compare the proposed formula, population, unit, period, and exclusions with the current definition.
 3. Confirm the cutoff and set `reporting_window` when the definition specifies a fixed basis.

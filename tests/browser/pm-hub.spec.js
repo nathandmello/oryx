@@ -126,6 +126,23 @@ test("compare and sign a cycle, filter the board, and approve a drag change", as
   await expect(lane(page, "later").getByRole("heading", { name: "Export turnaround" })).toBeVisible();
 
   const renewalID = hub.cli(["roadmap", "--product", "example"]).find(row => row.title === "Renewal delays").id;
+  const decision = { type: "decision", initiative: renewalID, on: hub.today,
+    reason: "The PM chose earlier renewal reminders.", source: "Renewal planning review, item 2" };
+  const tradeoff = "Delay export research by one week to test reminders.";
+  const signedPlan = hub.cli(["initiative", "propose", "example"], [
+    { ...decision, action: "unplan" },
+    { ...decision, action: "plan", cycle: "customer-operations", rank: 1, horizon: "now", effort: 2,
+      rationale: { choice: "Test reminders first", alternatives: ["Test both in parallel"], tradeoff,
+        owner: "Renewals PM", scope: "Renewal pilot", reopen_when: "Renewal contacts rise by five percent" } },
+  ]);
+  expect(hub.sign(signedPlan).status).toBe(0);
+  expect(hub.cli(["roadmap", "--product", "example"]).find(row => row.id === renewalID).trade_off).toBe(tradeoff);
+  await button(page, "Refresh").click();
+  const placement = card(page, "Renewal delays");
+  await expect(placement.locator("details")).toContainText(tradeoff);
+  await placement.getByText("Details", { exact: true }).click();
+  await expect(placement.getByText(tradeoff, { exact: true })).toBeVisible();
+
   const reason = "Legal clearance is pending for the renewal audience.";
   hub.cli(["route-context", "--write", "context/products/example/overview.md"], {
     sources: [{ reference: "Fixture legal review, item 12", date: hub.today, checked_on: hub.today,

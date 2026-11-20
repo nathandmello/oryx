@@ -5,7 +5,7 @@ description: Use automatically when the PM asks to capture, file, update, or rec
 
 # Ingest context
 
-Use [the context rules](../../../playbook/context.md) and the routing command. The PM can request capture in plain language.
+Use [the context rules](../../../playbook/context.md) and the routing command. The PM can request capture in plain language. Use the [conversation guide](../../../playbook/conversation.md) for coaching or offers. Keep authorized capture direct.
 
 For initiative meetings, use the transcript retrieval and summary workflow in [summarize-meeting](../summarize-meeting/SKILL.md). Route reusable findings with this skill.
 

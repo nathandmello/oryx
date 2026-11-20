@@ -1,6 +1,7 @@
 """Replay validated product initiative transactions into read models."""
 
 from datetime import date
+import json
 import re
 from urllib.parse import urlsplit
 
@@ -9,6 +10,7 @@ import launch_readiness
 import initiative_intake
 import metric_registry
 import outcome_evidence
+import storage
 from opportunities import SLUG
 from records import specific
 
@@ -108,6 +110,50 @@ def iso_date(value):
 def text(value):
     return (isinstance(value, str) and value == value.strip() and specific(value)
             and not re.search(r"[\x00-\x1f\x7f]", value) and bool(re.search(r"\w", value)))
+
+
+RATIONALE_FIELDS = ("choice", "alternatives", "tradeoff", "owner", "scope", "reopen_when")
+RATIONALE_MARK = " | Reviewed rationale: "
+
+
+def reviewed_rationale(event):
+    """Sign optional reviewed detail in the existing reason field, readable by version 1."""
+    if not isinstance(event, dict) or event.get("type") != "decision" or "rationale" not in event:
+        return event
+    detail = event["rationale"]
+    if not isinstance(detail, dict) or set(detail) - {"review_on"} != set(RATIONALE_FIELDS):
+        raise ValueError("Decision rationale needs " + ", ".join(RATIONALE_FIELDS) + " and optional review_on")
+    if (not text(event.get("reason")) or RATIONALE_MARK in event["reason"] or
+            not all(text(detail[key]) for key in RATIONALE_FIELDS if key != "alternatives")):
+        raise ValueError("Use concrete single-line decision and rationale fields")
+    alternatives = detail["alternatives"]
+    if (not isinstance(alternatives, list) or not alternatives or not all(text(item) for item in alternatives)
+            or len({item.casefold() for item in [detail["choice"], *alternatives]}) != len(alternatives) + 1):
+        raise ValueError("Name at least one distinct credible alternative to the chosen option")
+    if "review_on" in detail and (not iso_date(detail["review_on"]) or not iso_date(event.get("on"))
+                                   or detail["review_on"] < event["on"]):
+        raise ValueError("Set the rationale review date on or after the decision")
+    if any(event[key] != detail[key] for key in {"scope", "owner", "review_on"} & event.keys() & detail.keys()):
+        raise ValueError("The rationale must match the signed decision's scope, owner and review date")
+    signed = {key: value for key, value in event.items() if key != "rationale"}
+    signed["reason"] += RATIONALE_MARK + json.dumps(detail, ensure_ascii=False, sort_keys=True)
+    return signed
+
+
+def decision_rationale(event):
+    """Read an optional structured suffix without reinterpreting historical free text."""
+    if not isinstance(event, dict) or event.get("type") != "decision" or not isinstance(event.get("reason"), str):
+        return {}
+    reason, separator, detail = event["reason"].partition(RATIONALE_MARK)
+    if separator:
+        try:
+            rationale = storage.json_input(detail)
+            candidate = reviewed_rationale({**event, "reason": reason, "rationale": rationale})
+            if candidate["reason"] == event["reason"]:
+                return rationale
+        except ValueError:
+            pass
+    return {}
 
 
 def is_url(value):

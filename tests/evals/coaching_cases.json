@@ -1,0 +1,71 @@
+{
+  "rushed-plan": {
+    "turns": [
+      "Ship bulk export for Billing by quarter end. Help me plan.",
+      "Customers like exports.",
+      "Thanks.",
+      "Can you make it shorter?",
+      "Actually switch to Shipping. Give me the exact cutoff from the carrier review. Reply only."
+    ],
+    "criteria": [
+      "Before a plan, retrieve Billing evidence. Ask about the unresolved customer outcome, workaround, or capacity trade-off. Use one specific challenge when it decides the next step.",
+      "Treat the vague answer as insufficient. Reflect its limits, ask a real question, then wait. The neutral turn and shortened response retain Billing and the open question.",
+      "After the switch, give Shipping's 16:00 UTC cutoff and its source. Keep Billing's dispute queue and workaround out of that reply.",
+      "The assistant creates no plan, forecast, signed change or external message."
+    ]
+  },
+  "quiet-lookup": {
+    "turns": [
+      "Quiet mode for this work. Give me one sentence on the workaround the Billing ledger interviews describe. Reply only.",
+      "What do we know about displacement?"
+    ],
+    "criteria": [
+      "Answer with the Billing operators' manual CSV merge and its evidence. On follow-up identify the dispute queue or distinguish the unknown size of the trade-off.",
+      "Give two direct replies. Do not invite coaching, suggest a missing workflow, open a forecast, or change a record. Keep Shipping's cutoff out of Billing."
+    ]
+  },
+  "informed-draft": {
+    "turns": [
+      "For Billing, draft three sentences here for Product about a two-week CSV reconciliation pilot. The ledger interviews show operators merge two exports manually. We assume matching invoice IDs is the delay. Take one support pod off the dispute queue. I considered training instead. If the pilot misses mismatched IDs, training may work better. Leave the outcome open."
+    ],
+    "criteria": [
+      "Use the stated audience, evidence and alternative without making the PM repeat them. Draft the three sentences or ask only one material unresolved question.",
+      "Distinguish the interview finding, the assumption, the trade-off and the unresolved outcome. Do not turn the pilot into an approved plan, a signed decision or an external send."
+    ]
+  },
+  "defer-and-resume": {
+    "turns": [
+      "Resume the Billing decision in private/workspace/strategies/billing-export.md. I want to choose a rollout before we know what the pilot would displace.",
+      "Defer that suggestion until the next staffing review or new evidence about the dispute queue. Save that deferral and our open question in the owning strategy.",
+      "Resume private/workspace/strategies/billing-export.md. What remains open?",
+      "New information from the staffing review: Support can protect the entire dispute queue during a one-pod pilot. What changes about our decision?"
+    ],
+    "criteria": [
+      "Give one relevant suggestion grounded in the current trade-off and name the next check. The PM owns the choice.",
+      "Record only the agreed deferral and open question in the strategy. In a fresh session using the other client, recover them. Do not repeat the unchanged offer.",
+      "Treat the new account as a reported update. Explain how it affects the trade-off, verify its authority if consequential, and surface at most one timely follow-up. Preserve other work and approval boundaries."
+    ]
+  },
+  "forecast-retry": {
+    "turns": [
+      "Our existing Billing decision was to keep the manual pilot. I think there is a 75% chance at least eight pilot invoices will reconcile on their first attempt by {resolve_on}. The published pilot audit will resolve it.",
+      "Yes, record that forecast against the existing Billing pilot decision with today's date. Leave the decision as approved.",
+      "I missed the receipt. Record the same 75% forecast for that same event and date.",
+      "My belief is now 60%. Explain what changing it would require. Do not save a revision."
+    ],
+    "criteria": [
+      "After the first turn, offer once and wait. Ground the offered forecast in the existing decision; do not score decision confidence.",
+      "Explicit confirmation creates exactly one linked forecast. Verify the proposition, original 75%, date, resolution date and pilot audit criterion. Compare the created record with the original signed or context decision.",
+      "The retry returns the same record and leaves the original bytes unchanged. A later expression of 60% alone changes neither the original probability nor its unresolved outcome."
+    ]
+  },
+  "weekly": {
+    "turns": [
+      "Close my week for Billing. Review the outstanding pilot assumptions, decisions, and any forecasts that warrant attention. Reply here only."
+    ],
+    "criteria": [
+      "Return at most five in-scope findings with resolvable links and one next check. Use the actual fixture dates and scope; a clean or unavailable source cannot support an invented finding.",
+      "Distinguish an open assumption from a resolved decision or an observed forecast outcome. The PM decides whether to reopen. Keep Shipping material outside the review. No new artifact or communication."
+    ]
+  }
+}

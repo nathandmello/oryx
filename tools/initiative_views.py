@@ -15,7 +15,7 @@ import layout
 import metric_registry
 import outcome_evidence
 import records
-from initiative_events import HORIZONS, IN_DEFINITION, PHASES, iso_date, text
+from initiative_events import HORIZONS, IN_DEFINITION, PHASES, RATIONALE_MARK, decision_rationale, iso_date, text
 
 BACKLOG_FIELDS = {
     "product", "id", "title", "problem", "audience", "phase", "rank", "effort", "unit",
@@ -50,6 +50,9 @@ def view_template(root, view):
 def next_review(item, decision):
     scheduled = decision.get("review_on") or decision.get("revisit")
     dates = [change["on"] for change in item["evidence_changes"]]
+    rationale_date = decision_rationale(decision).get("review_on")
+    if rationale_date:
+        dates.append(rationale_date)
     if decision.get("action") == "review-outcomes":
         follow = decision["follow_up"]
         triggers = item["review_trigger_measurements"]
@@ -64,6 +67,13 @@ def next_review(item, decision):
             dates.append(scheduled)
         return min(dates)
     return scheduled
+
+
+def signed_claim_reason(snapshot):
+    event = {"type": "decision", "reason": snapshot["reason"], "on": snapshot["on"]}
+    if decision_rationale(event):
+        return event["reason"].partition(RATIONALE_MARK)[0]
+    return event["reason"]
 
 
 def signal_claims(private, basis):
@@ -88,10 +98,11 @@ def signal_claims(private, basis):
             pass
     for field in ("scope", "obligation", "reason"):
         if approval[field]:
-            claims.append({"text": approval[field], "authority": "PM-signed " + approval["action"],
+            claims.append({"text": signed_claim_reason(approval) if field == "reason" else approval[field],
+                           "authority": "PM-signed " + approval["action"],
                            "source": approval["source"]})
     if selection:
-        claims.append({"text": selection["reason"], "authority": "PM-signed plan",
+        claims.append({"text": signed_claim_reason(selection), "authority": "PM-signed plan",
                        "source": selection["source"], "record": selection["comparison"]["path"],
                        "revision": selection["comparison"]["sha256"]})
     return claims
@@ -204,7 +215,8 @@ def roadmap(registrations, cycle_filter=None, *, area=None, private=None):
                 "areas": item["areas"],
                 "outcome": item["description"]["outcome"], "success_metrics": sorted(item["targets"]),
                 "cycle": placement["cycle"], "rank": placement["rank"], "horizon": placement["horizon"],
-                "effort": placement["effort"], "unit": cycle["unit"], "trade_off": placement["reason"],
+                "effort": placement["effort"], "unit": cycle["unit"],
+                "trade_off": decision_rationale(placement).get("tradeoff", placement["reason"]),
                 "period_start": cycle["starts_on"], "period_end": cycle["ends_on"],
                 "planning_record": cycle["references"]["path"], "delivery": item["delivery"],
                 "evidence_reviews": evidence_review_labels(reviews),

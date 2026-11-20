@@ -63,6 +63,32 @@ class SignalReviewTests(unittest.TestCase):
         self.assertIn("Evidence review", h.cli("roadmap", "--format", "markdown"))
         h.preview(self.signal, error="Source already captured")
 
+    def test_signed_signal_feeds_scoped_coaching_and_weekly_review_once(self):
+        h = self.hub
+        h.submit(self.signal)
+        before = h.ledger.read_bytes()
+        scoped = json.loads(h.cli("task-context", "--product", "example", "--initiative", "renewal",
+                                  "Should we approve the renewal rollout?"))
+        offer = scoped["conversation"]["suggestion"]
+        self.assertEqual(offer["workflow"], "decision-coaching")
+        self.assertEqual(offer["source"], self.signal["source"])
+        self.assertIn(h.brief, offer["sources"])
+        weekly = json.loads(h.cli("decision-review", "--product", "example"))
+        rows = [row for row in weekly["findings"] if self.signal["source"] in row["sources"]]
+        row, = rows
+        self.assertEqual(row["kind"], "signal-review")
+        self.assertEqual(row["state"], "needs-triage")
+        self.assertEqual(row["risk_id"], offer["source"])
+        self.assertEqual(h.ledger.read_bytes(), before)
+
+        h.submit(self.assessment(impact="routine", claim=None, residual_risk=None,
+                                 reason="The wording changed while the decision remained current."))
+        weekly = h.cli("decision-review", "--product", "example")
+        self.assertNotIn(self.signal["source"], weekly)
+        scoped = json.loads(h.cli("task-context", "--product", "example", "--initiative", "renewal",
+                                  "Should we approve the renewal rollout?"))
+        self.assertNotIn("suggestion", scoped["conversation"])
+
     def test_material_uncertain_revise_and_retained_reviews_preserve_history(self):
         h = self.hub
         h.submit(self.signal)

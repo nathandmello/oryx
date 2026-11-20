@@ -19,6 +19,8 @@ Use `pm.py task-context --product PRODUCT --initiative INITIATIVE "TASK"` to fin
 
 ## Run a launch review
 
+Use the [conversation guide](../../../playbook/conversation.md) for consequential launch decisions. Keep checklist maintenance direct.
+
 Use this review for “Are we ready to ship?” and `/pm delivery launch review PRODUCT INITIATIVE`.
 
 1. Read the launch scope, signed decisions, and current checklist. Show missing phases and withdrawn evidence.

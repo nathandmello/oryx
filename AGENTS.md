@@ -54,7 +54,7 @@ Research and results can change earlier choices. Keep learning, delivery progres
 - Keep secrets and raw personal data out of both repositories. Use source references or de-identified evidence.
 - Use specialists only when warranted and delegation is authorised. One agent integrates shared edits.
 - Save useful findings and decisions in private records. Chat and private agent memory cannot replace them.
-- Default to thought-partner mode. Quiet mode stops unsolicited critique and questions; complete the requested work or wait.
+- Default to thought-partner mode. Follow [conversation guidance](playbook/conversation.md). In quiet mode, complete requested work or wait.
 - Use `red-team` for requested PM content reviews. Use engineering review for Hub changes. Follow [the working practices](playbook/working.md) across sessions.
 - Briefly report results, checks, and material gaps.
 

@@ -10,8 +10,10 @@
     "workspace": "Personal settings, workspace health, and installation or repository maintenance."
   },
   "verbs": {
+    "apply": "Save the reviewed change to its private record.",
     "capture": "Record evidence or prepare new intake with its source.",
     "check": "Inspect against stated rules and report failures.",
+    "coach": "Think through a product decision with the PM.",
     "critique": "Challenge claims, trade-offs, or decision quality.",
     "draft": "Start or resume a working artifact.",
     "open": "Launch a local interface for the named work.",
@@ -93,6 +95,12 @@
       "cli": ["roadmap"],
       "example": ["--product", "checkout", "--format", "markdown"]
     },
+    "portfolio decisions review": {
+      "summary": "Review due decisions, forecasts, assumptions, and conflicting evidence.",
+      "effect": "read",
+      "cli": ["decision-review"],
+      "example": ["--product", "checkout"]
+    },
     "portfolio roadmap plan": {
       "summary": "Compare roadmap candidates and prepare a capacity decision.",
       "guide": ".agents/skills/prioritize-roadmap/SKILL.md"
@@ -105,9 +113,55 @@
       "summary": "Review shipped outcomes, guardrail breaches and corrected readings. Prepare the PM's decision.",
       "guide": "playbook/initiative-approvals.md"
     },
+    "review decision coach": {
+      "summary": "Think through the evidence, options, and next decision with the PM.",
+      "guide": "playbook/conversation.md"
+    },
+    "review decision show": {
+      "summary": "Find accepted decisions that can own a forecast.",
+      "effect": "read",
+      "cli": ["forecast", "decisions"],
+      "example": ["--product", "checkout"]
+    },
+    "review forecast show": {
+      "summary": "Read forecasts and their sourced resolutions.",
+      "effect": "read",
+      "cli": ["forecast", "list"],
+      "example": ["--product", "checkout"]
+    },
+    "review forecast preview": {
+      "summary": "Preview a proposed forecast, revision, or resolution from JSON input.",
+      "effect": "read",
+      "cli": ["forecast", "preview"],
+      "example": []
+    },
+    "review forecast apply": {
+      "summary": "Save a reviewed forecast change from JSON input.",
+      "effect": "local-write",
+      "cli": ["forecast", "apply"],
+      "example": []
+    },
     "review artifact critique": {
       "summary": "Challenge a PM artifact or decision against its evidence.",
       "guide": ".agents/skills/red-team/SKILL.md"
+    },
+    "workspace checkpoint show": {
+      "summary": "Read the saved checkpoint in the owning record.",
+      "effect": "read",
+      "cli": ["conversation", "checkpoint", "show"],
+      "example": ["workspace/problems/export.md"]
+    },
+    "workspace checkpoint preview": {
+      "summary": "Preview a checkpoint update from JSON input.",
+      "effect": "read",
+      "cli": ["conversation", "checkpoint", "preview"],
+      "example": ["workspace/problems/export.md"]
+    },
+    "workspace checkpoint apply": {
+      "summary": "Save a reviewed checkpoint in its owning record.",
+      "effect": "local-write",
+      "cli": ["conversation", "checkpoint", "apply"],
+      "example": ["workspace/problems/export.md"]
     },
     "workspace browser open": {
       "summary": "Open the local PM Hub browser app to a workspace screen.",

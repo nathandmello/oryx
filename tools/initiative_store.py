@@ -9,7 +9,7 @@ import re
 import subprocess
 from tempfile import TemporaryDirectory
 
-from initiative_events import DISCOVERY_PLAN_SCOPE, Register, needs_reference, validate_event
+from initiative_events import DISCOVERY_PLAN_SCOPE, Register, needs_reference, reviewed_rationale, validate_event
 import brief_review
 import evidence_reviews
 import experiment_drafts
@@ -312,7 +312,8 @@ def prepare(root, product, changes, *, review_dates=None):
     signal_sources = {}
     proposed_experiments = set()
     definitions = None
-    for event in changes:
+    for change in changes:
+        event = reviewed_rationale(change)
         if isinstance(event, dict) and event.get("type") == "approve-experiment":
             event = experiment_drafts.proposed_plan(storage.private_root(root), product, register, event)
         elif (isinstance(event, dict) and event.get("type") == "experiment"

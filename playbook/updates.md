@@ -2,11 +2,12 @@
 
 Open the updated Hub to verify compatibility.
 
-Releases 0.3.1 through 0.8.1 use private format 2.
+Private format 2 applies.
 
 | Release | Change |
 | --- | --- |
-| 0.8.1 | Keeps [dated backlog reviews](initiative-views.md#read-the-views) visible when a signed approval needs review. |
+| 0.10.0 | Adds [decision coaching](conversation.md), [weekly review](decision-review.md), and [forecasts](decision-forecasts.md). |
+| 0.8.1 | Keeps [dated backlog reviews](initiative-views.md#read-the-views) visible when an approval is stale. |
 | 0.8.0 | Adds launch evidence history, decision conflict reviews, guardrail readings, and measurement corrections. |
 | 0.6.1 | Requires [browser impact evidence](local-ui.md#review-workflow-changes) for changes to roadmap, task, and launch checklist workflows. |
 | 0.6.0 | Opens [roadmaps, PM tasks, and launch checklists](local-ui.md) in a local browser. The app reads and updates existing private records. |
@@ -44,9 +45,11 @@ Use [the upgrade review skill](../.agents/skills/review-hub-upgrade/SKILL.md). E
 
 ## Using two machines
 
-Save and push the verified private migration from one machine when authorised. On the second, update the shared Hub, then pull private work before committing its local migration. The pull can accept an identical migration from the same history. It checks staged work and preserves working files.
+When authorised, push the verified private migration from one machine. On the second, update the Hub, then pull private work. Pull can accept an identical layout migration before local commit.
 
-If changes differ, restore the remote private repository in a separate checkout. Reconcile both copies, including staged and untracked files.
+A format-2 version update can stop this pull. Keep both staged and untracked work.
+In a separate matching Hub, clone the confirmed private branch under `private/`.
+Run `python3 tools/pm.py check` and reconcile local work before switching.
 
 ## Convert existing work
 
