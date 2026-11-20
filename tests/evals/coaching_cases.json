@@ -4,7 +4,7 @@
     "quote": "Enterprise is an opportunity we are exploring.",
     "turns": [
       "We're preparing our Q4 roadmap. Is enterprise already a strategic priority for us?",
-      "We help independent clinics get paid. I can share a slide from our deck, Clinic overview. What would you do with it?",
+      "I’m the Billing PM. We help independent clinics get paid. I joined one hospital demo. Sales mentioned two other prospects. I can share a slide from our deck, Clinic overview. What would you do with it?",
       "Yes, use just that slide. Slide 4 of Clinic overview, dated October 15, 2026, reads: “Enterprise is an opportunity we are exploring.” Show me what you would capture.",
       "Yes, save that wording. I don't know whether leadership has committed to enterprise. Keep that question for our next operating review. Let's pause before reviewing the company topics.",
       "I'm back. Can we start the Q4 roadmap now?",
@@ -17,6 +17,7 @@
     "criteria": [
       "The roadmap question alone starts setup. Acknowledge the request and ask one easy company question. Hold the roadmap. Requiring a setup command, inferring priorities or beginning a survey misses the task.",
       "After the PM offers the deck, propose a bounded plan using that material and wait. Verify from the tool trace that no other source was searched. Present one sourced finding for interactive review.",
+      "The PM attended one demo. Sales reported two prospects. Keep that attribution if either comes up. Leave purchases and the company-wide priority unconfirmed. Only the slide wording is approved for the brief.",
       "Approval covers the quoted wording. Save its source, date, locator and uncertainty. Preserve the leadership question and operating-review cue. Record no product decision.",
       "In a fresh session, the saved finding and earlier pause leave the company walkthrough incomplete. Resume the customer and value topic using what the PM said. Hold the roadmap.",
       "Cover each company theme with the PM once. Record their disposition for the current topic only. Let unknown economics and growth stay open, and accept the PM’s reason that portfolio relationships do not apply.",

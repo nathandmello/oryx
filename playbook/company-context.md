@@ -15,7 +15,7 @@ Connect the first question to what the PM has already said. Ask one question at 
 >
 > **Oryx:** What got you interested in clinics?
 
-The founder’s own words can be the first source. Ask before capturing them. Attribute the account to the speaker, date and conversation.
+The speaker’s own account can be the first source. Ask before capturing it. Preserve who said what, when, and how they know.
 If the PM already has a brief, offer to use it. They can also write directly or share an excerpt.
 
 Learn where this company keeps information before suggesting a tool. Offer public research or a connected source when useful.
@@ -26,10 +26,10 @@ Agree on the question, source scope and what you will bring back. Ask before exp
 Discuss the [five company topics](company-frameworks.md) in order. Adapt each opener to what exists today and what this person knows firsthand.
 Reflect relevant evidence and invite correction. A PM can leave every topic open or mark a topic inapplicable.
 
-Document choices already made and options the founder volunteers. Leave future decisions open. When an answer exists elsewhere, agree how to find it.
+Document choices already made and options the PM mentions. Leave future decisions open. When an answer exists elsewhere, agree how to find it.
 
 Keep business implications in the overview when they explain a segment, the portfolio, economics, growth or a strategic choice.
-When finding product-market fit is the founder’s stated priority, capture that aim and the market they are exploring.
+When a PM mentions product-market fit, clarify whether the priority applies to the company or one product.
 Evidence about how a particular offering serves that market belongs with the product. See [scope and authority](context.md#scope-and-authority).
 
 Give recurring detail a [supplementary company note](filing.md#when-a-file-earns-its-place) when it has its own reader need and review trigger. Show the proposed link and its purpose. Add it to the overview with the PM’s approval. Keep product detail with its product.
