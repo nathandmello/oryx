@@ -5,6 +5,7 @@ import unittest
 
 import test_conversation
 import test_pm
+import hook
 import onboarding_review
 import task_context
 from onboarding_fixtures import define_fixture_frameworks, review_current_topic
@@ -22,6 +23,9 @@ class OnboardingHookTests(unittest.TestCase):
 
     def test_each_stage_routes_every_request_then_offers_the_original_task_once(self):
         clients = ("Codex", "Claude")
+        for client in clients:
+            start = self.turn(client, "SessionStart", client)
+            self.assertIn(hook.CANDOR_GUIDANCE, start["hookSpecificOutput"]["additionalContext"])
         requests = {"company": "Build me a Q4 roadmap by morning.",
                     "pm": "/pm portfolio backlog show",
                     "product": "Expedite mode. Put Billing on the roadmap."}
@@ -29,6 +33,7 @@ class OnboardingHookTests(unittest.TestCase):
             for topic in self.frameworks[stage]:
                 for client in clients:
                     route, guidance = self.prompt(client, client, requests[stage])
+                    self.assertIn(hook.CANDOR_GUIDANCE, guidance)
                     self.assertEqual(route["status"], "onboarding_required")
                     state = route["onboarding"]
                     self.assertEqual(state["stage"], stage)

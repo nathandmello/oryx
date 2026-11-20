@@ -57,6 +57,16 @@ class ConversationTests(unittest.TestCase):
         line = guidance.splitlines()[-1]
         return (json.loads(line) if line.startswith("{") else {}), guidance
 
+    def test_candor_reaches_both_clients_from_start_through_quiet_mode(self):
+        for client in ("Codex", "Claude"):
+            with self.subTest(client=client):
+                startup = self.turn(client, "SessionStart", client)
+                _, ordinary = self.prompt(client, client, "Thanks!")
+                scope, quiet = self.prompt(client, client, "Quiet mode for Billing. Summarize the plan.")
+                self.assertEqual(scope["conversation"]["mode"], "quiet")
+                for guidance in (startup["hookSpecificOutput"]["additionalContext"], ordinary, quiet):
+                    self.assertIn(hook.CANDOR_GUIDANCE, guidance)
+
     def test_registered_clients_keep_per_turn_rules_after_walkthrough(self):
         overview = self.work / "context/company/overview.md"
         original = overview.read_bytes()

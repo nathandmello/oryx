@@ -19,6 +19,12 @@ import preferences
 import task_context
 
 
+CANDOR_GUIDANCE = (
+    "Answer directly. Skip reflexive praise or agreement. Respect preferences and decisions. "
+    "Agree plainly when warranted. If a claim exceeds the evidence, explain the gap. "
+    "Revise your assessment when new facts or a better argument warrant it."
+)
+
 CAPTURE_GUIDANCE = (
     "For requests to capture or update context, automatically read .agents/skills/ingest-context/SKILL.md. "
     "For meeting transcripts, read .agents/skills/summarize-meeting/SKILL.md before fetching sources. "
@@ -413,6 +419,9 @@ def main():
                 notice = pm.alignment_notice(root, report)
                 if notice:
                     result["hookSpecificOutput"]["additionalContext"] += "\n" + notice
+        if event in {"SessionStart", "UserPromptSubmit"}:
+            output = result["hookSpecificOutput"]
+            output["additionalContext"] = CANDOR_GUIDANCE + "\n" + output["additionalContext"]
         print(json.dumps(result))
         return 0
     except Exception as exc:
