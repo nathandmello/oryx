@@ -759,7 +759,7 @@ class InitiativeTests(unittest.TestCase):
         self.assertEqual((self.work / "customizations/settings.json").read_bytes(), original_state)
         change({"fields": {"x-confidence": {"type": "number"}}},
                {"x-confidence": 50, "x-rollout": 25, "x-milestone": "2028-02-29"})
-        change({}, {"x-milestone": "2027-02-29", "x-rollout": 100}, error="day is out of range")
+        change({}, {"x-milestone": "2027-02-29", "x-rollout": 100}, error="Invalid date value for Contract date")
         self.assertEqual(row("internal")["x-rollout"], 25)
         self.assertEqual(row("customer"), {"title": "Renewal delays", "x-milestone": "2028-02-29"})
         self.assertEqual(row("internal")["x-confidence"], 50)

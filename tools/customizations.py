@@ -302,7 +302,10 @@ def field_value(field, value):
     else:
         valid = line(value)
         if valid and kind == "date":
-            valid = date.fromisoformat(value).isoformat() == value
+            try:
+                valid = date.fromisoformat(value).isoformat() == value
+            except ValueError:
+                valid = False
     if not valid:
         raise ValueError(f"Invalid {kind} value for {field['label']}")
 
