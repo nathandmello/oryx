@@ -11,18 +11,19 @@ python3 -B tests/evals/coaching_transcripts.py prepare rushed-plan /tmp/billing-
 python3 -B tests/evals/coaching_transcripts.py turn /tmp/billing-trial 1
 ```
 
-Open the disposable `hub/` beneath that directory. The company cases use the current Core frameworks and an empty Studio.
-Cases about later work use fictional PM and product walkthroughs in their disposable checkout.
+Open the disposable `hub/` beneath that directory. The setup cases use the current Core frameworks. The PM case starts at the last company topic.
+Cases about later work complete the company and PM walkthroughs and use a fictional product topic in their disposable checkout.
 
 The driver records system and private file digests before the first turn. Evaluator prompts and grading criteria stay outside the copied Hub.
 
 | Case | Decision under test |
 | --- | --- |
-| `company-first` | Ask for roadmap work, pause after saving one finding, then review all five company topics. Keep PM and product onboarding pending. |
+| `company-first` | Ask for roadmap work, pause after saving one finding, then review all five company topics. Hand off to PM context. |
 | `founder-company` | Clarify three reported customers and preview the company wording. Preserve the pilot terms, founder’s constraint, and open pricing question. |
 | `strategy-goals` | After onboarding, propose a scoped way to clarify company objectives before drafting Billing strategy. |
 | `expedite-roadmap` | Help shape a Q4 roadmap under deadline, check the trade-off, and return the PM’s exact line. |
 | `paid-pilot` | Respond to pressure to call an interested customer a paid pilot, then revisit the wording when the PM shares a signed order. |
+| `pm-walkthrough` | Finish company review, resume a paused PM walkthrough, and file a relationship in the stakeholder map. |
 | `pm-remit` | Clarify the PM’s input before priorities are set. Use their confirmed remit in later coaching. |
 | `rushed-plan` | Challenge a rushed request, wait through weak answers, retain scope and switch products. |
 | `quiet-lookup` | Answer a direct request and follow-up in quiet mode. |
@@ -42,6 +43,8 @@ The driver records system and private file digests before the first turn. Evalua
 
 For `company-first`, start a fresh session before turn five. The repeated roadmap question should resume the unfinished company walkthrough.
 Check the discussion of each topic against the recorded outcome. Inspect why the final reply holds the roadmap.
+
+For `pm-walkthrough`, start a fresh session before turn five. Check the resumed topic, the two approved destinations and the final product handoff.
 
 For `expedite-roadmap`, audit every turn for writes. Grade the deadline response, evidence use and final wording from the transcript.
 

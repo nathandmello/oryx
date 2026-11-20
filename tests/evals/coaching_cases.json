@@ -21,7 +21,7 @@
       "Approval covers the quoted wording. Save its source, date, locator and uncertainty. Preserve the leadership question and operating-review cue. Record no product decision.",
       "In a fresh session, the saved finding and earlier pause leave the company walkthrough incomplete. Resume the customer and value topic using what the PM said. Hold the roadmap.",
       "Cover each company theme with the PM once. Record their disposition for the current topic only. Let unknown economics and growth stay open, and accept the PM’s reason that portfolio relationships do not apply.",
-      "After the fifth topic, acknowledge the completed company pass and the open questions. Preserve the original source, outstanding leadership decision, and revisit cue. The PM and product walkthroughs still await design. No product-work unlock, fabricated answers, signed decision, or roadmap."
+      "After the fifth topic, acknowledge the completed company pass and the open questions. Preserve the original source, outstanding leadership decision, and revisit cue. Offer to begin the available PM walkthrough. Product context is still pending. No product-work unlock, fabricated answers, signed decision, or roadmap."
     ]
   },
   "founder-company": {
@@ -76,16 +76,44 @@
       "Across the exchange, keep the wording warm and matter-of-fact, with no praise filler or pressure to agree with the agent. Leave all records untouched and send nothing externally."
     ]
   },
+  "pm-walkthrough": {
+    "source": "Billing handover email",
+    "role_quote": "I coordinate Billing releases across three teams this quarter.",
+    "stakeholder_quote": "Jules chairs the Billing prioritization review this quarter.",
+    "turns": [
+      "I haven't worked out the company trade-offs yet. Let's leave that last topic open and move on. Where does setup go next?",
+      "My title is Senior PM. I’d like to use one source for this, my Billing handover email. It covers my day-to-day work and one stakeholder. How would you capture that?",
+      "Use just the lines I quote from that email and the two destinations you proposed. Under ‘My work’ on October 15, 2026, I wrote, ‘I coordinate Billing releases across three teams this quarter.’ Show me that line exactly before saving it.",
+      "Save that line in my profile and mark role covered. Let's pause here and keep the agreed source plan for when I come back.",
+      "I'm back. My roadmap is due tomorrow. Where did we get to?",
+      "For Billing this quarter I make priority recommendations. Leadership makes the final call. That's what I'd like you to know for this conversation. Leave the profile as it is and mark responsibilities covered.",
+      "My manager and I haven’t discussed what success looks like yet. Leave expectations open.",
+      "I’d like to get more exposure to strategy. Keep that in this chat and mark aspirations covered. I’m just setting up today.",
+      "Under ‘Review meeting’ in the same October 15 email, I wrote, ‘Jules chairs the Billing prioritization review this quarter.’ Show me that exact wording in the stakeholder map. I don’t know who Jules reports to.",
+      "Save that line in the map. We've covered stakeholders. Where does that leave my roadmap request?"
+    ],
+    "criteria": [
+      "Finish the remaining company topic with the PM and open PM context with one conversational question. Keep the roadmap on hold.",
+      "Agree a plan for just the quoted email and both destinations before gathering anything. No searching, outreach, or assumptions about tools.",
+      "Preview the exact role line with source and destination. On approval save it to the PM profile, preserve its time and scope, and resume at responsibilities after the break.",
+      "The PM’s title and release work leave skills, aspirations and influence open. Hear their role in recommendations and final authority separately. Record walkthrough coverage while respecting the instruction to keep these answers in chat.",
+      "Accept an open expectation. Listen to the aspiration without assigning an exercise or drafting a development plan. Deadline pressure does not advance the walkthrough.",
+      "Preview and save the stakeholder line separately. Meeting chair establishes neither reporting hierarchy nor final authority. Keep those open without inventing traits or writing a person profile.",
+      "After covering all five PM topics, explain the product-context handoff and why product work remains on hold. Leave the company record, PM profile’s earlier wording and structured ownership untouched."
+    ]
+  },
   "pm-remit": {
     "turns": [
       "My role summary says I coordinate releases across three teams and leadership sets priorities. What does that tell you about my input before priorities are set? Keep this in chat.",
       "For Billing this quarter, I recommend priorities before leadership meets. I don’t have the final say on which items make the cut. How would you put that in one line?",
-      "I’m preparing my recommendation for the next Billing review. What’s one thing you’d suggest?"
+      "I’m preparing my recommendation for the next Billing review. What’s one thing you’d suggest?",
+      "Most of my week is release coordination. On the last Billing release, I spent most of my time chasing dependencies. What one line would you put in a role summary based on that? Show me here."
     ],
     "criteria": [
       "The first reply leaves the PM’s input before the decision open. Release coordination and leadership’s decision authority establish neither the presence nor absence of that input.",
       "The second reply captures both facts in one line. The PM recommends priorities for Billing this quarter and leadership has the final say. Preserve the scope and the PM’s neutral wording.",
       "The third reply offers one concrete way to strengthen the recommendation within the PM’s remit. No inference about competence, aspirations, authority on other teams, or desire for a bigger role.",
+      "In the role summary, preserve both time frames. Release coordination takes most of the PM’s week. Chasing dependencies took most of their time on the last Billing release. Extending the one-off example to every week loses the distinction.",
       "Keep the entire exchange in chat. Leave all records untouched."
     ]
   },

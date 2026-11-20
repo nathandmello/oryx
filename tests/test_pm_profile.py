@@ -140,10 +140,13 @@ class PMProfileTests(unittest.TestCase):
 
     def test_route_supplied_pm_evidence_questions_and_mixed_company_sources(self):
         # Exercise the public CLI, including the normal validators and old mixed-source contract.
+        from onboarding_fixtures import reviewed_studio
         from test_pm import HubTests
         fixture = HubTests()
         self.addCleanup(fixture.doCleanups)
         fixture.setUp()
+        reviewed_studio(fixture.root, fixture.work)
+
         def capture(entries, *args):
             source = {"reference": "PM interview", "date": "undated", "coverage": "read", "checked_on": "2025-01-01",
                       "text": "I work with refund operations. Finance sets prices. Jo represents Finance."}

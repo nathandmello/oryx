@@ -113,12 +113,11 @@ def review(private, payload):
             raise ValueError("Review the currently available walkthrough stage")
         if payload["topic"] != view["walkthroughs"][stage]["next_topic"]["id"]:
             raise ValueError("Review the current walkthrough topic with the PM before moving on")
-        if stage == "company":
+        if stage in {"company", "pm"}:
             import company_onboarding
-            if company_onboarding.read(private)[1]["pending"]:
-                raise ValueError("Accept or defer the pending company finding before advancing the walkthrough")
-        # The receipt records coverage only. The PM's words become company evidence
-        # only through the separate source and wording review.
+            if company_onboarding.read(private, kind=stage)[1]["pending"]:
+                raise ValueError(f"Accept or defer the pending {NAMES[stage]} finding before advancing the walkthrough")
+        # The receipt records coverage only. Capturing a fact has its own source and wording review.
         topics = state["reviewed"][stage]
         topics[payload["topic"]] = payload["outcome"]
         if all(topic["id"] in topics for topic in frameworks[stage]):

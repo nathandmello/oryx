@@ -140,7 +140,12 @@ def fingerprint(text):
 
 def scope_key(scope):
     if not isinstance(scope, dict):
-        raise ValueError("Choose a known company, product, area, or initiative scope")
+        raise ValueError("Choose a known company, stakeholder, product, area, or initiative scope")
+    if scope.get("stakeholders") is True:
+        if len(scope) == 1:
+            return ("stakeholders",)
+        if scope.get("product"):
+            return ("stakeholders", *scope_key({k: v for k, v in scope.items() if k != "stakeholders"}))
     if (scope.get("company") is True and set(scope) <= {"company", "product", "area", "initiative"}
             and all(scope.get(key) is None for key in ("product", "area", "initiative"))):
         return ("company",)
@@ -149,7 +154,7 @@ def scope_key(scope):
             and all(value is None or isinstance(value, str) and layout.SLUG.fullmatch(value)
                     for value in scope.values())):
         return tuple(scope.get(key) for key in ("product", "area", "initiative"))
-    raise ValueError("Choose a known company, product, area, or initiative scope")
+    raise ValueError("Choose a known company, stakeholder, product, area, or initiative scope")
 
 
 def offer_key(value):

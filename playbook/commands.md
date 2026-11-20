@@ -37,7 +37,8 @@ Use the verb to describe what the PM gets.
 | `review` | Apply independent critique across multiple kinds of work. | `/pm review artifact critique` |
 | `workspace` | Manage personal settings, repository state, or oryx health. | `/pm workspace preferences show` |
 
-Use `/pm context company capture` to set up or continue a company brief. Use `/pm context company show` to inspect progress.
+Onboarding starts in conversation. For a direct entry point, use `/pm context company capture` or `/pm context pm capture`.
+Use `/pm context company show` for company review progress, `/pm context pm show` for your profile, and `/pm context stakeholder show` for relationships.
 
 For meeting evidence about a potential initiative, use context capture to preserve the source.
 Use initiative intake when the PM wants to assess a distinct investment or attach a signal to one.

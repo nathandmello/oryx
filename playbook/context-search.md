@@ -9,6 +9,10 @@ An ambiguous request returns possible subjects. A named record or exact identifi
 When a search finds no match, describe what you checked. Leave the underlying question open.
 Carry a documented exclusion forward with its original scope and timing.
 
+For a question about the PM, use `pm.py pm-profile --topic responsibilities` or the relevant profile topic.
+Use `pm.py pm-profile` to list older or handwritten sections. Ask before opening a section that mixes personal subjects.
+Use the [stakeholder map](stakeholders.md) for reporting lines or decision roles.
+
 Within that scope, the resolver compares eligible passages by wording and meaning.
 It uses the title, heading, and valid section lead to interpret short passages.
 It checks selected notes against the current source file and returns the complete entry with its source references.

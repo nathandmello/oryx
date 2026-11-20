@@ -111,7 +111,7 @@ test("an empty Studio opens its agent walkthrough from a task deep link", async 
 
   const catalog = path.join(hub.root, "playbook", "onboarding-frameworks.json");
   const frameworks = JSON.parse(fs.readFileSync(catalog, "utf8"));
-  fs.writeFileSync(catalog, JSON.stringify({ ...frameworks, pm: null, product: null }));
+  fs.writeFileSync(catalog, JSON.stringify({ ...frameworks, product: null }));
   let progress = hub.cli(["onboarding", "status"]);
   for (const topic of frameworks.company) {
     progress = hub.cli(["onboarding", "review-topic"], {
@@ -121,14 +121,23 @@ test("an empty Studio opens its agent walkthrough from a task deep link", async 
   }
   await button(page, "Check progress").click();
   await expect(page.getByRole("heading", { name: "PM context" })).toBeVisible();
-  await expect(page.getByText("You can keep adding what you learn about the company", { exact: false })).toBeVisible();
+  await expect(page.getByText(frameworks.pm[0].question, { exact: true })).toBeVisible();
+  for (const topic of frameworks.pm) {
+    progress = hub.cli(["onboarding", "review-topic"], {
+      revision: progress.revision, stage: "pm", topic: topic.id,
+      outcome: "open", pm_reply: "Let's keep this open for now.",
+    });
+  }
+  await button(page, "Check progress").click();
+  await expect(page.getByRole("heading", { name: "Product context" })).toBeVisible();
+  await expect(page.getByText("You can still update your company, PM, and stakeholder context", { exact: false })).toBeVisible();
   await expect(button(page, "New task")).toHaveCount(0);
 
   const checkpoint = path.join(studio, "workspace", "onboarding", "review.json");
   fs.writeFileSync(checkpoint, "damaged test checkpoint");
   await button(page, "Check progress").click();
   await expect(page.getByText("Ask oryx to review your saved progress with you.")).toBeVisible();
-  await expect(page.getByText("You can keep adding what you learn", { exact: false })).toHaveCount(0);
+  await expect(page.getByText("You can still update your company", { exact: false })).toHaveCount(0);
 
   fs.writeFileSync(catalog, JSON.stringify(frameworks));
   fs.renameSync(studio, path.join(path.dirname(hub.root), "empty-studio"));

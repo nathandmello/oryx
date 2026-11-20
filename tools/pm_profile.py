@@ -14,8 +14,11 @@ PATH = layout.PROFILE
 LEGACY = "context/pm-remit.json"
 CAPTURE_START = "<!-- start PM context capture -->"
 CAPTURE_END = "<!-- end PM context capture -->"
+# Share existing section names so earlier clients can still append to the profile.
+WALKTHROUGH_TOPICS = {"role": "PM background", "responsibilities": "Other PM context",
+                      "expectations": "Other PM context", "aspirations": "Other PM context"}
 TOPICS = {"background": "PM background", "preferences": "Working preferences",
-          "stakeholders": "PM stakeholders", "context": "Other PM context"}
+          "stakeholders": "PM stakeholders", "context": "Other PM context", **WALKTHROUGH_TOPICS}
 HEADING = "## PM remit"
 RESPONSIBILITIES = ("Responsibility", "Role", "Goals", "Depends on")
 FOLLOW = ("Follow",)

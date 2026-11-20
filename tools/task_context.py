@@ -42,6 +42,13 @@ CUSTOMIZATION_PATH = re.compile(
     r"""(["'`])(?:(?:/[^"'\x60\n]*/)?(?:studio|private|workspace)/)?customizations/[^"'\x60\n]+\1"""
     r"|<(?:(?:/[^<>\n]*/)?(?:studio|private|workspace)/)?customizations/[^<>\n]+>"
     r"|(?:(?<![\w.-])(?:studio|private|workspace)/|(?<![\w./-]))customizations/[\w./%+-]+", re.I)
+STAKEHOLDER_QUERY = re.compile(
+    r"\bstakeholder (?:map|context)\b|\b(?:list|show|map|who are) (?:me )?(?:the |my |our )?stakeholders\b|"
+    r"\breporting (?:lines?|relationships?|structure)\b|"
+    r"\bwho (?:do|does) [^?.!]{1,60} report to\b|"
+    r"\b(?:who|which (?:person|team|role)) (?:can |typically |usually |currently )?"
+    r"(?:approves?|decides?|recommends?|advises?|owns?|signs? off|has (?:the )?final say|"
+    r"is (?:the (?:approver|decision maker)|responsible for|accountable for))\b", re.I)
 COMPANY_QUERY = re.compile(r"\bcompany(?:-wide| context| overview| policy)\b", re.I)
 # In a company-only Studio, a standalone question about the business model has
 # an identifiable subject. A named organisation or comparison needs clarification.
@@ -140,6 +147,8 @@ def inherit_products(documents):
 
 def resolved_artifact(name, documents):
     if name in documents:
+        if layout.stakeholder_record(name):
+            return {"stakeholders": True}
         doc = documents[name]
         if doc["company"]:
             return {"company": True, "product": None, "area": None, "initiative": None}
@@ -229,11 +238,17 @@ def source_matches(scoped, prompt, terms):
 
 def choose_scope(private, documents, prompt, cwd, previous, explicit):
     overview = {doc["product"]: doc for doc in documents.values() if doc["kind"] == "product-context"}
+    switched = bool(SWITCH.match(prompt))
+    followup = not switched and FOLLOW_UP.match(prompt.strip())
+    relationship = STAKEHOLDER_QUERY.search(prompt) or (previous and previous.get("stakeholders") and followup)
+
+    def with_relationship(scope):
+        return {**scope, "stakeholders": True} if relationship and scope.get("product") else scope
+
     if explicit:
-        return explicit, []
+        return with_relationship(explicit), []
     if conversation.acknowledgement(prompt):
         return {}, []
-    switched = bool(SWITCH.match(prompt))
     prompt = SWITCH.sub("", prompt)
     artifacts = re.findall(r"(?:(?:studio|private|workspace)/)?((?:context|workspace)/[\w./-]+?\.(?:md|json))\b", prompt)
     known = [scope for name in artifacts if (name.endswith(".md") or layout.initiative_work_identity(name))
@@ -244,6 +259,11 @@ def choose_scope(private, documents, prompt, cwd, previous, explicit):
         identifier = doc["id"]
         if identifier and (match := re.search(r"\b" + re.escape(identifier) + r"/([a-z0-9-]+)\b", prompt)):
             known.append({"product": product, "area": None, "initiative": match[1]})
+    if any(item.get("stakeholders") for item in known):
+        others = [item for item in known if not item.get("stakeholders")]
+        if others:
+            return {}, sorted({"stakeholders", *(item.get("product") or "company" for item in others)})
+        return {"stakeholders": True}, []
     if known:
         products = sorted({item["product"] for item in known if item["product"]})
         scopes = {(item["product"], item["area"], item["initiative"]) for item in known}
@@ -251,23 +271,27 @@ def choose_scope(private, documents, prompt, cwd, previous, explicit):
             specific = [item for item in known if item["area"] or item["initiative"]]
             if len(products) > 1 or len({(item["area"], item["initiative"]) for item in specific}) > 1:
                 return {}, sorted({"/".join(value for value in scope if value) or "company" for scope in scopes})
-            return (specific or known)[0], []
-        return known[0], []
+            return with_relationship((specific or known)[0]), []
+        return with_relationship(known[0]), []
 
-    if COMPANY_QUERY.search(prompt):
+    if not relationship and COMPANY_QUERY.search(prompt):
         return {"company": True}, []
 
     terms = words(prompt)
     named = sorted(product for product, doc in overview.items()
                    if mentions(prompt, product) or mentions(prompt, doc["title"]))
     if len(named) == 1:
-        return inferred_scope(documents, named[0], terms), []
+        return with_relationship(inferred_scope(documents, named[0], terms)), []
     if named:
         return {}, named
+    if relationship:
+        if followup and previous and previous.get("product") in overview:
+            return with_relationship(previous), []
+        return {"stakeholders": True}, []
     if re.search(r"\bour (?:company|business)\b", prompt, re.I):
         return {"company": True}, []
-    if previous and not switched and FOLLOW_UP.match(prompt.strip()):
-        if previous.get("company") or previous.get("product") in overview:
+    if previous and followup:
+        if previous.get("stakeholders") or previous.get("company") or previous.get("product") in overview:
             return previous, []
     if not switched and cwd and cwd != private and private in cwd.parents:
         scope = resolved_artifact((cwd / "scope.md").relative_to(private).as_posix(), documents)
@@ -503,6 +527,8 @@ def resolve_current(private, prompt, cwd, previous, explicit, explain, include_h
             review = next((candidate for candidate in candidates if candidate["id"] == requested), None)
         if review:
             scope = review["scope"] if review["scope"].get("product") else {"company": True}
+            if layout.stakeholder_record(review["owner"]):
+                scope = {"stakeholders": True}
             choices = []
     status = "ambiguous" if choices else "resolved" if scope else "unscoped"
     result = {"status": status, "scope": scope, "choices": choices, "entries": [], "warnings": []}
@@ -549,6 +575,8 @@ def resolve_current(private, prompt, cwd, previous, explicit, explain, include_h
             result["warnings"].append(f"Could not verify the registered initiative scope: {exc}")
     overview = docs.get(layout.product(product)) if product else None
     company = (overview["parent"] or layout.COMPANY) if overview else layout.COMPANY if scope.get("company") else None
+    if scope.get("stakeholders") and layout.STAKEHOLDERS not in docs:
+        result["warnings"].append(f"No readable stakeholder map was found at {layout.STAKEHOLDERS}.")
     if product and not overview:
         result["warnings"].append(f"Missing product context for {product}.")
     if company and company not in docs:
@@ -558,6 +586,13 @@ def resolve_current(private, prompt, cwd, previous, explicit, explain, include_h
     labels, cached_notes = {}, {}
     view = json.dumps([through.isoformat(), sorted(areas)])
     review_documents = []
+    map_product = product if scope.get("stakeholders") else None
+
+    def names_product(text):
+        # The source location can name a different product. Use the recorded statement and its heading.
+        statement = re.sub(r"\[S[1-9]\d*\][^\n]*", "", text)
+        return mentions(statement, map_product) or bool(overview and words(overview["title"]) and mentions(statement, overview["title"]))
+
     for name, meta in docs.items():
         if not evidence_reviews.in_scope(meta, scope, areas, company):
             continue
@@ -568,11 +603,14 @@ def resolve_current(private, prompt, cwd, previous, explicit, explain, include_h
         elif not terms:
             continue
         due_dates[name] = meta["due"]
-        optional_note = name not in base
+        scoped_map = map_product and layout.stakeholder_record(name)
+        optional_note = name not in base and not scoped_map
         candidates = index.projection(name, view) if optional_note and name not in loaded else None
         if candidates is None:
             doc = live(name)
             candidates = list(linked_entries(doc, areas, through))
+            if scoped_map:
+                candidates = [row for row in candidates if names_product(row["text"]) or names_product(row["section"])]
             if optional_note:
                 index.save_projection(name, view, candidates)
         else:
@@ -621,6 +659,10 @@ def resolve_current(private, prompt, cwd, previous, explicit, explain, include_h
             result["warnings"].append(f"Review overdue for {name}. Confirm current authority before relying on it.")
     relevant = evidence_reviews.scoped_reviews(loaded, review_documents, saved_reviews, scope, areas, through,
                                               recall_ids=risk_ids, recall_all=include_history)
+    if map_product:
+        relevant = {key: review for key, review in relevant.items()
+                    if not layout.stakeholder_record(review["owner"]) or
+                    all(names_product(claim["text"]) or names_product(claim.get("section", "")) for claim in review["claims"])}
     for review in signed_reviews:
         relevant[("signal", review["initiative"], review["id"])] = review
     active = [r for r in relevant.values() if r.get("active", r["state"] in evidence_reviews.OPEN)
@@ -680,7 +722,10 @@ def resolve_current(private, prompt, cwd, previous, explicit, explain, include_h
         result.pop("evidence_gap", None)
     profile = private / layout.PROFILE
     if profile.resolve() == profile and profile.is_file() and layout.PROFILE not in upgrades.source_paths(private):
-        preferences = records.section(profile.read_text(encoding="utf-8"), "Working preferences")
+        profile_text = profile.read_text(encoding="utf-8")
+        preferences = records.section(profile_text, "Working preferences")
+        if scope.get("stakeholders") and (records.section(profile_text, "PM stakeholders") or "").strip():
+            result["warnings"].append(f"Review existing stakeholder notes in {layout.PROFILE} with the PM before reusing them.")
         if preferences and preferences.strip():
             result["pm_preferences"] = preferences.strip()[:1200]
     return result
@@ -829,6 +874,9 @@ def turn_context(private, prompt, *, cwd=None, saved=None, explicit=None, work_r
         cue = company_onboarding.followup(private, prompt, company_scope=scope.get("company"))
         if cue:
             turn["company_followup"] = cue
+        pm_cue = company_onboarding.followup(private, prompt, company_scope=False, kind="pm")
+        if pm_cue:
+            turn["pm_followup"] = pm_cue
     result["conversation"] = turn
     record = previous.get("record") if same_work and not scope and not selected_new_owner else None
     if checkpoint:

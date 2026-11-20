@@ -940,8 +940,10 @@ function setupScreen() {
   let handoff = "Continue in your oryx conversation. You can leave questions open.";
   if (current.stage === "repair") {
     handoff = "Ask oryx to review your saved progress with you.";
-  } else if (!current.stage_available && ["pm", "product"].includes(current.stage)) {
+  } else if (!current.stage_available && current.stage === "pm") {
     handoff = "You can keep adding what you learn about the company in your oryx conversation.";
+  } else if (!current.stage_available && current.stage === "product") {
+    handoff = "You can still update your company, PM, and stakeholder context with oryx.";
   }
   app.append(heading("Continue onboarding", `You can return to ${screenNames[state.screen]} after the walkthrough.`),
     node("section", { class: "panel stack" },

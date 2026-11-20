@@ -7,7 +7,8 @@ import sys
 import unittest
 
 import test_pm
-from onboarding_fixtures import reviewed_studio
+from onboarding_fixtures import review_current_topic, reviewed_studio
+import onboarding_review
 import context_capture
 import pm
 import records
@@ -117,6 +118,7 @@ class ProductAreaTests(unittest.TestCase):
         self.assertEqual(pm.check(self.root), [])
 
     def test_invalid_areas_do_not_rewrite_existing_remits_or_create_records(self):
+        reviewed_studio(self.root, self.work)
         old = {"responsibilities": [], "follow": ["area/refunds"]}
         self.assertEqual(self.save(old).returncode, 0)
         path = self.work / context_capture.REMIT_PATH
@@ -137,15 +139,18 @@ class ProductAreaTests(unittest.TestCase):
     def test_capturing_ownership_does_not_complete_the_walkthrough(self):
         company = records.create(self.root, "company-context", "context/company/overview.md")
         original = company.read_bytes()
+        self.assertEqual(onboarding_review.status(self.work)["stage"], "company")
+        while onboarding_review.status(self.work)["stage"] == "company":
+            review_current_topic(self.work)
         for remit in (
             {"responsibilities": [], "follow": []},
             {"responsibilities": [self.responsibility("product/shop")], "follow": [], "status": "confirmed"},
         ):
             self.assertEqual(self.save(remit).returncode, 0)
             report = json.loads(self.cli("align", "--status"))
-            self.assertEqual(report["onboarding"]["stage"], "company")
+            self.assertEqual(report["onboarding"]["stage"], "pm")
             guidance = self.startup()
-            self.assertEqual(json.loads(guidance.splitlines()[-1])["onboarding"]["stage"], "company")
+            self.assertEqual(json.loads(guidance.splitlines()[-1])["onboarding"]["stage"], "pm")
             self.assertEqual(company.read_bytes(), original)
 
     def test_damaged_remit_is_reported_and_capture_preserves_it(self):

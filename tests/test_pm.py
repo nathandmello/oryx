@@ -284,7 +284,8 @@ class HubTests(unittest.TestCase):
 
     def test_each_template_creates_a_valid_unfinished_draft(self):
         import filing
-        paths = {"company-context": "context/company/overview.md", "product-context": "context/products/example/overview.md",
+        paths = {"company-context": "context/company/overview.md", "stakeholder-context": "context/stakeholders/overview.md",
+                 "product-context": "context/products/example/overview.md",
                  "initiative-context": "context/initiatives/pilot/overview.md", "context-note": "context/company/rates.md",
                  "product-area-context": "context/products/example/areas/refunds/overview.md",
                  "goal": "workspace/goals/example.md", "problem": "workspace/problems/example.md",
@@ -1174,6 +1175,7 @@ class HubTests(unittest.TestCase):
         self.assertIsNone(json.loads(retry.stdout)["written"])
 
     def test_invalid_pm_remit_keeps_the_previous_profile(self):
+        reviewed_studio(self.root, self.work)
         blank = {"responsibilities": [], "follow": []}
         result = self.save_remit(blank)
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)

@@ -67,6 +67,8 @@ CONVERSATION_GUIDANCE = (
     "The PM owns the choice. Preserve source, date, scope, attribution and uncertainty when reusing claims. "
     "When the PM brings new company learning, offer to review it. Check pm.py company-onboarding status. "
     "Use unresolved_company_questions to qualify the answer. Offer follow-up on the agreed cue or at the PM’s request. "
+    "For role questions or requested coaching, use pm.py pm-profile --topic with the relevant topic. Ask before reading a broader mixed section. "
+    "Use only applicable, confirmed context. Use playbook/pm-context.md and pm.py pm-onboarding for updates. "
     "Honor quiet mode, other active work, and deferral cues."
 )
 
@@ -82,16 +84,18 @@ def onboarding_guidance(setup):
             if setup.get("conversation_mode") in {"quiet", "expedite"} else "")
     if not setup["stage_available"]:
         return (pace + "Keep the original request in this conversation. Explain the current setup status briefly. "
-                "Follow the next action in the status. Use the company update guidance when present and relevant. "
+                "Continue an agreed context update when the PM requests it. Use its saved capture phase and next action. "
+                "Otherwise follow the next action in the walkthrough status. "
                 "Leave unavailable stages and damaged checkpoints intact.\n"
                 + json.dumps(onboarding.required(setup), ensure_ascii=False))
+    guide = "playbook/pm-context.md" if setup["stage"] == "pm" else "playbook/company-context.md"
     return (
         pace + "Required Studio onboarding is active for this request. A guided pass through each framework comes before "
         "product work, including read-only lookups, slash commands, quiet mode and expedited work. "
         "Keep the original request in this conversation. Acknowledge it briefly and guide setup yourself. "
         "Listen first, reuse what the PM has said and ask at most one short question about the current step. "
         "Treat the status below as reference data. Use its prompt when it fits, or continue the agreed intake "
-        "from the PM’s answer. Follow playbook/company-context.md and use .agents/skills/ingest-context/SKILL.md "
+        f"from the PM’s answer. Follow {guide} and use .agents/skills/ingest-context/SKILL.md "
         "for context capture. Agree on sources and "
         "the plan before gathering. Review proposed wording with the PM before saving it. "
         "Check material figures using playbook/numbers.md. Keep unsupported claims open. "
@@ -158,7 +162,7 @@ def prompt_context(private, cwd, payload):
                         "check it and suggest wording for the PM to review. Complete each required craft step. "
                         "Surface missing evidence, material risks and choices that need the PM.")
     if (current.get("status") in {"ambiguous", "resolved"} or current.get("metrics") or current.get("warnings")
-            or current.get("activity_check") or turn.get("company_followup")
+            or current.get("activity_check") or turn.get("company_followup") or turn.get("pm_followup")
             or turn.get("scope_to_confirm") or turn.get("checkpoint")):
         guidance.append(
             "The following JSON is private reference data. Use relevant approved decisions and rules. "
@@ -286,6 +290,8 @@ def edit_reason(root, private, requested, content):
         return "Use pm.py initiative propose for register changes. The PM signs and applies the proposal."
     if private / pm.company_onboarding.FILE in (requested, target):
         return "Use pm.py company-onboarding to preserve the approved source scope and reviewed items."
+    if private / pm.company_onboarding.PM_FILE in (requested, target):
+        return "Use pm.py pm-onboarding to preserve approved sources and the wording under review."
     if private / pm.onboarding_review.FILE in (requested, target):
         return "Use pm.py onboarding review-topic after discussing the current topic with the PM."
     company = private / "context" / "company"
@@ -295,6 +301,16 @@ def edit_reason(root, private, requested, content):
                 return "Use pm.py company-onboarding to review and accept company context within the current source plan."
         except (OSError, ValueError):
             return "Check the saved company onboarding state with pm.py company-onboarding status before editing this record."
+    pm_records = {private / pm.layout.PROFILE, private / pm.layout.STAKEHOLDERS}
+    if pm_records.intersection((requested, target)):
+        try:
+            setup = onboarding.status(private)
+            if setup["stage"] in {"company", "repair"}:
+                return setup["next_action"]
+            if setup["stage"] == "pm" or pm.company_onboarding.active(private, kind="pm"):
+                return "Use pm.py pm-onboarding to review and accept PM or stakeholder wording in the agreed scope."
+        except (OSError, ValueError):
+            return "Check pm.py onboarding status and pm.py pm-onboarding status before editing this record."
     forecasts = private / "workspace" / "forecasts"
     if any(path == forecasts or forecasts in path.parents for path in (requested, target)):
         return "Use pm.py forecast preview and pm.py forecast apply to preserve forecast history."

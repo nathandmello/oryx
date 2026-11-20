@@ -7,6 +7,6 @@ Use [context](context/README.md) to find what is known. Use [workspace](workspac
 
 Use [Studio customizations](../../playbook/overrides.md) to change how oryx works for you.
 
-Keep your background, preferences, and responsibilities together in `context/pm/context.md`. Keep installation settings and remote locations in `settings.json`.
+Keep your role, expectations and aspirations in `context/pm/context.md`. Use `context/stakeholders/overview.md` for reporting lines and decision relationships. Keep installation settings and remote locations in `settings.json`.
 
 Keep the current session checkpoint and next action here. Use [the working practices](../../playbook/working.md) across sessions.

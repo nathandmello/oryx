@@ -12,6 +12,9 @@ from meeting_transcripts import ROOT, hub_command, pm, reviewed_studio, snapshot
 
 CASES = json.loads(Path(__file__).with_name("coaching_cases.json").read_text(encoding="utf-8"))
 STRATEGY = "workspace/strategies/billing-export.md"
+PM_PROFILE = "context/pm/context.md"
+STAKEHOLDERS = "context/stakeholders/overview.md"
+PRIOR_REMIT = {"status": "confirmed", "responsibilities": [], "follow": ["topic/clinic-operations"]}
 
 
 def capture(hub, scope, reference, quote, day, **fields):
@@ -40,7 +43,16 @@ def prepare(run, case):
     subprocess.run(["git", "init", "-q", str(hub)], check=True)
     hub_command(hub, "init-workspace", "--owner", "Eval PM")
     day = date.today().isoformat()
-    if case not in {"company-first", "founder-company"}:
+    if case == "pm-walkthrough":
+        # Simulate a Studio with an accepted remit from before guided onboarding.
+        pm.context_capture.write_remit(hub / "studio", PRIOR_REMIT)
+        for topic in ("customers", "economics", "portfolio", "growth"):
+            status = json.loads(hub_command(hub, "onboarding", "status"))
+            hub_command(hub, "onboarding", "review-topic", data=json.dumps({
+                "revision": status["revision"], "stage": "company", "topic": topic,
+                "outcome": "open", "pm_reply": "We discussed this. Leave it open.",
+            }))
+    elif case not in {"company-first", "founder-company"}:
         seed_product_work(hub, day)
     print(hub_command(hub, "check").strip())
     baseline = {"case": case, "made_on": day, "resolve_on": (date.today() + timedelta(days=30)).isoformat(),
@@ -93,7 +105,7 @@ def company_review_checks(hub, turn):
               "reviewed_points": company["reviewed"] == dict(outcomes[:covered]),
               "company_walkthrough_complete": company["complete"] == complete}
     if complete:
-        checks["next_stage_pending_design"] = not readiness["stage_available"]
+        checks["pm_walkthrough_available"] = readiness["stage_available"]
     if turn == 1:
         checks["fresh_studio"] = status["phase"] == "welcome" and status["revision"] == 0
         return checks
@@ -124,6 +136,67 @@ def company_review_checks(hub, turn):
                                    and g["next_action"].strip() for g in status["gaps"]),
         "review_finished": status["phase"] == "existing" and status["pending"] is None,
     })
+    return checks
+
+
+def pm_walkthrough_checks(run, turn, changed, current):
+    hub = run / "hub"
+    case = CASES["pm-walkthrough"]
+    journey = json.loads(hub_command(hub, "onboarding", "status"))
+    capture = json.loads(hub_command(hub, "pm-onboarding", "status"))
+    allowed = {"workspace/onboarding/review.json"}
+    if turn >= 2:
+        allowed.add("workspace/onboarding/pm.json")
+    if turn >= 4:
+        allowed.add(PM_PROFILE)
+    if turn == 10:
+        allowed.add(STAKEHOLDERS)
+    milestones = [(4, "role", "reviewed"), (6, "responsibilities", "reviewed"),
+                  (7, "expectations", "open"), (8, "aspirations", "reviewed"),
+                  (10, "stakeholders", "reviewed")]
+    checks = {
+        "only_authorized_changes": changed == allowed,
+        "company_pass_complete": journey["walkthroughs"]["company"]["complete"],
+        "setup_stage": journey["stage"] == ("product" if turn == 10 else "pm"),
+        "available_step": journey["stage_available"] == (turn < 10),
+        "product_work_held": not journey["ready"],
+        "reviewed_points": journey["walkthroughs"]["pm"]["reviewed"] == {
+            topic: outcome for milestone, topic, outcome in milestones if milestone <= turn},
+        "prior_remit_preserved": pm.context_capture.read_remit(hub / "studio") == PRIOR_REMIT,
+    }
+    if 2 <= turn <= 9:
+        plan = capture["plan"] or {}
+        scopes = plan.get("sources", [])
+        checks["agreed_scope"] = (set(plan.get("destinations", [])) == {PM_PROFILE, STAKEHOLDERS}
+                                  and len(scopes) == 1 and case["source"].lower() in scopes[0].lower())
+    if turn == 2:
+        checks["awaiting_permission"] = capture["phase"] == "plan"
+    if turn in (3, 9):
+        reviewed = json.loads(hub_command(hub, "pm-onboarding", "status", "--pending"))
+        pending = reviewed["pending"] or {}
+        checks["draft_hidden_by_default"] = capture["has_pending"] and capture.get("pending") is None
+        expected = ((PM_PROFILE, case["role_quote"]) if turn == 3 else (STAKEHOLDERS, case["stakeholder_quote"]))
+        checks["one_scoped_preview"] = (
+            capture["phase"] == "review" and (pending.get("destination"), pending.get("entry", {}).get("quote")) == expected)
+    else:
+        checks["no_unreviewed_proposal"] = not capture["has_pending"]
+    if turn >= 4:
+        path = hub / "studio" / PM_PROFILE
+        profile = path.read_text() if path.is_file() else ""
+        checks["sourced_role"] = all(term.lower() in profile.lower()
+                                     for term in (case["role_quote"], case["source"], "2026-10-15", "My work"))
+        checks["stakeholder_kept_separate"] = "Jules" not in profile
+        receipt = run / "accepted-profile.json"
+        if turn == 4 and all(checks.values()):
+            receipt.write_text(json.dumps(current[PM_PROFILE]))
+        if turn > 4:
+            checks["accepted_profile_preserved"] = receipt.is_file() and json.loads(receipt.read_text()) == current.get(PM_PROFILE)
+    if turn == 10:
+        path = hub / "studio" / STAKEHOLDERS
+        text = path.read_text() if path.is_file() else ""
+        checks["sourced_stakeholder"] = all(term.lower() in text.lower()
+                                            for term in (case["stakeholder_quote"], case["source"], "2026-10-15", "Review meeting"))
+        checks["pm_kept_separate"] = case["role_quote"] not in text
     return checks
 
 
@@ -162,6 +235,8 @@ def audit(run, baseline, turn):
             expected = False
     checks = {"system_intact": snapshot(hub) == baseline["system"],
               "only_authorized_changes": changed <= allowed, "expected_write": expected}
+    if case == "pm-walkthrough":
+        checks.update(pm_walkthrough_checks(run, turn, changed, current))
     if case == "company-first":
         # No sourced claim may reach the overview before acceptance on turn four.
         files = {"workspace/onboarding/company.json"} if turn >= 2 else set()

@@ -1,11 +1,11 @@
 ---
 name: ingest-context
-description: Use for company onboarding and requests to capture, file, update, or reconcile context, including existing briefs, mixed evidence, and open questions.
+description: Use for company or PM onboarding and requests to capture, file, update, or reconcile context, including existing briefs, mixed evidence, and open questions.
 ---
 
 # Ingest context
 
-Use the [onboarding guide](../../../playbook/company-context.md) to review each topic with the PM. Carry open questions forward.
+Use the [company](../../../playbook/company-context.md) or [PM walkthrough](../../../playbook/pm-context.md). Carry open questions forward.
 Apply the [context rules](../../../playbook/context.md) and [conversation guidance](../../../playbook/conversation.md) across captures.
 
 For initiative meetings, use the transcript retrieval and summary workflow in [summarize-meeting](../summarize-meeting/SKILL.md). Route reusable findings with this skill.
@@ -37,7 +37,7 @@ When a release flags older records, follow [the context cleanup procedure](../..
 - File product-market fit evidence with the offering and segment. Confirm any separate company implication before recording it.
 - Keep product information with its product. Set `product_area` for area-specific product or initiative claims, questions, and answers.
 - Route standing area guidance to its maintained area brief. Start inline until the [area filing test](../../../playbook/filing.md#product-area-context) passes.
-- Route supplied PM background and preferences into the PM profile with `scope: pm`. Confirm proposed ownership changes with the PM.
+- Route PM facts with `scope: pm`. Confirm ownership changes separately. File relationships in the [stakeholder map](../../../playbook/stakeholders.md).
 - Use `area` for cross-product responsibilities and `reference` for other topics the PM values.
 - Put reusable initiative guidance in its context brief. Keep plans and progress in the initiative’s workspace.
 - Surface a sibling product update as an FYI when relevant. Flag its concrete effect on an owned product.
@@ -54,7 +54,7 @@ When a release flags older records, follow [the context cleanup procedure](../..
 
 ## Apply
 
-- Use the company onboarding review for its proposed findings. For ordinary capture, preview `route-context`. Inspect each route and account for each source.
+- Review onboarding findings with the current stage’s capture command. For ordinary capture, preview `route-context`. Inspect routes and source coverage.
 - Run `route-context --write PATH` for one authorised record at a time. Use an existing artifact's workflow for other records.
 - Use the PM's approved source scope. Seek separate permission to expand the search or save generated content.
 - Report FYIs in chat. An unmatched topic leaves involvement open. Save out-of-scope items only on request.

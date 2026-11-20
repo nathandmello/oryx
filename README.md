@@ -48,8 +48,10 @@ Your first request starts a walkthrough with oryx. You can share a source or exp
 Together you review customers, economics, the product portfolio, growth, and strategic trade-offs. You can leave questions open or say a topic does not apply.
 If you’re a founder starting with an idea, your own account is enough to begin. Bring back what you learn and review what it changes.
 
-The company walkthrough is available now. Product work stays on hold until the PM and product walkthroughs are available and complete.
-After onboarding, each activity checks the evidence it needs. [Onboarding](playbook/company-context.md)
+Next, oryx asks about your role, day-to-day responsibilities, expectations and aspirations. You can review one point at a time or leave it open.
+You can also map who you work with and how decisions happen. Oryx keeps the stakeholder map separate from your profile. [PM walkthrough](playbook/pm-context.md)
+
+Product work stays on hold pending the product walkthrough. You can keep your company, profile and stakeholder context current in the meantime.
 
 ## Make it yours
 
@@ -61,7 +63,7 @@ After onboarding, each activity checks the evidence it needs. [Onboarding](playb
 
 | Location | What lives there |
 | --- | --- |
-| `studio/context/` | Company and product context, source material, and meeting notes |
+| `studio/context/` | Company, PM, stakeholder and product context, sources, and meeting notes |
 | `studio/workspace/` | Discovery briefs, experiments, planning comparisons, and launch work |
 | `studio/customizations/` | Your standing rules, templates, fields, and views |
 | `studio/README.md` · `studio/settings.json` | Your session handoff and local configuration |

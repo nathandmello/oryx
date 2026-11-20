@@ -6,6 +6,7 @@ from itertools import chain, combinations, product
 import json
 import re
 
+import layout
 import records
 import storage
 
@@ -116,6 +117,10 @@ def compatible(a, b):
 
 
 def applicable(review, scope, areas=()):
+    map_review = layout.stakeholder_record(review.get("owner", ""))
+    if (map_review and not scope.get("stakeholders")
+            or not map_review and scope.get("stakeholders") and not scope.get("product")):
+        return False
     own = review["scope"]
     if own.get("product") and own["product"] != scope.get("product"):
         return False
@@ -145,7 +150,8 @@ def terms(text):
 
 
 def conflicts(a, b):
-    if not compatible(a["scope"], b["scope"]):
+    if (layout.stakeholder_record(a["record"]) != layout.stakeholder_record(b["record"])
+            or not compatible(a["scope"], b["scope"])):
         return False
     # Source IDs are local to each record. Compare meaning-bearing words before the citation.
     first, second = (x["assertion"].split(" [S", 1)[0] for x in (a, b))
@@ -342,7 +348,8 @@ def applies_to_task(review, scope, areas, documents):
 
 
 def in_scope(doc, scope, areas, company):
-    return ((company and doc["company"]) or
+    return ((scope.get("stakeholders") and layout.stakeholder_record(doc["record"])) or
+            (company and doc["company"]) or
             (scope.get("product") and doc["product"] == scope["product"] and doc["area"] in {None, *areas}
              and doc["initiative"] in (None, scope.get("initiative"))))
 

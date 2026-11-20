@@ -7,6 +7,7 @@ Create only the artifact needed for the current work. Templates guide thought; t
 | Template | Purpose | Home |
 | --- | --- | --- |
 | [Company context](company-context.md) | Customer value, economics, portfolio, growth, competitive advantage, and strategic trade-offs | `context/company/overview.md` |
+| [Stakeholder map](stakeholder-context.md) | People, teams, reporting lines, decision roles, and working relationships | `context/stakeholders/overview.md` |
 | [Product context](product-context.md) | Product purpose, users, vocabulary, constraints, and accepted decisions | `context/products/<product>/overview.md` |
 | [Product area context](product-area-context.md) | Standing area boundaries, users, rules, goals, and decisions | `context/products/<product>/areas/<area>/overview.md` |
 | [Initiative context](initiative-context.md) | Outcome, affected workflow, dependencies, and decisions for recurring initiative work | `context/products/<product>/initiatives/<initiative>/overview.md` |
@@ -21,7 +22,7 @@ Create only the artifact needed for the current work. Templates guide thought; t
 | [Prioritization](prioritization.md) | Comparison of approved candidates for a planning cycle | `workspace/roadmaps/<product>/<cycle>.md` |
 | [Roadmap](roadmap.md) | Narrative roadmap for work outside the signed initiative register | `workspace/roadmaps/` |
 
-Create a [PM profile](../playbook/context.md#pm-remit) with `new pm-context context/pm/context.md`. Add background and preferences directly in Markdown.
+The [PM walkthrough](../playbook/pm-context.md) helps you build your profile in `context/pm/context.md`. You can also write it yourself.
 
 Use the [context section rules](../playbook/filing.md#when-a-section-earns-its-place) to choose headings. Give each substantive section a lead that explains when it applies.
 

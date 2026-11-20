@@ -4,7 +4,7 @@ Private format 2 applies.
 
 | Release | Change |
 | --- | --- |
-| 0.12.0 | Adds the [company walkthrough](company-context.md) for all Studios. Existing records supply evidence for review. Product work waits for the forthcoming PM and product walkthroughs. |
+| 0.12.0 | Adds [company](company-context.md) and [PM](pm-context.md) walkthroughs, including a [stakeholder map](stakeholders.md). Update shared Studio clients before saving a map. Existing records can supply evidence. Product work waits for product onboarding. |
 | 0.11.1 | Updates [conversation guidance](conversation.md) to ground agreement in evidence. Capture and coaching keep omissions open and preserve confirmed limits. |
 | 0.11.0 | Adds [workspace overrides](overrides.md) and [template and roadmap customization](customization.md). Existing records retain their contents. |
 | 0.10.0 | Adds [decision coaching](conversation.md), [weekly review](decision-review.md), and [forecasts](decision-forecasts.md). |

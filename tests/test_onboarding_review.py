@@ -20,7 +20,7 @@ class WalkthroughTests(unittest.TestCase):
                   "outcome": outcome, "pm_reply": "Leave that open for now."}
         return review.review(self.work, dict(values, **changes))
 
-    def test_all_five_topics_can_remain_open_and_undefined_framework_blocks_work(self):
+    def test_every_company_and_pm_topic_can_remain_open_and_product_work_stays_held(self):
         self.assertFalse((self.work / review.FILE).exists())
         topics = ("customers", "economics", "portfolio", "growth", "tradeoffs")
         for number, topic in enumerate(topics):
@@ -31,8 +31,18 @@ class WalkthroughTests(unittest.TestCase):
         self.assertTrue(state["walkthroughs"]["company"]["complete"])
         self.assertEqual(state["walkthroughs"]["company"]["reviewed"], dict.fromkeys(topics, "open"))
         self.assertEqual(state["stage"], "pm")
+        self.assertTrue(state["stage_available"])
+        profile = self.work / pm.layout.PROFILE
+        profile_before = profile.read_bytes() if profile.exists() else None
+        for topic in ("role", "responsibilities", "expectations", "aspirations", "stakeholders"):
+            self.assertEqual(state["walkthroughs"]["pm"]["next_topic"]["id"], topic)
+            state = self.record()
+        self.assertEqual(state["stage"], "product")
         self.assertFalse(state["stage_available"])
         self.assertFalse(state["ready"])
+        self.assertTrue(state["walkthroughs"]["pm"]["complete"])
+        self.assertEqual(profile.read_bytes() if profile.exists() else None, profile_before)
+        self.assertFalse((self.work / pm.layout.STAKEHOLDERS).exists())
         self.assertFalse((self.work / "context/company/overview.md").exists())
         self.assertNotIn("Leave that open", (self.work / review.FILE).read_text())
         self.assertEqual(pm.check(self.root), [])

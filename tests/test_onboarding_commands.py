@@ -6,8 +6,9 @@ import sys
 import unittest
 
 import test_pm
+import company_onboarding
 import onboarding_review
-from onboarding_fixtures import reviewed_studio
+from onboarding_fixtures import review_current_topic, reviewed_studio
 
 
 class OnboardingCommandTests(unittest.TestCase):
@@ -37,8 +38,11 @@ class OnboardingCommandTests(unittest.TestCase):
                 "outcome": "open", "pm_reply": "We covered this. I'd like to leave it open.",
             })
         self.assertEqual(state["stage"], "pm")
-        self.assertFalse(state["stage_available"])
+        self.assertTrue(state["stage_available"])
+        self.assertEqual(state["walkthroughs"]["pm"]["next_topic"]["id"], "role")
+        self.assertIn("pm-onboarding", state["pm_updates"])
         self.assertEqual(self.cli("action", "portfolio", "roadmap", "show", ok=False)["onboarding"], state)
+        self.assertEqual(self.cli("task-context", "Continue.")["onboarding"], state)
         self.assertFalse((self.work / "context/company/overview.md").exists())
 
     def test_unreadable_progress_holds_work_and_keeps_the_original_bytes(self):
@@ -50,6 +54,23 @@ class OnboardingCommandTests(unittest.TestCase):
         self.assertNotIn("company_updates", state)
         self.assertEqual(self.cli("roadmap", ok=False)["onboarding"], state)
         self.assertEqual(path.read_bytes(), b"broken walkthrough")
+
+    def test_damaged_company_capture_does_not_hide_pm_but_damaged_current_capture_holds(self):
+        while onboarding_review.status(self.work)["stage"] == "company":
+            review_current_topic(self.work)
+        company = self.work / company_onboarding.FILE
+        company.write_bytes(b"broken company capture")
+        state = self.cli("onboarding", "status")
+        self.assertEqual(state["stage"], "pm")
+        self.assertEqual(state["company_phase"], "unavailable")
+        self.assertIn("pm_updates", state)
+        profile = self.work / company_onboarding.PM_FILE
+        profile.write_bytes(b"broken PM capture")
+        state = self.cli("task-context", "Continue setup.")["onboarding"]
+        self.assertEqual(state["stage"], "repair")
+        self.assertEqual(self.cli("roadmap", ok=False)["onboarding"], state)
+        self.assertEqual(profile.read_bytes(), b"broken PM capture")
+        self.assertEqual(company.read_bytes(), b"broken company capture")
 
     def test_after_a_complete_pass_strategy_checks_its_own_prerequisite(self):
         reviewed_studio(self.root, self.work)

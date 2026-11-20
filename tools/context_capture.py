@@ -641,7 +641,7 @@ def validate_decision_approval(entry, revision, checked_on):
             raise ValueError("Supply the PM, discussion reference and exact confirmation reply")
 
 
-def route(payload, private, remit=None, *, single_excerpt=False):
+def route(payload, private, remit=None, *, single_excerpt=False, descriptive_intake=False):
     """Plan destinations and PM relevance independently from prepared excerpts."""
     fields(payload, ("sources", "entries"), ("responses",))
     responses = payload.get("responses", [])
@@ -676,6 +676,8 @@ def route(payload, private, remit=None, *, single_excerpt=False):
             subject = f"product/{entry['product']}"
         elif scope == "company":
             canonical, subject = COMPANY_PATH, "company"
+        elif scope == "stakeholder":
+            canonical, subject = layout.STAKEHOLDERS, "stakeholders"
         elif scope == "pm":
             canonical, subject = REMIT_PATH, "pm"
         elif scope in ("area", "reference"):
@@ -729,8 +731,8 @@ def route(payload, private, remit=None, *, single_excerpt=False):
             subject_key(affected, ("product", "area"))
             line(reason, "Consequence")
         attention, responsibilities = relevance(remit, subject, affects)
-        if scope == "pm" and not responsibilities:
-            attention = "pm"
+        if scope in {"pm", "stakeholder"} and not responsibilities:
+            attention = scope
 
         if "question" in entry:
             if not section or entry.keys() & {"source", "location", "quote", "answers", "interpretation"}:
@@ -782,9 +784,10 @@ def route(payload, private, remit=None, *, single_excerpt=False):
     verification = verify_excerpts(payload["sources"], entries, private, single_excerpt=single_excerpt)
     plan = {"sources": sources, "entries": entries, "source_checks": verification, "remit_configured": remit is not None,
             "remit_status": remit_status(remit)}
-    risk_preview = evidence_reviews.preview(private, entries, sources)
-    if risk_preview:
-        plan["risk_preview"] = risk_preview
+    if not descriptive_intake:
+        risk_preview = evidence_reviews.preview(private, entries, sources)
+        if risk_preview:
+            plan["risk_preview"] = risk_preview
     if responses:
         plan["responses"] = responses
     return plan
@@ -825,8 +828,15 @@ def scoped_text(entry, value):
     return value
 
 
+def pm_topic_marker(entry):
+    topic = entry.get("topic")
+    if entry.get("scope") == "pm" and topic in pm_profile.WALKTHROUGH_TOPICS:
+        return f" <!-- pm-topic:{topic} -->"
+    return ""
+
+
 def render_entry(entry, identifier):
-    cite = f"[{identifier}] ({literal(entry['location'])})"
+    cite = f"[{identifier}] ({literal(entry['location'])}){pm_topic_marker(entry)}"
     quote = literal(entry["quote"])
     if "term" in entry:
         term = entry["term"]
@@ -916,7 +926,7 @@ def insert_entries(text, selected, sources, private, target, leads=None):
             originals[heading] = records.split_context_lead(records.section(text, heading) or "")
             updates[heading] = section_body(originals[heading][1], heading)
         if "question" in entry:
-            bullet = f"- Unknown: {scoped_text(entry, literal(entry['question']))}"
+            bullet = f"- Unknown: {scoped_text(entry, literal(entry['question']))}{pm_topic_marker(entry)}"
         else:
             source = sources[entry["source"] - 1]
             reference = records.retarget_links(source["reference"], private / "README.md", target, private)
@@ -948,7 +958,7 @@ def insert_entries(text, selected, sources, private, target, leads=None):
     for entry in selected:
         if "answers" in entry:
             heading = entry["section"]
-            question = f"- Unknown: {scoped_text(entry, literal(entry['answers']))}"
+            question = f"- Unknown: {scoped_text(entry, literal(entry['answers']))}{pm_topic_marker(entry)}"
             # A question with continuation lines needs a separate review of the whole entry.
             pattern = rf"^{re.escape(question)}(?:\n(?!\n*  )|\Z)"
             updates[heading] = re.sub(pattern, "", updates[heading], flags=re.M).strip()
@@ -1006,7 +1016,7 @@ def apply_profile(root, private, target, selected, sources, lint):
     return True
 
 
-def apply(root, destination, plan, owner, lint):
+def apply(root, destination, plan, owner, lint, *, descriptive_intake=False):
     private = storage.private_root(root)
     target = record_path(private, destination)
     original = target.read_text(encoding="utf-8") if target.is_file() else None
@@ -1063,11 +1073,12 @@ def apply(root, destination, plan, owner, lint):
     candidate = insert_entries(text, selected, plan["sources"], private, target, section_leads(text, selected))
     candidate = records.ordered_sections(candidate, order)
     with storage.writer_lock(private):
-        documents = task_context.context_documents(private, override=(destination, candidate))
-        events = evidence_reviews.capture_events(private, documents, destination, selected, plan["sources"], responses)
-        if events:
-            plan["risk_events"] = events
-            candidate = evidence_reviews.append(candidate, events)
+        if not descriptive_intake:
+            documents = task_context.context_documents(private, override=(destination, candidate))
+            events = evidence_reviews.capture_events(private, documents, destination, selected, plan["sources"], responses)
+            if events:
+                plan["risk_events"] = events
+                candidate = evidence_reviews.append(candidate, events)
         if candidate == text:
             return False
         state = records.section(candidate, "Work state")

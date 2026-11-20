@@ -1,4 +1,4 @@
-# Company, PM, product, product area, and initiative context
+# Capture and use context
 
 Use [the starters](../templates/README.md) for recurring reference.
 
@@ -40,7 +40,7 @@ For company work, emphasise binding policies, exclusions, and shared terminology
 The PM profile is `studio/context/pm/context.md`. Manage [reply preferences](working.md#reply-preferences) with oryx commands.
 Keep captured preferences as context.
 
-Use the PM’s own description of their responsibilities. Saving a remit provides material for the [onboarding walkthrough](company-context.md).
+Review the PM’s responsibilities, expectations and aspirations in the [PM walkthrough](pm-context.md). File relationships in the [stakeholder map](stakeholders.md).
 For a fresh profile, use `python3 tools/pm.py new pm-context context/pm/context.md`.
 
 Ownership in `## PM remit` guides routing. The PM can edit it directly. For example:
@@ -103,8 +103,9 @@ Apply the [section rules](filing.md#when-a-section-earns-its-place). Retain cont
 | Company | `organisation`, `markets`, `business-model`, `portfolio`, `growth`, `direction`, `operations`, `constraints` |
 | Product | `offer`, `vision`, `purpose`, `customers`, `contribution`, `ownership`, `constraints`, `goals` |
 | Initiative | `outcome`, `workflow`, `constraints` |
-| PM | `background`, `preferences`, `stakeholders`, `context` |
-| Shared | `vocabulary`, `decisions`, `examples`, `data-boundaries`, `reviews` |
+| PM | `role`, `responsibilities`, `expectations`, `aspirations`, `background`, `preferences`, `context`. Existing `stakeholders` entries stay readable. |
+| Stakeholder | `people`, `reporting`, `authority`, `collaboration` |
+| Shared | Company, product and initiative briefs also support `vocabulary`, `decisions`, `examples`, `data-boundaries`, `reviews` |
 
 Use `context` for other PM facts. Update confirmed ownership separately.
 

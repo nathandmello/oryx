@@ -33,6 +33,7 @@ import layout
 import layout_upgrade
 import opportunities
 import pm_profile
+import pm_profile_view
 import company_source
 import company_onboarding
 import onboarding
@@ -60,7 +61,8 @@ REQUIRED = (
     customizations.DEFAULTS, "tools/customizations.py", overrides.DEFAULTS_FILE, "tools/overrides.py", "tools/agent_session.py", "tools/preferences.py", ".agents/skills/pm/SKILL.md", ".claude/skills/pm/SKILL.md",
     "tools/studio_layout.py", "tools/company_source.py", "playbook/customization.md", "playbook/overrides.md",
     "tools/conversation.py", conversation.GUIDE, "tools/company_onboarding.py", "tools/onboarding.py",
-    "tools/onboarding_review.py", "playbook/onboarding-frameworks.json",
+    "tools/onboarding_review.py", "playbook/onboarding-frameworks.json", "tools/pm_profile_view.py",
+    "playbook/pm-context.md", "playbook/stakeholders.md",
     "tools/hub_commands.py", "playbook/commands.md", hub_commands.CATALOG,
     ".agents/skills/extend-hub/SKILL.md", ".claude/skills/extend-hub/SKILL.md",
     ".agents/skills/ingest-context/SKILL.md", ".claude/skills/ingest-context/SKILL.md",
@@ -261,7 +263,7 @@ def guidance_errors(root: Path, texts: dict[str, str]) -> list[str]:
             errors.append(f"{guide}: unsupported brief scope: {label}")
         documented.setdefault(scope, set()).update(re.findall(r"`([^`]+)`", topics))
     for scope, topics in context_capture.TOPICS.items():
-        listed = documented.get(scope, set()) | (set() if scope == "pm" else documented.get("shared", set()))
+        listed = documented.get(scope, set()) | (set() if scope in {"pm", "stakeholder"} else documented.get("shared", set()))
         for topic in sorted(topics.keys() - listed):
             errors.append(f"{guide}: missing {scope} routing topic: {topic}")
         for topic in sorted(listed - topics.keys()):
@@ -366,12 +368,13 @@ def check_workspace(root: Path, system_texts: dict[str, str]) -> list[str]:
         parts = path.relative_to(private).parts
         if (len(parts) == 3 and parts[:2] == ("workspace", "forecasts") and path.suffix == ".json"):
             continue  # The forecast checker validates every receipt in this directory.
-        if rel in {company_onboarding.FILE, onboarding_review.FILE}:
+        if rel in {company_onboarding.FILE, company_onboarding.PM_FILE, onboarding_review.FILE}:
             try:
                 if rel == onboarding_review.FILE:
                     onboarding_review.status(private)
                 else:
-                    company_onboarding.read(private)
+                    kind = "pm" if rel == company_onboarding.PM_FILE else "company"
+                    company_onboarding.read(private, kind)
             except (ValueError, OSError) as exc:
                 errors.append(f"{label}: {exc}")
             continue
@@ -731,15 +734,18 @@ def run_initiative_work(root, command, operation, product, initiative, *, write=
 
 
 def studio_setup(private):
-    """Report the current walkthrough and any resumable company intake."""
-    setup = {"onboarding": onboarding.status(private)}
-    try:
-        status = company_onboarding.status(private)
-    except (OSError, ValueError):
-        setup["company_onboarding"] = {"phase": "unavailable",
-                                      "next_action": "Run pm.py company-onboarding status to inspect the saved progress."}
-        return setup
-    setup["company_onboarding"] = {"phase": status["phase"], "next_action": status["next_action"]}
+    """Report the current walkthrough and available intake phases without quoting personal evidence."""
+    walkthrough = onboarding.status(private)
+    setup = {"onboarding": walkthrough}
+    stages = ("company",) if walkthrough["stage"] in {"company", "repair"} else ("company", "pm")
+    for kind in stages:
+        try:
+            status = company_onboarding.status(private, kind)
+            progress = {"phase": status["phase"], "next_action": status["next_action"]}
+        except (OSError, ValueError):
+            progress = {"phase": "unavailable",
+                        "next_action": f"Run pm.py {kind}-onboarding status to inspect the saved progress."}
+        setup[kind + "_onboarding"] = progress
     return setup
 
 
@@ -771,12 +777,12 @@ def alignment_notice(root, result=None):
 
 
 
-def capture_errors(root, target, text):
+def capture_errors(root, target, text, *, destination_only=False):
     private = workspace.private_root(root)
     rel = target.relative_to(private).as_posix()
     texts = {f"templates/{kind}.md": (root / "templates" / f"{kind}.md").read_text(encoding="utf-8")
              for kind in records.KINDS}
-    for path in inventory(private):
+    for path in (() if destination_only else inventory(private)):
         parts = path.relative_to(private).parts
         if (path != target and path.suffix == ".md" and path.resolve() == path and path.is_file()
                 and not any(part == "secrets" or part.startswith(".") for part in parts)):
@@ -837,11 +843,20 @@ def build_parser():
     setup.add_argument("operation", choices=("status", "review-topic"))
     company_setup = commands.add_parser("company-onboarding", help="Review or resume company context in Studio")
     company_setup.add_argument("operation", choices=company_onboarding.OPERATIONS)
+    pm_setup = commands.add_parser("pm-onboarding", help="Review PM and stakeholder context in Studio")
+    pm_setup.add_argument("operation", choices=company_onboarding.PM_OPERATIONS)
+    inspect_pm = pm_setup.add_mutually_exclusive_group()
+    inspect_pm.add_argument("--gap", metavar="REV/INDEX", help="Inspect one deferred gap at the displayed revision")
+    inspect_pm.add_argument("--pending", action="store_true", help="Inspect the proposed wording awaiting review")
     route = commands.add_parser("route-context", help="Route supplied context evidence from JSON on stdin")
     route.add_argument("--write", metavar="PATH", help="Apply entries to one authorised context record")
     area = commands.add_parser("area-context", help="Locate a product area's context and its source records")
     area.add_argument("product")
     area.add_argument("area")
+    profile = commands.add_parser("pm-profile", help="Look up the PM's recorded context")
+    selection = profile.add_mutually_exclusive_group()
+    selection.add_argument("--topic", choices=tuple(pm_profile.WALKTHROUGH_TOPICS), help="Read only this topic’s reviewed entries")
+    selection.add_argument("--section", help="Read one full profile heading, including older or handwritten notes")
     task = commands.add_parser("task-context", help="Read scoped guidance for a workspace task")
     task.add_argument("prompt", nargs="?", default="")
     task.add_argument("--product", type=layout.slug)
@@ -894,10 +909,22 @@ def incomplete_setup():
 
 
 def check_action_setup(path, entry):
+    if path in {"context pm capture", "context stakeholder show"}:
+        require_pm_stage()
+        return
+    if entry and entry.get("cli", [None])[0] == "pm-profile":
+        return  # The CLI enforces the same walkthrough gate for direct and catalog lookups.
     if path == "context company capture" or (entry and entry.get("cli", [None])[0] in SETUP_TOOLS):
         return
     state = incomplete_setup()
     if state:
+        raise onboarding.SetupRequired(state)
+
+
+def require_pm_stage():
+    state = incomplete_setup()
+    if state and (state["stage"] in {"company", "repair"} or
+                  state["stage"] == "pm" and not state["stage_available"]):
         raise onboarding.SetupRequired(state)
 
 
@@ -906,7 +933,7 @@ def setup_capture(payload):
     if not isinstance(payload, dict) or payload.get("responses") or not isinstance(payload.get("entries"), list):
         return False
     for entry in payload["entries"]:
-        if not isinstance(entry, dict) or entry.get("scope") not in ("company", "pm", "product"):
+        if not isinstance(entry, dict) or entry.get("scope") not in ("company", "pm", "product", "stakeholder"):
             return False
         if any(key in entry for key in ("decision", "record_decision", "product_area")) or entry.get("topic") == "decisions":
             return False
@@ -919,18 +946,34 @@ def setup_capture(payload):
 
 
 def check_command_setup(args):
+    if args.command == "set-remit":
+        require_pm_stage()
+        return None
+    if args.command == "pm-onboarding":
+        inspecting = args.gap is not None or args.pending
+        if inspecting and args.operation != "status":
+            raise ValueError("Use --gap or --pending only with pm-onboarding status")
+        if inspecting or args.operation != "status":
+            require_pm_stage()
+        return None
     if args.command in SETUP_TOOLS:
         return None
     state = incomplete_setup()
     if not state:
         return None
+    if args.command == "pm-profile" and state["stage"] in {"pm", "product"}:
+        return None
     if args.command == "task-context":
         return state
     if args.command == "route-context" and (args.write is None or onboarding.setup_destination(args.write)):
-        if args.write and Path(args.write).parts[:2] == ("context", "company"):
+        if args.write and (Path(args.write).parts[:2] == ("context", "company") or
+                           company_onboarding.pm_destination(args.write) and state["stage"] != "product"):
             raise onboarding.SetupRequired(state)
         return state  # The handler also verifies the supplied entries before routing them.
-    if (args.command == "new" and args.kind in {"company-context", "pm-context", "product-context", "context-note"}
+    if (args.command == "new" and company_onboarding.pm_destination(args.path) and
+            state["stage"] != "product"):
+        raise onboarding.SetupRequired(state)
+    if (args.command == "new" and args.kind in {"company-context", "pm-context", "product-context", "stakeholder-context", "context-note"}
             and onboarding.setup_destination(args.path)):
         return None
     raise onboarding.SetupRequired(state)
@@ -1046,10 +1089,15 @@ def main() -> int:
             if args.kind == "pm-context":
                 if args.path != context_capture.REMIT_PATH or any((args.parent, args.basis, args.reason, args.trigger, args.topic_question, args.topic_peer)):
                     raise ValueError("Create the PM profile at context/pm/context.md")
-                created = pm_profile.create(private, args.title)
+                with storage.writer_lock(private):
+                    if company_onboarding.active(private, kind="pm"):
+                        raise ValueError("Review and accept the proposed profile with pm-onboarding")
+                    created = pm_profile.create(private, args.title)
                 print(f"Created {created.relative_to(ROOT)}.")
                 return 0
             with storage.writer_lock(private):
+                if args.path == layout.STAKEHOLDERS and company_onboarding.active(private, kind="pm"):
+                    raise ValueError("Review and accept the proposed stakeholder record with pm-onboarding")
                 filing.check_new(private, args.kind, args.path, args.title)
                 initiative_id = initiative_store.verify_draft_home(ROOT, args.kind, args.path)
                 contract = None
@@ -1072,6 +1120,10 @@ def main() -> int:
         if args.command == "area-context":
             private = workspace.repo(ROOT, "workspace")
             print(json.dumps(context_capture.area_context(private, args.product, args.area), indent=2))
+            return 0
+        if args.command == "pm-profile":
+            private = workspace.repo(ROOT, "workspace")
+            print(json.dumps(pm_profile_view.view(private, args.section, topic=args.topic), indent=2, ensure_ascii=False))
             return 0
         if args.command in {"task-context", "catalog"}:
             private = workspace.repo(ROOT, "workspace")
@@ -1128,16 +1180,22 @@ def main() -> int:
         if args.command == "set-remit":
             prepare_private_write(ROOT)
             private = workspace.repo(ROOT, "workspace")
-            context_capture.write_remit(private, json.load(os.sys.stdin))
+            remit = storage.json_input(sys.stdin.read())
+            with storage.writer_lock(private):
+                if company_onboarding.active(private, kind="pm"):
+                    raise ValueError("Finish the active PM capture before separately confirming the structured remit")
+                context_capture.write_remit(private, remit)
             print(f"Saved studio/{context_capture.REMIT_PATH}.")
             return 0
-        if args.command == "company-onboarding":
+        if args.command in {"company-onboarding", "pm-onboarding"}:
+            kind = "pm" if args.command == "pm-onboarding" else "company"
             if args.operation == "status":
-                result = company_onboarding.status(workspace.repo(ROOT, "workspace"))
+                result = company_onboarding.status(workspace.repo(ROOT, "workspace"), kind,
+                                                   gap=getattr(args, "gap", None), pending=getattr(args, "pending", False))
             else:
                 settings = prepare_private_write(ROOT)
                 result = company_onboarding.change(ROOT, args.operation, storage.json_input(sys.stdin.read()),
-                                                   settings["owner"], capture_errors)
+                                                   settings["owner"], capture_errors, kind)
             print(json.dumps(result, indent=2, ensure_ascii=False))
             return 0
         if args.command == "route-context":
@@ -1147,6 +1205,15 @@ def main() -> int:
             if args.write is not None:
                 settings = prepare_private_write(ROOT)
             private = workspace.optional_repo(ROOT) or ROOT / storage.STUDIO
+            entries = payload.get("entries") if isinstance(payload, dict) else None
+            pm_entries = isinstance(entries, list) and any(
+                isinstance(entry, dict) and entry.get("scope") in ("pm", "stakeholder") for entry in entries
+            )
+            if pm_entries:
+                if setup and setup["stage"] in {"company", "pm", "repair"}:
+                    raise onboarding.SetupRequired(setup)
+                if company_onboarding.active(private, kind="pm"):
+                    raise ValueError("Use pm-onboarding to preview findings within the approved PM source plan")
             remit, error = context_capture.inspect_remit(private)
             plan = context_capture.route(payload, private, remit)
             definitions = {}
@@ -1166,6 +1233,8 @@ def main() -> int:
                 if any(ARTIFACT.search(Path(part).stem) for part in Path(args.write).parts):
                     raise ValueError("Engineering artifacts belong in the delivery system")
                 with storage.writer_lock(private):
+                    if company_onboarding.pm_destination(args.write) and company_onboarding.active(private, kind="pm"):
+                        raise ValueError("Review and accept PM or stakeholder context with pm-onboarding")
                     company_onboarding.check_capture(private, args.write, plan)
                     if context_capture.apply(ROOT, args.write, plan, settings["owner"], capture_errors):
                         plan["written"] = args.write
