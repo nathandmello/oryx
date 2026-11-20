@@ -9,7 +9,8 @@ import re
 import subprocess
 from tempfile import TemporaryDirectory
 
-from initiative_events import DISCOVERY_PLAN_SCOPE, Register, needs_reference, reviewed_rationale, validate_event
+from initiative_events import (DISCOVERY_PLAN_SCOPE, EXTENDED_DISCOVERY_SCOPE, Register,
+                               needs_reference, reviewed_rationale, validate_event)
 import brief_review
 import evidence_reviews
 import experiment_drafts
@@ -45,7 +46,7 @@ def digest(value):
 def external_file(root, value, label):
     path = Path(value)
     if not path.is_absolute() or path.resolve() != path or path.is_relative_to(root) or not path.is_file():
-        raise ValueError(f"{label} must be a regular file outside the Hub checkout")
+        raise ValueError(f"{label} must be a regular file outside the oryx checkout")
     return path
 
 
@@ -133,16 +134,16 @@ def doc_reference(root, name, kind, *, plan_scope=None, options=None, initiative
         parent_error = opportunities.brief_parent_error(name, text, initiative)
         if parent_error:
             raise ValueError(parent_error)
-    if plan_scope == DISCOVERY_PLAN_SCOPE:
-        # The section reader treats column-zero "## " lines as boundaries, including inside examples.
+    custom_headings = []
+    if plan_scope in (DISCOVERY_PLAN_SCOPE, EXTENDED_DISCOVERY_SCOPE):
         headings_pattern = r"(?m)^## ([^\n]*)"
         raw = [heading.rstrip() for heading in re.findall(headings_pattern, text)]
-        visible = [heading.rstrip() for heading in re.findall(headings_pattern, brief_review.visible(text))]
-        allowed = {"Parent initiative", "Work state", *opportunities.REQUIRED_SECTIONS[kind]}
-        names = set(raw)
-        if raw != visible or len(raw) != len(names) or not names <= allowed:
+        visible = [name for name, *_ in records.section_blocks(text)]
+        if raw != visible or len(raw) != len(set(raw)):
             raise ValueError(f"{name}: ambiguous discovery section boundary. Use ### for subsections "
                              "and indent example headings inside code or comments.")
+        standard = {"Parent initiative", "Work state", *opportunities.REQUIRED_SECTIONS[kind]}
+        custom_headings = [heading for heading in visible if heading not in standard]
     headings = (*opportunities.DISCOVERY_PLAN, "Sources") if plan_scope else opportunities.REQUIRED_SECTIONS[kind]
     missing = opportunities.missing(text, headings)
     if missing:
@@ -151,14 +152,17 @@ def doc_reference(root, name, kind, *, plan_scope=None, options=None, initiative
         brief_review.check_review_content(text, kind, headings, root=root)
     reference = {"path": name, "id": identifier}
     if plan_scope:
-        if plan_scope == DISCOVERY_PLAN_SCOPE:
-            reference["scope"] = DISCOVERY_PLAN_SCOPE
+        if plan_scope in (DISCOVERY_PLAN_SCOPE, EXTENDED_DISCOVERY_SCOPE):
+            reference["scope"] = EXTENDED_DISCOVERY_SCOPE if custom_headings else DISCOVERY_PLAN_SCOPE
         elif plan_scope == "legacy-plan":
             # An older signed timebox covered the plan sections alone.
             headings = opportunities.DISCOVERY_PLAN
         else:
             raise ValueError("Unknown signed discovery plan scope")
-        revision = digest(canonical([records.section(text, heading).strip() for heading in headings]))
+        signed = [records.section(text, heading).strip() for heading in headings]
+        if custom_headings:
+            signed.extend([heading, records.section(text, heading).strip()] for heading in custom_headings)
+        revision = digest(canonical(signed))
     else:
         if records.work_state(text)[0].get("State") != "complete":
             raise ValueError(f"Complete {name} before this decision")
@@ -255,7 +259,7 @@ def read(root, product):
     private = storage.private_root(root)
     for old_path in layout_upgrade.legacy_initiative_registers(private):
         if old_path.parent.name == product:
-            raise ValueError(f"Existing prototype register at {old_path.relative_to(private)}. Preserve it and use its original Hub checkout.")
+            raise ValueError(f"Existing prototype register at {old_path.relative_to(private)}. Preserve it and use its original oryx checkout.")
     register = Register(product)
     if not target.exists():
         return None, {"version": 1, "product": product, "events": []}, register
@@ -294,9 +298,10 @@ def pinned_definition(root, product, metric):
         if row["reference"] == reference:
             return row
     for entry in metric_registry.history(private)[1]["revisions"]:
-        if entry["metric"] == name and entry["product"] in (None, product):
-            row = metric_registry.describe(name, entry["definition"], product=entry["product"],
-                                           approved_by=entry["approved_by"], effective_on=entry["effective_on"])
+        if entry["metric"] == name.removeprefix("company.") and entry["product"] in (None, product):
+            if name.startswith("company.") and entry["product"] is not None:
+                continue
+            row = metric_registry.describe_entry(name, entry)
             if row["reference"] == reference:
                 return row
     raise ValueError(f"Recover the approved metric revision {reference} before recording new evidence")

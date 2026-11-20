@@ -4,7 +4,7 @@ Use [the starters](../templates/README.md) for recurring reference. Keep facts, 
 
 ## Scope and authority
 
-Keep standing company facts and commitments in `private/context/company/overview.md`. Link separately maintained reference notes.
+Keep standing company facts and commitments in `studio/context/company/overview.md`. Link separately maintained reference notes.
 
 Link product context to its company. Area and initiative briefs inherit their product. Record each decision and exception under its owner.
 
@@ -32,7 +32,7 @@ For company work, emphasise binding policies, exclusions, and shared terminology
 
 ## PM remit
 
-The PM profile is `private/context/pm/context.md`. Manage [reply preferences](working.md#reply-preferences) with Hub commands.
+The PM profile is `studio/context/pm/context.md`. Manage [reply preferences](working.md#reply-preferences) with oryx commands.
 Keep captured preferences as context.
 
 Ask once about missing or unfinished responsibilities when questions are welcome. Accept deferral. For a fresh profile, use `python3 tools/pm.py new pm-context context/pm/context.md`.
@@ -150,7 +150,7 @@ Show what to retain, merge, reroute, or retire, with reasons and affected links.
 
 Back up affected files. Apply authorised repairs, including links and citations. Use a verified filing plan for reversible folds. Ask before permanent removal.
 
-Rerun the Hub check and compare the repaired claims with their sources. Record the review scope and open questions in the existing checkpoint.
+Rerun the oryx check and compare the repaired claims with their sources. Record the review scope and open questions in the existing checkpoint.
 
 Report remaining gaps and unavailable evidence.
 

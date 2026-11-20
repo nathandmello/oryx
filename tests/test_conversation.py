@@ -90,7 +90,7 @@ class ConversationTests(unittest.TestCase):
         for client in ("Codex", "Claude"):
             with self.subTest(client=client):
                 self.prompt(client, client, "Review product/billing.")
-                company, _ = self.prompt(client, client, "Read private/context/company/overview.md.")
+                company, _ = self.prompt(client, client, "Read studio/context/company/overview.md.")
                 self.assertTrue(company["scope"]["company"])
                 follow_up, _ = self.prompt(client, client, "Can you make it shorter?")
                 self.assertTrue(follow_up["scope"]["company"])

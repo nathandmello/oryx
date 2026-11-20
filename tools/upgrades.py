@@ -13,6 +13,7 @@ import storage
 
 LEDGER = ".hub-upgrades.json"
 RULE = "record-filing-0.2"
+STUDIO_GUIDES = "studio-guides-1"
 STRUCTURE_RULE = "artifact-structure-1"
 STRUCTURE_HANDOFF = "artifact-structure-handoff-1"
 TRANSACTIONS = "filing-transactions-0.2"
@@ -38,13 +39,33 @@ STARTERS = {
         "Use [the product template](../../templates/product-context.md) for standing product guidance. Link recurring initiative work to its product using [the initiative template](../../templates/initiative-context.md)."),
 }
 
+# SHA-256 of whole installed guides, after link retargeting and checkout newline normalization.
+# Match by path so a guide copied elsewhere remains eligible for a filing review.
+HISTORICAL_GUIDES = {
+    "README.md": {
+        "f2326333bbf25a7175eb81cf622cfd676fda2869426da50655d6f26acc07a903",  # 0.3–0.10
+        "bbad6c9eb0f9c96cf2d80ffd321a68dee8f610800cccb491eec1f0c56c02471b",  # Studio before the rename
+    },
+    "context/README.md": {
+        "1bd75febf21d98d4a41f835c82504fdb387d3e60ea1673ae3dc52f0cba089e5e",  # 0.3.0
+        "87df8833a179373b3bdbcc866d4af3ece7aaee834bef41fc79fd77bc4eb06aef",  # 0.3.1–0.3.5
+        "52debca1c0ad41ce800410473bdb3c086a573de6007969e24bb6b8b7b5b721ab",  # 0.4–0.10
+    },
+    "workspace/README.md": {
+        "0b0f605fd0e237e41a23e5d5072d92f6bdebe462bd183c6c05c8d0ae927cd4b8",  # 0.3.0
+        "c0966b4c8e9d7d8ca09d1aadbdb8b30bfdc53f9efb93c262a44ddd6be5aeb6f5",  # 0.3.1–0.3.5
+        "6849d694f2016e721d65f922fabea90e58a8adcd85f2e07a71b7ed365d96a5cc",  # 0.4.0
+        "99b0c5abbc3fd0b63d8eded4d3aeb043b27d390725c497cc1ad275aba238d9d1",  # 0.4.1–0.10
+    },
+}
+
 
 def encode(state):
     return json.dumps(state, indent=2, sort_keys=True, ensure_ascii=False) + "\n"
 
 
 def fresh(private):
-    storage.replace_text(private / LEDGER, None, encode({RULE: {}, STRUCTURE_RULE: {}}))
+    storage.replace_text(private / LEDGER, None, encode({RULE: {}, STRUCTURE_RULE: {}, STUDIO_GUIDES: True}))
     storage.replace_text(scan_marker(private), None, RULE)
 
 
@@ -70,16 +91,22 @@ def installed_seed(private, name):
     return records.retarget_links(source.read_text(encoding="utf-8"), source, private / name, private.parent, copies)
 
 
-def candidates(private, inventory, *, restored_layout=False):
+def candidates(private, inventory, *, restored_layout=False, scan_guides=True):
     found = {}
     for path in inventory(private):
         name = path.relative_to(private).as_posix()
         parts = Path(name).parts
-        if (path.suffix.lower() != ".md" or path.resolve() != path or
+        if (layout.is_customization(name) or path.suffix.lower() != ".md" or path.resolve() != path or
                 any(p.startswith(".") or p == "secrets" for p in parts) or not path.is_file()):
             continue
+        guide = name in STARTERS or name == "workspace/README.md"
+        if guide and not scan_guides:
+            continue
         text = path.read_text(encoding="utf-8", errors="replace")
-        if (name in STARTERS or name == "workspace/README.md") and text and text == installed_seed(private, name):
+        if guide and text and text == installed_seed(private, name):
+            continue
+        if (restored_layout and name in HISTORICAL_GUIDES
+                and hashlib.sha256(text.encode("utf-8")).hexdigest() in HISTORICAL_GUIDES[name]):
             continue
         marker = records.MARKER.match(text)
         if restored_layout and (name == layout.PROFILE or "sources" in parts or layout.valid_work(name)
@@ -115,6 +142,8 @@ def read_state(private):
     state = json.loads(original) if original is not None else {}
     if not isinstance(state, dict) or not isinstance(state.get(RULE, {}), dict):
         raise ValueError("Invalid private upgrade ledger")
+    if STUDIO_GUIDES in state and state[STUDIO_GUIDES] is not True:
+        raise ValueError("Invalid Studio guide inventory receipt")
     transactions = state.get(TRANSACTIONS, {})
     if not isinstance(transactions, dict) or not all(
             re.fullmatch(r"[a-z0-9]+(?:-[a-z0-9]+)*", key) and isinstance(value, str) and re.fullmatch(r"[0-9a-f]{64}", value)
@@ -141,8 +170,9 @@ def read_state(private):
 def source_paths(private):
     import layout_upgrade
     state = read_state(private)[1]
-    return ({name for name, item in state.get(RULE, {}).items() if item.get("role") == "source"}
-            | set(layout_upgrade.receipt(private, state).get("sources", [])))
+    sources = ({name for name, item in state.get(RULE, {}).items() if item.get("role") == "source"}
+               | set(layout_upgrade.receipt(private, state).get("sources", [])))
+    return {name for name in sources if not layout.is_customization(name)}
 
 
 def structure_review(root, private, state, originals):
@@ -201,9 +231,13 @@ def run(private, inventory, *, prepare=False, record=None, outcome=None, digest=
     needs_setup = RULE not in state
     marker = scan_marker(private)
     items = state.setdefault(RULE, {})
-    if needs_setup or not marker.exists():
-        for name, candidate in candidates(private, inventory, restored_layout="purpose-layout-1" in state).items():
+    # The tracked receipt distinguishes legacy guide reviews from ordinary PM edits after installation.
+    scan_guides = needs_setup or STUDIO_GUIDES not in state
+    if scan_guides or not marker.exists():
+        for name, candidate in candidates(private, inventory, restored_layout="purpose-layout-1" in state,
+                                          scan_guides=scan_guides).items():
             items.setdefault(name, candidate)
+        state[STUDIO_GUIDES] = True
     repaired = []
     if prepare and needs_setup:
         for name, (old, new) in STARTERS.items():
@@ -226,7 +260,8 @@ def run(private, inventory, *, prepare=False, record=None, outcome=None, digest=
     if any(value is not None for value in (record, outcome, digest, note)):
         layout_state = state.get("purpose-layout-1", {})
         retained = layout_state.get("retained", {})
-        if ((record not in items and record not in retained) or outcome not in ("reviewed", "waiting", "source")
+        if (not isinstance(record, str) or layout.is_customization(record) or (record not in items and record not in retained)
+                or outcome not in ("reviewed", "waiting", "source")
                 or not isinstance(note, str) or not records.specific(note.strip()) or len(note.splitlines()) != 1):
             raise ValueError("Select a review item, outcome, current digest, and specific one-line evidence or blocker")
         if fingerprint(review_path(private, record, markdown=record not in retained)) != digest:
@@ -245,9 +280,9 @@ def run(private, inventory, *, prepare=False, record=None, outcome=None, digest=
         storage.replace_text(marker, None, RULE)
     outstanding = []
     for name, item in items.items():
-        if item["status"] != "reviewed":
+        if item["status"] != "reviewed" and not layout.is_customization(name):
             outstanding.append(dict(item, path=name, digest=fingerprint(review_path(private, name))))
-    return {"rule": RULE, "updated_guides": repaired, "needs_setup": needs_setup and not prepare, "outstanding": outstanding}
+    return {"rule": RULE, "updated_guides": repaired, "needs_setup": scan_guides and not prepare, "outstanding": outstanding}
 
 
 def backup(private, names):

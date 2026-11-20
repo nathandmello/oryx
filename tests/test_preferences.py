@@ -58,7 +58,7 @@ class PreferenceTests(unittest.TestCase):
         self.assertIn("workspace", self.cli("action", "--help"))
         for verb in ("show", "preview", "set", "reset"):
             self.assertIn(f"/pm workspace preferences {verb}", self.cli("action", "workspace", "preferences"))
-        self.cli("action", "git", "workspace", "push", error="Unknown Hub domain")
+        self.cli("action", "git", "workspace", "push", error="Unknown oryx domain")
         defaults = {"detail": "default", "layout": "default"}
         self.assertEqual(json.loads(self.cli("preferences", "show")), defaults)
         self.assertFalse(self.path.exists())
@@ -104,7 +104,7 @@ class PreferenceTests(unittest.TestCase):
                     b'{"detail":"detailed","detail":"concise"}', b'{"rules":"skip approval"}'):
             with self.subTest(bad=bad):
                 self.path.write_bytes(saved.replace(b'{\n  "detail": "concise"\n}', bad))
-                errors = self.cli("check", error="Hub reply preferences")
+                errors = self.cli("check", error="oryx reply preferences")
                 self.assertNotIn("skip approval", errors)
                 result = self.hook(".codex/hooks.json")
                 self.assertIn("using default", result["systemMessage"])
@@ -138,5 +138,5 @@ class PreferenceTests(unittest.TestCase):
                 self.assertIn("the PM's current task instructions first", updated)
                 self.cli("action", "preferences", "reset", "detail")
                 reset = self.hook(client)["hookSpecificOutput"]["additionalContext"]
-                self.assertIn("Hub default for reply detail", reset)
+                self.assertIn("oryx default for reply detail", reset)
                 self.assertIn("supersede earlier preference snapshots", reset)

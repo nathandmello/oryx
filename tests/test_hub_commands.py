@@ -38,9 +38,9 @@ class HubCommandTests(unittest.TestCase):
                         description = json.loads(self.cli("action", "--describe", *path.split()))
                         self.assertEqual(description["command"], path)
                         self.assertEqual(description["summary"], catalog["commands"][path]["summary"])
-        self.assertIn("Unknown Hub action",
+        self.assertIn("Unknown oryx action",
                       self.cli("action", "initiative", "record", "apply", expected=1))
-        self.assertIn("Unknown Hub domain", self.cli("action", "git", "workspace", "push", expected=1))
+        self.assertIn("Unknown oryx domain", self.cli("action", "git", "workspace", "push", expected=1))
 
     def test_guided_action_returns_its_shared_guide_and_treats_arguments_as_data(self):
         arguments = ["checkout", "Pilot review", "A; B"]
@@ -88,7 +88,7 @@ class HubCommandTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "does not match the terminal parser"):
                 hub_commands.load(root, pm.build_parser())
             catalog["commands"]["workspace installation check"] = {
-                "summary": "Check the shared installation.", "guide": "private/context/pm/context.md",
+                "summary": "Check the shared installation.", "guide": "studio/context/pm/context.md",
             }
             path.write_text(json.dumps(catalog))
             with self.assertRaisesRegex(ValueError, "shared playbook or canonical skill"):

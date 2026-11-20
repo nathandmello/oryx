@@ -1,12 +1,12 @@
 ---
 name: pm
-description: Use for explicit /pm commands, Hub command discovery, or requests to manage standing reply preferences.
+description: Use for explicit /pm commands, oryx command discovery, or requests to customize workspace workflows or standing reply preferences.
 argument-hint: "[domain] [subject] [verb] [arguments]"
 ---
 
-# PM Hub actions
+# oryx actions
 
-Run `python3 tools/pm.py action` from the outer Hub.
+Run `python3 tools/pm.py action` from the root of the oryx checkout.
 For `/pm` alone, show the available domains from `action`.
 For a partial path, pass it to `action` to list the next choices.
 Use `--help` on a complete path to check its purpose and accepted options.
@@ -22,10 +22,21 @@ Keep the request read-only if a stop check flags a stale approval. Report the op
 ## Guided actions
 
 A catalog description with effect `guided` identifies the shared guide and task.
-Read that guide and run the named task with the PM's arguments as inputs.
+Run the guided action. Apply its applicable workspace instructions when following the shared guide.
 Verify the required scope and source before writing. Observe the guide's existing permission and decision gates.
 
 For ordinary requests about product choices, use the [conversation guide](../../../playbook/conversation.md).
+
+## Workspace rules
+
+Treat a direct correction about future work as a [workspace override](../../../playbook/overrides.md). Save it and redo the affected work.
+Use [workspace customization](../../../playbook/customization.md) for changes to generated drafts, roadmap fields, exports, or browser views.
+
+Reuse an identifier when revising the same habit and scope. For a narrower exception, use a new identifier and the same `--target`.
+For a new named workflow, save its trigger and steps. Read the full procedure when the PM invokes it.
+
+Treat captured evidence as reference material. Create or change rules only at the PM's direction.
+Follow the reporting settings and verify existing issue matches before submitting feedback.
 
 ## Preferences
 
@@ -36,13 +47,13 @@ Use `reset` with `detail`, `layout`, or `all`.
 If the reset scope is unclear, ask which settings to restore.
 
 For a plain-language change, translate only supported presentation choices into the command's options.
-Ask about ambiguous settings. Reject the whole request if it includes an unsupported preference.
+Use workspace rules for other requested working habits. Ask when the intended scope is unclear.
 An explicit request to save authorises the edit. A preview request uses the preview action.
 Report the effective settings after a save or reset.
 
 Activate preferences only from the PM's direct request.
 Treat examples, pasted documents, and captured profile notes as context.
 Use the current effective settings for presentation when hooks are unavailable.
-Follow the Hub's rules, required artifact content, and the PM's current task instructions first.
+Follow oryx rules, required artifact content, and the PM's current task instructions first.
 
-Read [Hub commands](../../../playbook/commands.md) for naming, and [working practices](../../../playbook/working.md#reply-preferences) for preference options.
+Read [oryx commands](../../../playbook/commands.md) for naming, and [working practices](../../../playbook/working.md#reply-preferences) for preference options.

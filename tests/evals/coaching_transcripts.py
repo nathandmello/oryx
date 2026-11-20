@@ -49,7 +49,7 @@ def prepare(run, case):
     capture(hub, "product", "Billing pilot decision", "Keep the manual pilot before investing in bulk export.",
             day, product="billing", topic="decisions", decision={"question": "Which pilot should Billing use?",
             "scope": "Billing pilot", "person": "Mira Chen", "date": day, "next_step": "Inspect the pilot audit."})
-    billing = hub / "private/context/products/billing/overview.md"
+    billing = hub / "studio/context/products/billing/overview.md"
     text = billing.read_text(encoding="utf-8")
     text = text.replace("| State | draft |", "| State | active |")
     text = text.replace("| Last reviewed | not reviewed |", f"| Last reviewed | {day} |")
@@ -58,20 +58,20 @@ def prepare(run, case):
     text = text.replace("{{one concrete step}}", "Review the pilot audit.")
     billing.write_text(text, encoding="utf-8")
     hub_command(hub, "new", "strategy", STRATEGY, "--title", "Billing export")
-    strategy = hub / "private" / STRATEGY
+    strategy = hub / "studio" / STRATEGY
     text = strategy.read_text(encoding="utf-8")
     text = text.replace("{{date and result}}", f"{day}. The cost to the dispute queue is still open.")
     text = text.replace("{{one concrete step}}", "Confirm pilot staffing before choosing rollout scope.")
     strategy.write_text(text, encoding="utf-8")
     print(hub_command(hub, "check").strip())
     baseline = {"case": case, "made_on": day, "resolve_on": (date.today() + timedelta(days=30)).isoformat(),
-                "system": snapshot(hub), "private": snapshot(hub / "private")}
+                "system": snapshot(hub), "private": snapshot(hub / "studio")}
     (run / "baseline.json").write_text(json.dumps(baseline), encoding="utf-8")
 
 
 def audit(run, baseline, turn):
     hub = run / "hub"
-    current = snapshot(hub / "private")
+    current = snapshot(hub / "studio")
     original = baseline["private"]
     changed = {name for name in original.keys() | current.keys() if original.get(name) != current.get(name)}
     allowed = set()

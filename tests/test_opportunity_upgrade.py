@@ -86,8 +86,8 @@ class OpportunityUpgradeTests(unittest.TestCase):
 
     def test_already_relocated_workspace_cannot_start_a_second_register(self):
         self.register.write_text(json.dumps(self.envelope()))
-        self.private.rename(self.home / "private")
-        self.private = self.home / "private"
+        self.private.rename(self.home / "studio")
+        self.private = self.home / "studio"
         before = self.files()
         setup = {"type": "setup", "company": "context/company/overview.md",
                  "product_context": "context/products/orders/overview.md", "max_open": 5, "max_discovery": 2}

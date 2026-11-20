@@ -13,7 +13,7 @@ When a release flags older records, follow [the context cleanup procedure](../..
 
 ## Inspect
 
-- Read `private/context/pm/context.md` when present. Use PM-confirmed responsibilities, goal links, dependencies, and interests.
+- Read `studio/context/pm/context.md` when present. Use PM-confirmed responsibilities, goal links, dependencies, and interests.
 - Replace superseded roles when the PM confirms a change. Preserve unrelated entries and save the agreed scope with `pm.py set-remit`.
 - Find the existing record and accountable owner. Compare new evidence with accepted decisions.
 - Read applicable data boundaries before opening, transferring, or quoting sensitive source material.

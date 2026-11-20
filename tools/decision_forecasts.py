@@ -229,7 +229,7 @@ def check_workspace(private):
     try:
         list_records(private)
     except (OSError, ValueError) as exc:
-        return [f"private/{HOME}: {exc}"]
+        return [f"{private.name}/{HOME}: {exc}"]
     return []
 
 

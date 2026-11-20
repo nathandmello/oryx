@@ -1,4 +1,4 @@
-# Hub command convention
+# oryx command convention
 
 ## Where the rules live
 
@@ -16,7 +16,7 @@ Use `/pm DOMAIN SUBJECT VERB [arguments]`. Use the same arguments after the skil
 Enter a domain to see its subjects. Enter a domain and subject to see the available actions.
 Add `--help` to a complete command to see its purpose, example, and options.
 
-From the Hub root, use `python3 tools/pm.py action` in place of `/pm`.
+From the oryx checkout root, use `python3 tools/pm.py action` in place of `/pm`.
 Use `action --catalog` for the machine-readable catalog.
 Use `action --describe DOMAIN SUBJECT VERB` for one action's route and effect.
 
@@ -35,7 +35,7 @@ Use the verb to describe what the PM gets.
 | `portfolio` | Compare or view work across initiatives and cycles. | `/pm portfolio roadmap show` |
 | `delivery` | Review handoff, launch, enablement, or shipped outcomes. | `/pm delivery outcome review` |
 | `review` | Apply independent critique across multiple kinds of work. | `/pm review artifact critique` |
-| `workspace` | Manage personal settings, repository state, or Hub health. | `/pm workspace preferences show` |
+| `workspace` | Manage personal settings, repository state, or oryx health. | `/pm workspace preferences show` |
 
 For meeting evidence about a potential initiative, use context capture to preserve the source.
 Use initiative intake when the PM wants to assess a distinct investment or attach a signal to one.
@@ -52,7 +52,7 @@ Use the owning domain for a required review stage. Use `review` for independent 
 For new interfaces, make required record identifiers positional. Use lowercase, hyphenated flags for filters and options.
 Use `--format` for an existing choice of output formats.
 
-Choose a new domain only for a durable area of Hub ownership.
+Choose a new domain only for a durable area that oryx owns.
 Define its boundary against the existing domains in the same change.
 Keep published paths stable. If a subject or action must move, map its old path to the current one as a compatibility alias.
 Use one canonical path per action in help and examples.

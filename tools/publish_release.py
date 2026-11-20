@@ -105,7 +105,7 @@ def ensure_tag(tag, sha, api):
     path = "git/ref/tags/" + tag
     ref = optional(api, path)
     if ref is None:
-        obj = api("git/tags", "POST", {"tag": tag, "message": f"PM Hub {tag}", "object": sha, "type": "commit",
+        obj = api("git/tags", "POST", {"tag": tag, "message": f"oryx {tag}", "object": sha, "type": "commit",
                                       "tagger": {"name": "github-actions[bot]",
                                                  "date": datetime.now(timezone.utc).isoformat(timespec="seconds"),
                                                  "email": "41898282+github-actions[bot]@users.noreply.github.com"}})
@@ -120,7 +120,7 @@ def ensure_tag(tag, sha, api):
 
 def create_release(tag, notes):
     result = subprocess.run(["gh", "release", "create", tag, "--repo", os.environ["GITHUB_REPOSITORY"],
-                    "--title", f"PM Hub {tag}", "--verify-tag", "--latest=false", "--notes-file", "-"],
+                    "--title", f"oryx {tag}", "--verify-tag", "--latest=false", "--notes-file", "-"],
                    input=notes, text=True, capture_output=True)
     if result.returncode:
         error = result.stderr.strip()

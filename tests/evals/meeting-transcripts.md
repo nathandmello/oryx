@@ -17,7 +17,7 @@ The [manifest](meeting_cases.json) records prompts, URLs, content hashes, and th
 
 ## Run a case
 
-1. From the Hub root, prepare a new directory outside the checkout. The harness copies the shared Hub and omits eval files.
+1. From the oryx root, prepare a new directory outside the checkout. The harness copies the shared Hub and omits eval files.
 2. Start an agent with fresh conversation context in the generated `hub/`. Supply the text of `prompt.txt` as its request.
 3. Give the agent access to its own Hub, the supplied input, and the public connector required by the request.
 4. Keep other runs, evaluation criteria, and prior replies outside the agent's inputs. Save its final reply beside `prompt.txt`.

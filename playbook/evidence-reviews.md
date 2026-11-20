@@ -8,7 +8,7 @@ Use the existing evidence capture, meeting summary, initiative intake, backlog, 
 
 Read the actual statements, decision owners, scopes, dates, exceptions, and citations. A narrower decision needs the policy owner's authority for an exception.
 
-The Hub compares overlapping decision scopes and flags potential conflicts. It also recognizes some restrictions in prose. People assess meaning, credibility, and impact.
+oryx compares overlapping decision scopes and flags potential conflicts. It also recognizes some restrictions in prose. People assess meaning, credibility, and impact.
 
 For a customer update, qualify a promised launch that still requires Legal sign-off. A PM can retain a plan while clearance remains outstanding.
 

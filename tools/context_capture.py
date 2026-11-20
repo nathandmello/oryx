@@ -59,6 +59,8 @@ def source_rows(inputs):
         reference = line(source["reference"], "Source reference")
         if not records.specific(reference) or "|" in reference or records.PLACEHOLDER.search(reference):
             raise ValueError("Use a source reference without table separators or placeholders")
+        if records.uses_customization_source("README.md", reference):
+            raise ValueError("Cite the underlying evidence. Studio customizations describe working methods.")
         if reference in seen:
             raise ValueError("List each supplied source once")
         seen.add(reference)

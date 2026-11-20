@@ -120,3 +120,13 @@ pre { padding: .75rem; border: 1px solid var(--line); border-radius: .55rem; bac
   .row .badge { justify-self: start; }
   .header-end:empty { display: none; }
 }
+
+.custom-roadmap { overflow-x: auto; }
+.custom-roadmap table { width: 100%; border-collapse: collapse; }
+.custom-roadmap th, .custom-roadmap td { padding: .65rem; text-align: left; border-bottom: 1px solid #ccc; }
+.custom-roadmap.compact th, .custom-roadmap.compact td { padding: .25rem; }
+.custom-roadmap td, .custom-cards dd { white-space: pre-wrap; }
+.custom-cards { display: grid; gap: .75rem; grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr)); }
+.custom-cards dt { font-weight: 600; }
+.custom-cards dd { margin: 0 0 .5rem; }
+.custom-roadmap.compact .card { padding: .5rem; }

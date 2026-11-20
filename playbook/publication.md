@@ -47,7 +47,7 @@ Inspect the publication run summary for the tag, merge SHA and release link. Com
 
 Merging starts the hosted publisher automatically. Temporary GitHub failures retry twice inside that job.
 Agents monitor the run and handle authorised recovery. After fixing a failed gate, retry the existing run for that merge.
-For targeted recovery, dispatch **Publish PM Hub** on `main` with the original PR number.
+For targeted recovery, dispatch **Publish oryx** on `main` with the original PR number.
 
 Older manual verification prompts expire when their candidate leaves the default branch tip. Automatic publication starts with the pipeline release.
 Retries verify existing tags and reuse completed releases. Inspect conflicting tags or missing review evidence before retrying.

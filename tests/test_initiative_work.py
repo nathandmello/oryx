@@ -28,7 +28,7 @@ class InitiativeWorkTests(unittest.TestCase):
                 target.parent.mkdir(parents=True, exist_ok=True)
                 shutil.copyfile(source, target)
         subprocess.run(["git", "init", "--quiet", "--initial-branch=main", str(self.root)], check=True)
-        self.private = self.root / "private"
+        self.private = self.root / "studio"
         self.env = dict(os.environ)
         self.env.pop("PM_HUB_SHARED_GROUP", None)
         self.cli("init-workspace", "--owner", "Fixture PM")
@@ -69,6 +69,22 @@ class InitiativeWorkTests(unittest.TestCase):
     @staticmethod
     def update(identifier, **values):
         return {"action": "update", "id": identifier, "fields": values}
+
+    def test_workspace_starter_scope_and_stale_preview(self):
+        def change(config):
+            revision = json.loads(self.cli("customize", "show"))["revision"]
+            self.cli("customize", "apply", value={"revision": revision, "config": config})
+        original = self.operation("launch-checklist", "init", "--preview")
+        change({"checkpoints": {"enablement": {"title": "Coordinate support training"}},
+                "products": {self.product: {"checkpoints": {"enablement": {"omit": True}}}}})
+        self.operation("launch-checklist", "init", "--starter-revision", original["starter_revision"],
+                       error="template changed")
+        self.assertFalse((self.work / "launch-checklist.json").exists())
+        preview = self.operation("launch-checklist", "init", "--preview")
+        self.assertNotIn("enablement", [row["id"] for row in preview["checkpoints"]])
+        saved = self.operation("launch-checklist", "init", "--starter-revision", preview["starter_revision"])
+        change({"products": {self.product: None}})
+        self.assertEqual(self.operation("launch-checklist", "init"), saved)
 
     def test_launch_readiness_requires_its_own_evidence_and_keeps_follow_through(self):
         # Based on Kubernetes production-readiness practices for rollout, rollback and monitoring.
@@ -166,7 +182,7 @@ class InitiativeWorkTests(unittest.TestCase):
         self.assertTrue(retail["checkpoints"])
         self.assertEqual(own["checkpoints"], [])
         path = retail["path"]
-        context = json.loads(self.cli("task-context", f"Compare billing handoff with private/{path}"))
+        context = json.loads(self.cli("task-context", f"Compare billing handoff with studio/{path}"))
         self.assertEqual(context["scope"]["product"], "retail")
         self.assertEqual(context["scope"]["initiative"], self.initiative)
         exclusion = self.private / ".git/info/exclude"

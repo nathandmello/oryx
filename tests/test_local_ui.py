@@ -70,10 +70,10 @@ class LocalUITests(unittest.TestCase):
         fixture.submit(fixture.setup_event(), fixture.capture())
         scope = {"product": "example", "initiative": "renewal"}
         with urlopen(self.server.origin, timeout=5) as response:
-            self.assertIn(b"PM Hub", response.read())
+            self.assertIn(b"oryx", response.read())
             self.assertIn("frame-ancestors 'none'", response.headers["Content-Security-Policy"])
         with self.assertRaises(HTTPError) as error:
-            urlopen(self.server.origin + "/private/settings.json", timeout=5)
+            urlopen(self.server.origin + "/studio/settings.json", timeout=5)
         self.assertEqual(error.exception.code, 404)
         self.call("catalog", {}, headers={"Origin": "http://elsewhere.invalid"}, failure="launcher")
         self.call("catalog", {}, headers={"X-PM-Hub-Token": "invalid"}, failure="launcher")
@@ -109,14 +109,14 @@ class LocalUITests(unittest.TestCase):
             ) as process:
                 try:
                     line = process.stdout.readline()
-                    self.assertIn("PM Hub is open at ", line)
-                    url = line.strip().removeprefix("PM Hub is open at ")
+                    self.assertIn("oryx is open at ", line)
+                    url = line.strip().removeprefix("oryx is open at ")
                     address = urlsplit(url)
                     self.assertEqual(address.hostname, "127.0.0.1")
                     self.assertEqual(parse_qs(address.query), {"screen": [screen]})
                     self.assertTrue(address.fragment)
                     with urlopen(url, timeout=5) as response:
-                        self.assertIn(b"<title>PM Hub</title>", response.read())
+                        self.assertIn(b"<title>oryx</title>", response.read())
                 finally:
                     process.terminate()
                     process.wait(timeout=5)
@@ -124,6 +124,63 @@ class LocalUITests(unittest.TestCase):
                                   capture_output=True, text=True, timeout=5)
         self.assertEqual(rejected.returncode, 2)
         self.assertIn("invalid choice", rejected.stderr)
+
+    def test_open_session_keeps_roadmap_exports_fields_and_starters_across_studio_upgrade(self):
+        fixture = self.fixture
+        self.approve_candidate()
+        fixture.submit(fixture.cycle(), fixture.plan())
+        signed = fixture.ledger.read_bytes()
+        old = fixture.root / "private"
+        fixture.work.rename(old)
+        pages = old / "workspace/.views"
+        pages.mkdir()
+        (pages / "review.html").write_text("<title>Renewals review</title><!-- pm:roadmap-data -->")
+        config = {"fields": {"x-score": {"type": "number", "label": "Pilot score"}},
+                  "views": {"review": {"title": "Renewals review", "layout": "table", "page": "review",
+                                       "columns": ["title", "x-score"]}},
+                  "products": {"example": {"default_view": "review",
+                                           "templates": {"prioritization": {"Sponsors": {
+                                               "before": "Capacity constraints", "prompt": "Who approves the budget?"}}},
+                                           "checkpoints": {"enablement": {"title": "Coach the renewal team"}}}}}
+        (old / ".hub-customizations.json").write_text(json.dumps({
+            "version": 1, "config": config, "values": {"example": {fixture.i: {"x-score": 0}}},
+            "retired": [], "field_contracts": {}}, indent=2) + "\n")
+        scope = {"product": "example"}
+        board = self.call("roadmap", scope)
+        view = board["presentation"]
+        self.assertEqual(view["name"], "review")
+        self.assertEqual(board["rows"][0]["x-score"], 0)
+        comparison = self.call("comparison-template", scope)
+        sections = list(comparison["sections"])
+        self.assertEqual(sections[sections.index("Capacity constraints") - 1], "Sponsors")
+        checklist = {**scope, "initiative": "renewal", "command": "launch-checklist", "operation": "init"}
+        preview = self.call("work", checklist)
+        self.assertIn("Coach the renewal team", [row["title"] for row in preview["checkpoints"]])
+        self.assertFalse(fixture.work.exists())
+
+        # The old client is still open when core updates. Saving the displayed
+        # value is the first write; its template, page and register bytes match.
+        settings_path = old / "settings.json"
+        installed = json.loads(settings_path.read_text())
+        installed["system_version"] = "0.10.0"
+        settings_path.write_text(json.dumps(installed))
+        self.call("roadmap-fields", {**scope, "id": fixture.i, "revision": view["revision"], "values": {"x-score": 0}})
+        self.assertTrue(fixture.work.is_dir())
+        self.assertEqual(self.call("comparison-template", scope), comparison)
+        export = {**scope, "view": view["name"], "cycle": "quarter-two", "board_revision": board["revision"],
+                  "revision": view["revision"], "page_revision": view["page_revision"]}
+        html = self.call("roadmap-export", export)["html"]
+        self.assertIn("<title>Renewals review</title>", html)
+        self.assertIn('"x-score": 0', html)
+        self.assertNotIn('"effort"', html)
+        saved = self.call("work", {**checklist, "save": True, "revision": preview["revision"],
+                                   "starter_revision": preview["starter_revision"]})
+        self.assertEqual(saved["checkpoints"], preview["checkpoints"])
+        self.call("roadmap-fields", {**scope, "id": fixture.i, "revision": view["revision"], "values": {"x-score": 17}})
+        self.call("roadmap-export", export, failure="view changed")
+        cli = json.loads(fixture.cli("roadmap", "--product", "example"))
+        self.assertEqual(cli, [{"title": "Renewal delays", "x-score": 17}])
+        self.assertEqual(fixture.ledger.read_bytes(), signed)
 
     def test_roadmap_cycle_and_reorder_need_the_reviewed_signature(self):
         self.approve_candidate()

@@ -1,4 +1,4 @@
-"""Run product-context probes against PM Hub and score prepared workspace-task results."""
+"""Run product-context probes against oryx and score prepared workspace-task results."""
 
 import argparse
 from datetime import date

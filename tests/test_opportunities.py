@@ -45,7 +45,7 @@ class InitiativeTests(unittest.TestCase):
         signers.write_text("pm-hub-pm " + self.key.with_suffix(".pub").read_text())
         self.env = dict(os.environ, PM_HUB_ALLOWED_SIGNERS=str(signers))
         self.env.pop("PM_HUB_SHARED_GROUP", None)
-        self.work = self.root / "private"
+        self.work = self.root / "studio"
         self.ledger = self.work / "workspace/backlogs/example/initiatives.json"
         self.cli("init-workspace", "--owner", "Fixture PM", "--delivery-system", "Fixture delivery")
         self.cli("new", "company-context", self.company)
@@ -711,6 +711,59 @@ class InitiativeTests(unittest.TestCase):
         self.assertEqual(self.trace()["initiative"]["decisions"], [old])
         self.submit(self.decision("evaluate"))
         self.assertEqual(self.trace()["initiative"]["decisions"][0], old)
+
+    def test_changing_a_teams_working_fields_preserves_the_signed_plan(self):
+        self.submit(self.setup_event(), self.capture(), self.describe(), self.metric(), self.target(),
+                    self.decision("evaluate"), self.decision("prepare-brief"))
+        self.brief_ready()
+        self.submit(self.decision("approve-initiative"))
+        self.submit(self.cycle(), self.plan())
+        originals = {p: p.read_bytes() for p in (self.ledger, self.work / self.planning, self.work / self.brief)}
+        def change(config, values, error=None):
+            current = json.loads(self.cli("customize", "show"))
+            return self.cli("customize", "apply", value={"revision": current["revision"], "config": config,
+                            "values": [{"product": "example", "id": self.i, "field": k, "value": v}
+                                       for k, v in values.items()]}, error=error)
+        def field(label, kind, **options):
+            return {"label": label, "type": kind, **options}
+        fields = {
+            "x-confidence": field("Confidence", "choice", choices=["High", "Low"]),
+            "x-priority": field("MoSCoW", "choice", choices=["Must", "Could", "Won’t this time"]),
+            "x-size": field("Story points", "number"), "x-votes": field("Votes", "number"),
+            "x-milestone": field("Contract date", "date"), "x-teams": field("Dependencies", "multiple", choices=["Billing", "Mobile"]),
+            "x-notes": field("What we heard", "text"), "x-rollout": field("Rollout percentage", "number")}
+        change({"fields": fields, "views": {"internal": {"columns": ["rank", "effort", "horizon", *fields]},
+                                            "customer": {"columns": ["title", "x-milestone"]}}},
+               {"x-confidence": "Low", "x-priority": "Won’t this time", "x-size": 8, "x-votes": 0,
+                "x-rollout": 0, "x-teams": ["Mobile", "Billing"], "x-notes": "Signal | A\n二次確認"})
+        def row(name):
+            return json.loads(self.cli("roadmap", "--product", "example", "--view", name))[0]
+        initial = row("internal")
+        self.assertEqual((initial["rank"], initial["effort"], initial["horizon"]), (1, 3, "now"))
+        self.assertEqual((initial["x-size"], initial["x-votes"], initial["x-milestone"]), (8, 0, None))
+        self.assertEqual(initial["x-teams"], ["Mobile", "Billing"])
+        self.assertEqual(initial["x-notes"], "Signal | A\n二次確認")
+        change({}, {"x-votes": None})
+        self.assertIsNone(row("internal")["x-votes"])
+        change({}, {"x-votes": 0, "x-rollout": 0})
+        health = {"x-health": field("Health", "choice", choices=["On track", "At risk", "Off track"])}
+        change({"fields": health}, {"x-health": "On track"})
+        prior = json.loads(self.cli("customize", "show"))["revision"]
+        change({}, {"x-health": "At risk"})
+        self.cli("customize", "apply", value={"revision": prior, "values": [
+            {"product": "example", "id": self.i, "field": "x-health", "value": "Off track"}]}, error="Reload")
+        self.assertEqual(json.loads(self.cli("customize", "show"))["values"]["example"][self.i]["x-health"], "At risk")
+        # A change in scoring model must convert existing data in the same transaction.
+        original_state = (self.work / "customizations/settings.json").read_bytes()
+        change({"fields": {"x-confidence": {"type": "number"}}}, {}, error="Invalid number value")
+        self.assertEqual((self.work / "customizations/settings.json").read_bytes(), original_state)
+        change({"fields": {"x-confidence": {"type": "number"}}},
+               {"x-confidence": 50, "x-rollout": 25, "x-milestone": "2028-02-29"})
+        change({}, {"x-milestone": "2027-02-29", "x-rollout": 100}, error="day is out of range")
+        self.assertEqual(row("internal")["x-rollout"], 25)
+        self.assertEqual(row("customer"), {"title": "Renewal delays", "x-milestone": "2028-02-29"})
+        self.assertEqual(row("internal")["x-confidence"], 50)
+        self.assertEqual({p: p.read_bytes() for p in originals}, originals)
 
     def test_planning_checks_rank_and_capacity_across_initiatives(self):
         other_id = f"{self.product_id}/exports"

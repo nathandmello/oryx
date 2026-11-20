@@ -35,9 +35,9 @@
   },
   "defer-and-resume": {
     "turns": [
-      "Resume the Billing decision in private/workspace/strategies/billing-export.md. I want to choose a rollout before we know what the pilot would displace.",
+      "Resume the Billing decision in studio/workspace/strategies/billing-export.md. I want to choose a rollout before we know what the pilot would displace.",
       "Defer that suggestion until the next staffing review or new evidence about the dispute queue. Save that deferral and our open question in the owning strategy.",
-      "Resume private/workspace/strategies/billing-export.md. What remains open?",
+      "Resume studio/workspace/strategies/billing-export.md. What remains open?",
       "New information from the staffing review: Support can protect the entire dispute queue during a one-pod pilot. What changes about our decision?"
     ],
     "criteria": [

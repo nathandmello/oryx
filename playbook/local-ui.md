@@ -1,6 +1,6 @@
-# Use PM Hub in a browser
+# Use oryx in a browser
 
-Open the Hub on the computer that holds the private workspace.
+Open oryx on the computer that holds your workspace.
 Use the [shared command menu](commands.md) to start the app:
 
 ```text
@@ -48,7 +48,7 @@ If the register or comparison changes, review a fresh proposal.
 Open **Tasks** or **Launch checklists**, then choose a product and initiative.
 Add or edit items. Preview changes and save them to the same lists the terminal commands use.
 
-Start a launch checklist from the shared template. Record evidence to verify a check.
+Start a launch checklist from the [workspace starter](customization.md). Record evidence to verify a check.
 A task edit preview names launch checks affected by withdrawn evidence. The checklist shows each outstanding reason and the earlier verification.
 
 Choose independent evidence or specify verification task IDs when a check uses only some supporting tasks.
@@ -59,7 +59,7 @@ See the [terminal workflow](initiative-work.md) for the list fields and [roadmap
 
 ## Browser tests
 
-Use Node.js 20 or later. From the Hub root, install the test dependencies and run Chromium:
+Use Node.js 20 or later. Run these commands from the oryx repository root.
 
 ```sh
 npm ci --prefix tests/browser

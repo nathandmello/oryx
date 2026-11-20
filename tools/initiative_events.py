@@ -15,6 +15,7 @@ from opportunities import SLUG
 from records import specific
 
 DISCOVERY_PLAN_SCOPE = "plan-and-sources"
+EXTENDED_DISCOVERY_SCOPE = "plan-sources-and-custom-sections"
 
 OPEN_PHASES = {"inbox", "under consideration", "in discovery", "defining", "candidate", "planned", "delivery"}
 IN_DEFINITION = {"inbox", "under consideration", "in discovery", "defining"}
@@ -319,7 +320,7 @@ def check_reference(event):
     else:
         keys = {"path", "id", "sha256"}
         if (event.get("action") == "start-discovery" and isinstance(reference, dict)
-                and reference.get("scope") == DISCOVERY_PLAN_SCOPE):
+                and reference.get("scope") in (DISCOVERY_PLAN_SCOPE, EXTENDED_DISCOVERY_SCOPE)):
             keys.add("scope")
         valid = (event.get("action") == "prepare-brief" and reference == {}) or (
             isinstance(reference, dict) and set(reference) == keys
@@ -407,7 +408,9 @@ class Register:
                     continue
                 prior = old["source"]
                 prior_definition = metric_registry.reference_metric(old)
-                if not (definition and source != prior and prior_definition in (None, definition)):
+                same_metric = definition and (not prior_definition or
+                    prior_definition.removeprefix("company.") == definition.removeprefix("company."))
+                if not (same_metric and (not prior_definition or source.rsplit("@", 1)[1] != prior.rsplit("@", 1)[1])):
                     raise ValueError("Reuse the existing metric definition")
             unique(self.metrics, event["metric"], event, "metric ID")
         elif kind == "capture":

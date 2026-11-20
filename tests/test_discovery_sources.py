@@ -50,6 +50,33 @@ class DiscoverySourceTests(unittest.TestCase):
         h.submit(h.evidence()[3], self.finish)
         self.assertEqual(h.trace()["initiative"]["phase"], "defining")
 
+    def test_workspace_sections_survive_template_removal_and_are_signed(self):
+        h = self.hub
+        change = {"templates": {"discovery-brief": {
+            "Interview protocol": {"prompt": "Record the protocol."},
+            "Approach and timebox": {"mode": "replace", "content": "| Method | Interviews |"}}}}
+        def configure(patch):
+            revision = json.loads(h.cli("customize", "show"))["revision"]
+            h.cli("customize", "apply", value={"revision": revision, "config": patch})
+        configure(change)
+        (h.work / h.discovery).unlink()
+        h.new("discovery-brief", h.discovery)
+        h.fill(h.discovery, {**{k: v for k, v in self.sections.items() if k != "Approach and timebox"},
+                             "Sources": self.source, "Interview protocol": "Use a common script."}, complete=False)
+        h.preview(self.start, error="needs content in Approach and timebox")
+        h.fill(h.discovery, {"Approach and timebox": self.sections["Approach and timebox"]}, complete=False)
+        proposal = h.preview(self.start)
+        self.assertEqual(proposal["reviewed_transactions"][0]["references"]["scope"], "plan-sources-and-custom-sections")
+        h.apply(proposal)
+        configure({"templates": None})
+        self.assertEqual(h.trace()["review_issues"], [])
+        h.fill(h.discovery, {"Interview protocol": "Use a revised sampling protocol.",
+                             "Findings and recommendation": "Two interviews support a reminder pilot."})
+        h.preview(self.finish, error="Authorize the revised timebox")
+        h.submit(self.start)
+        h.submit(h.evidence()[3], self.finish)
+        self.assertEqual(h.trace()["review_issues"], [])
+
     def test_embedded_headings_cannot_hide_following_citations(self):
         h = self.hub
         path = h.work / h.discovery

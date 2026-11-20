@@ -1,8 +1,8 @@
 # Git and GitHub operations
 
-The outer checkout is the shared system repository. `private/` is an independent Git repository, ignored by the system.
+The outer checkout is the shared system repository. `studio/` is an independent Git repository, ignored by the system.
 
-Keep each repository's history, branches, staging area, and remotes separate. Open the outer directory in Codex or Claude.
+Keep each repository's history, branches, staging area, and remotes separate. Open a [protected PM session](overrides.md) for workspace work. Run system updates from your terminal.
 
 ## Choose the repository
 
@@ -23,9 +23,9 @@ For mixed changes, keep commits separate. Authorisation for one target does not 
 
 Run `python3 tools/pm.py git workspace status` and `python3 tools/pm.py git system status` before a save or synchronisation.
 
-Read `private/settings.json`. Verify the actual Git root, branch, changed files, staged changes, and fetch and push URLs.
+Read `studio/settings.json`. Verify the actual Git root, branch, changed files, staged changes, and fetch and push URLs.
 
-Stage explicit paths with `git -C private add -- <paths>` for PM work. Use the outer root for system changes.
+Stage explicit paths with `git -C studio add -- <paths>` for PM work. Use the outer root for system changes.
 
 Review the staged diff, then commit in that same repository. Preserve unrelated edits. Run the relevant checks before a commit.
 
@@ -71,7 +71,9 @@ Never infer permission for force pushes, mirrors, bulk pushes, deletion, or hist
 
 Keep PM data, personal settings, and real customer examples inside the private repository. Shared tests use fictional data.
 
-The checker rejects tracked `private/` entries and legacy `workspace/` entries in the system index. This includes Git links. Ignore rules alone do not remove tracked files.
+The checker rejects tracked Studio directories and Git links in the system index, including [earlier repository roots](updates.md#what-runs). Ignore rules alone do not remove tracked files.
+
+A system push checks the branch’s reachable history. A system pull checks both local and incoming histories. Earlier commits containing Studio files block either operation.
 
 Use explicit private paths when the agent searches or checks PM work. Root Git commands omit ignored records.
 
@@ -109,7 +111,7 @@ Follow [the installed-workspace upgrade procedure](updates.md) for all existing 
 
 ## Codex review before publication
 
-Merging to the default branch makes changes available to consumers who pull it. Apply this process to every Hub release. Compare the candidate with the last published version and the PM requirements.
+Merging to the default branch makes changes available to consumers who pull it. Apply this process to every oryx release. Compare the candidate with the last published version and the PM requirements.
 
 | Stage | Evidence required to advance |
 | --- | --- |

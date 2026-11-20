@@ -1,10 +1,10 @@
 # Approve initiative transactions
 
-Use a trusted Hub and OpenSSH with `ssh-keygen -Y sign` and `ssh-keygen -Y verify`.
+Use a trusted oryx checkout and OpenSSH with `ssh-keygen -Y sign` and `ssh-keygen -Y verify`.
 
 Keep the PM signing key and trusted allowed-signers file outside both repositories. List `pm-hub-pm` and its public key on one line. Set `PM_HUB_ALLOWED_SIGNERS` to the file's absolute path.
 
-Keep signing access with the PM. Protect verified Hub code and signer configuration against agent writes. Give agents writable drafts and read-only access to registers and their parent directories.
+Keep signing access with the PM. Protect verified oryx code and signer configuration against agent writes. Give agents writable drafts and read-only access to registers and their parent directories.
 
 Signatures detect changes to signed data. Filesystem permissions protect registers from deletion and rollback.
 
@@ -15,11 +15,11 @@ Use a local filesystem that supports exclusive locks on read-only descriptors.
 
 | Existing location | PM provisions | Access for the group |
 | --- | --- | --- |
-| `private/workspace/backlogs/<product>/` | PM owner, shared group, mode `2750` | Read and traverse |
-| `private/workspace/experiments/<product>/<initiative>/` | Shared group, mode `2770` | Create and edit drafts |
+| `studio/workspace/backlogs/<product>/` | PM owner, shared group, mode `2750` | Read and traverse |
+| `studio/workspace/experiments/<product>/<initiative>/` | Shared group, mode `2770` | Create and edit drafts |
 | Signed register | Shared group, mode `0640` | Read |
 | Named experiment drafts | Shared group, mode `0660` | Read and write |
-| `.git/pm-hub-writer.lock` and `private/.git/pm-hub-writer.lock` | PM owner, shared group, mode `0640` | Read and lock |
+| `.git/pm-hub-writer.lock` and `studio/.git/pm-hub-writer.lock` | PM owner, shared group, mode `0640` | Read and lock |
 
 Before enabling sharing, provision both locks and existing files as shown. Keep both locks in place.
 Provision the experiment draft directory before its first target. Setgid directories preserve the group during atomic publication.
@@ -125,11 +125,11 @@ New reviews need distinct, visible answers. A short answer or named source can s
 Prior signed hypotheses and experiments remain readable.
 
 Describe the discovery method in the brief. The signed `review_on` sets its next checkpoint.
-At selection and delivery start, the Hub checks the approved Initiative Brief again. Reopen weak briefs for revision and approval.
+At selection and delivery start, oryx checks the approved Initiative Brief again. Reopen weak briefs for revision and approval.
 
 For existing work, cite the original analysis. Registered initiatives use the generated roadmap.
 
-Use [installed Hub updates](updates.md) for private format alignment.
+Follow [the oryx update procedure](updates.md) for private format alignment.
 
 Published format-1 installations follow the normal upgrade. An unreleased prototype stored signed registers under the earlier layout.
 If alignment detects that prototype, it pauses before moving the data or changing signed references. Use its original format-1 checkout at `02a62b6`. If a previous upgrade already moved those files, consult the verified installation backup.

@@ -7,7 +7,7 @@ description: Give PM work a fresh, evidence-based challenge. Use when asked to r
 
 Challenge the draft from an independent reader's perspective before the PM takes the next step. Review AI-assisted and human-authored work by the same standard.
 
-Use [extend-hub](../extend-hub/SKILL.md) for engineering review of Hub code, hooks, upgrades, or implementation against requirements.
+Use [extend-hub](../extend-hub/SKILL.md) for engineering review of oryx code, hooks, upgrades, or implementation against requirements.
 
 ## Frame the review
 

@@ -29,6 +29,37 @@ class FilingTests(unittest.TestCase):
         self.assertEqual(hook.returncode, 0, hook.stderr)
         return json.loads(hook.stdout)
 
+    def test_restored_checkout_keeps_personal_skills_out_of_filing(self):
+        received, plan = self.legacy()
+        name = "customizations/skills/board/SKILL.md"
+        skill = self.work / name
+        skill.parent.mkdir(parents=True)
+        proof = plan["changes"][0]["replacements"][0]
+        skill.write_text("# Board review\n\n" + proof["quote"] + "\n")
+        upgrades.scan_marker(self.work).unlink(missing_ok=True)
+        original = skill.read_bytes()
+        status = self.cli("align", "--status")
+        self.assertEqual(status.returncode, 0, status.stdout + status.stderr)
+        self.assertNotIn(name, {item["path"] for item in json.loads(status.stdout)["outstanding"]})
+        ledger = self.work / upgrades.LEDGER
+        # A previously affected installation may already have inventoried its skill.
+        ledger.write_text(upgrades.encode({upgrades.RULE: {name: {"status": "pending", "note": "Old inventory"}}}))
+        status = json.loads(self.cli("align", "--status").stdout)
+        self.assertNotIn(name, {item["path"] for item in status["outstanding"]})
+        fold = {"id": "board-skill", "reason": "Consolidate board brief history.", "changes": [
+            {"path": name, "before": upgrades.fingerprint(skill), "into": "context/company/overview.md"},
+            plan["changes"][0]]}
+        denied = self.cli("align", "--preview-plan", data=fold)
+        self.assertNotEqual(denied.returncode, 0)
+        self.assertIn("outside record filing", denied.stdout)
+        proof.update(source=name, digest=upgrades.fingerprint(skill))
+        denied = self.cli("align", "--preview-plan", data=plan)
+        self.assertNotEqual(denied.returncode, 0)
+        self.assertIn("unchanged local primary source", denied.stdout)
+        self.assertEqual(skill.read_bytes(), original)
+        for path, data in received.items():
+            self.assertEqual(path.read_bytes(), data)
+
     def legacy(self):
         ledger = self.work / upgrades.LEDGER
         ledger.write_text('{"context-evidence-0.2": {}}')

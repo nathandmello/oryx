@@ -25,7 +25,7 @@ class RetrievalTests(unittest.TestCase):
         temp = tempfile.TemporaryDirectory()
         self.addCleanup(temp.cleanup)
         self.root = Path(temp.name).resolve()
-        self.private = self.root / "private"
+        self.private = self.root / "studio"
         self.private.mkdir()
         (self.root / "playbook").mkdir()
         shutil.copy(ROOT / "playbook/saas-metrics.json", self.root / "playbook")
@@ -117,11 +117,14 @@ class RetrievalTests(unittest.TestCase):
         self.assertLessEqual(len(json.dumps(result["entries"], ensure_ascii=False)), 6500)
         self.assertTrue(any("remaining binding" in message for message in result["warnings"]))
 
+    @patch("context_search.OPTIONAL_SECONDS", float("inf"))
     def test_cache_failure_concurrency_and_live_revalidation(self):
         query = "I received a broken item. Can I get my money back?"
         with ThreadPoolExecutor(4) as workers:
             results = list(workers.map(self.resolve, [query] * 8))
-        self.assertTrue(all(self.notes(result) == [self.refunds] for result in results))
+        for result in results:
+            self.assertEqual(result["retrieval"]["mode"], "hybrid")
+            self.assertEqual(self.notes(result), [self.refunds])
         self.resolve(query)  # Let the first uncontended query fill any missed cache writes.
         with patch.object(context, "read_document", wraps=context.read_document) as reads:
             self.resolve(query)
@@ -223,9 +226,12 @@ class RetrievalTests(unittest.TestCase):
         self.assertFalse(ambiguous["entries"])
         with patch("context_search.OPTIONAL_SECONDS", 0):
             result = self.resolve("Who approves promotional discounts?")
+            paraphrase = self.resolve("I received a broken item. Can I get my money back?")
         self.assertEqual(result["retrieval"]["mode"], "hybrid-time-limited")
         self.assertIn(self.discount, self.notes(result))
         self.assertFalse(result["warnings"])
+        self.assertEqual(paraphrase["retrieval"]["mode"], "hybrid-time-limited")
+        self.assertEqual(self.notes(paraphrase), [])
 
     def test_model_reference_output(self):
         model = context_embeddings.encoder()

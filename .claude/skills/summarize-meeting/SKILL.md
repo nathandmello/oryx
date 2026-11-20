@@ -1,6 +1,6 @@
 ---
 name: summarize-meeting
-description: Fetches or reads requested meeting transcripts, summarizes them, and ingests sourced findings into PM Hub initiative context.
+description: Fetches or reads requested meeting transcripts, summarizes them, and ingests sourced findings into oryx initiative context.
 argument-hint: "<initiative> <meeting title, date range, source link, or transcript file>"
 ---
 
@@ -67,7 +67,7 @@ Use [ingest-context](../ingest-context/SKILL.md) and the [filing rules](../../..
 - Use a dated `context-note` beside the overview when readers need the meeting's history. Keep its content within initiative scope.
 - Link the note in a supported section of the overview. Cite the relevant source.
 - Keep source transcripts with their owners. File authorised exports in `sources/` beside the overview when data boundaries permit retention.
-- Use source links or de-identified evidence to keep secrets and raw personal data out of Hub files.
+- Use source links or de-identified evidence to keep secrets and raw personal data out of oryx files.
 
 Use `YYYY-MM-DD-<meeting-slug>.md` for a standalone note. Use the meeting date or `undated` when unknown. Qualify recurring titles by date.
 

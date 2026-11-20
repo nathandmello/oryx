@@ -1,9 +1,9 @@
 ---
 name: extend-hub
-description: Use automatically when changing the shared PM Hub, including fixes, instructions, playbooks, skills, templates, tools, and tests. Routine private PM record edits use their own workflow.
+description: Use automatically when changing shared oryx code or guidance, including fixes, instructions, playbooks, skills, templates, tools, and tests. Routine private PM record edits use their own workflow.
 ---
 
-# Extend PM Hub
+# Extend oryx
 
 Read `AGENTS.md` and the existing work relevant to the request. Complete the dependency review for every shared change.
 
@@ -60,4 +60,4 @@ The PM's request authorises work within its scope. Ask only for a missing decisi
 
 Use the placement map in `README.md`. Create templates only for requested artifact types; a future activity alone is insufficient.
 
-For repository operations, read [the Git rules](../../../playbook/git.md). Keep private settings and PM records inside `private/`.
+For repository operations, read [the Git rules](../../../playbook/git.md). Keep private settings and PM records inside `studio/`.

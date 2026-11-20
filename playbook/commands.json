@@ -29,6 +29,28 @@
     "preferences": "workspace preferences"
   },
   "commands": {
+    "workspace company apply": {
+      "summary": "Import a versioned company workflow file into this Studio.",
+      "effect": "local-write",
+      "cli": ["company", "import"],
+      "example": ["product-ops.json"]
+    },
+    "workspace company show": {
+      "summary": "Show the company workflow source installed in this Studio.",
+      "effect": "read",
+      "cli": ["company", "show"],
+      "example": []
+    },
+    "workspace company reset": {
+      "summary": "Remove the company workflow source from this Studio.",
+      "effect": "local-write",
+      "cli": ["company", "remove"],
+      "example": []
+    },
+    "workspace workflow open": {
+      "summary": "Carry out the PM's named workspace workflow with the supplied inputs.",
+      "guide": "playbook/overrides.md"
+    },
     "context area show": {
       "summary": "Locate a product area's standing context and sources.",
       "effect": "read",
@@ -164,13 +186,13 @@
       "example": ["workspace/problems/export.md"]
     },
     "workspace browser open": {
-      "summary": "Open the local PM Hub browser app to a workspace screen.",
+      "summary": "Open the local oryx browser app to a workspace screen.",
       "effect": "read",
       "cli": ["ui"],
       "example": ["--screen", "roadmap"]
     },
     "workspace health check": {
-      "summary": "Run Hub structure, content, and workflow checks.",
+      "summary": "Run oryx structure, content, and workflow checks.",
       "effect": "read",
       "cli": ["check"],
       "example": ["--system-only"]

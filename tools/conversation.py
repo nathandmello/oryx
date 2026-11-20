@@ -296,23 +296,24 @@ def add_commands(commands):
 
 
 def run(root, args, prepare_write):
+    payload = None if args.operation == "show" else storage.json_input(sys.stdin.read())
+    if args.operation == "apply":
+        if not isinstance(payload, dict) or "changes" not in payload:
+            raise ValueError("Apply requires the reviewed checkpoint preview")
+        prepare_write(root)
+    else:
+        workspace.settings(root)
     private = workspace.repo(root, "workspace")
-    workspace.settings(root)
     if args.operation == "show":
         result = read_checkpoint(private, args.record)
+    elif args.operation == "preview":
+        result, _, _, _ = preview(root, private, args.record, payload)
     else:
-        payload = storage.json_input(sys.stdin.read())
-        if args.operation == "preview":
-            result, _, _, _ = preview(root, private, args.record, payload)
-        else:
-            if not isinstance(payload, dict) or "changes" not in payload:
-                raise ValueError("Apply requires the reviewed checkpoint preview")
-            prepare_write(root)
-            with storage.writer_lock(private):
-                result, target, original, candidate = preview(root, private, args.record, payload["changes"])
-                if payload != result:
-                    raise ValueError("The checkpoint preview is stale or modified. Review it again.")
-                storage.require_visible(private, target.relative_to(private))
-                if candidate != original:
-                    storage.replace_text(target, original, candidate)
+        with storage.writer_lock(private):
+            result, target, original, candidate = preview(root, private, args.record, payload["changes"])
+            if payload != result:
+                raise ValueError("The checkpoint preview is stale or modified. Review it again.")
+            storage.require_visible(private, target.relative_to(private))
+            if candidate != original:
+                storage.replace_text(target, original, candidate)
     print(json.dumps(result, ensure_ascii=False, indent=2))

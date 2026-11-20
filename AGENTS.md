@@ -1,16 +1,17 @@
-# PM Hub constitution
+# oryx constitution
 
-PM Hub supports personal product management. The PM makes product decisions.
+oryx supports personal product management. The PM makes product decisions.
 
 ## Start and scope
 
-Open the outer Hub. Read [README.md](README.md). For installed workspaces, run `python3 tools/pm.py align` and follow [upgrade guidance](playbook/updates.md). Read relevant records and settings. If prompted, ask once about remit.
+Read [README.md](README.md). Save standing PM corrections as [workspace overrides](playbook/overrides.md). Follow the PM’s applicable Studio rule for the step it changes. Keep other steps.
+Follow [upgrade guidance](playbook/updates.md) and run `python3 tools/pm.py align`. Ask once about remit when prompted.
 
-The shared system and `private/` have independent Git histories. Search private records explicitly. File reference material under `private/context/` and working artifacts under `private/workspace/`.
+The shared system and `studio/` have independent Git histories. File evidence under `studio/context/` and working artifacts under `studio/workspace/`.
 
 Read [the Git rules](playbook/git.md) before any commit, pull, push, remote change, or GitHub action.
 
-Keep Hub work in this checkout. Obtain permission before changing delivery repositories or other workspaces.
+Keep oryx work in this checkout. Obtain permission before changing delivery repositories or other workspaces.
 
 Use [ingest-context](.agents/skills/ingest-context/SKILL.md) automatically for requests to capture or update context. Apply the workflow from the PM's intent.
 
@@ -55,14 +56,14 @@ Research and results can change earlier choices. Keep learning, delivery progres
 - Use specialists only when warranted and delegation is authorised. One agent integrates shared edits.
 - Save useful findings and decisions in private records. Chat and private agent memory cannot replace them.
 - Default to thought-partner mode. Follow [conversation guidance](playbook/conversation.md). In quiet mode, complete requested work or wait.
-- Use `red-team` for requested PM content reviews. Use engineering review for Hub changes. Follow [the working practices](playbook/working.md) across sessions.
+- Use `red-team` for requested PM content reviews. Use engineering review for core changes. Follow [the working practices](playbook/working.md) across sessions.
 - Briefly report results, checks, and material gaps.
 
 ## Growth and structure
 
 - Implement the smallest complete workflow for each need.
 - Follow the README placement map. Add templates only for requested artifact types.
-- Use [extend-hub](.agents/skills/extend-hub/SKILL.md) for every shared Hub change.
+- Use [extend-hub](.agents/skills/extend-hub/SKILL.md) for every core change.
 - Prefer files, existing tools, and one command layer. Add dependencies or services for demonstrated needs.
 - Follow the [slash command convention](playbook/commands.md).
 - Apply [the filing rules](playbook/filing.md) before creating or converting any record. Keep one authoritative record per artifact. Preserve stable identifiers when files move.
@@ -85,7 +86,7 @@ Use restrained Hemingway prose in files and replies:
 
 ## Checks
 
-Before finishing a Hub change, trace its dependencies and update affected guidance, examples, tools, and tests. Report any unverified impact.
+For each core change, trace dependencies and update affected guidance, examples, tools, and tests. Report any unverified impact.
 
 Run `python3 tools/pm.py check` after changes. Run affected tests after tool changes.
 

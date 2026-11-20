@@ -11,7 +11,7 @@ def main():
 
     review = json.load(sys.stdin)
     window = tk.Tk()
-    window.title("PM Hub · Approve roadmap change")
+    window.title("oryx · Approve roadmap change")
     window.geometry("760x640")
     window.minsize(490, 380)
     frame = ttk.Frame(window, padding=18)

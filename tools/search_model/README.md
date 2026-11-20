@@ -1,6 +1,6 @@
 # Local English embedding model
 
-PM Hub ships the 256-dimensional Model2Vec Potion base model. Minish Lab distilled it from BGE base English v1.5.
+oryx ships the 256-dimensional Model2Vec Potion base model. Minish Lab distilled it from BGE base English v1.5.
 The data file contains 29,528 WordPiece tokens, their scales, and their signed 8-bit vectors.
 Python verifies its SHA-256 digest before use.
 

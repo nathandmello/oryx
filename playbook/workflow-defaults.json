@@ -1,0 +1,6 @@
+{
+  "weekly-review-order": {
+    "scope": "Weekly reviews",
+    "behavior": "Start with the single recommended check."
+  }
+}

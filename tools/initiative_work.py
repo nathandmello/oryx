@@ -7,6 +7,7 @@ import json
 from pathlib import Path
 import re
 
+import customizations
 import launch_readiness
 import layout
 import records
@@ -135,13 +136,25 @@ def read_rows(filename, rows):
     return rows
 
 
-def template(root):
+def template(root, changes=None):
     path = root / TEMPLATE
     if path.resolve() != path or not path.is_file():
         raise ValueError("The launch checklist starter is missing or unsafe")
     defaults = storage.json_input(path.read_text(encoding="utf-8"))
     if not isinstance(defaults, dict) or not defaults:
         raise ValueError("Give the launch checklist starter checkpoints")
+    if changes is not None:
+        if not isinstance(changes, dict):
+            raise ValueError("Use a map of launch starter checkpoints")
+        for identifier, change in changes.items():
+            layout.slug(identifier)
+            customizations.keys(change, REQUIRED[CHECKLIST] | {"omit"}, "starter checkpoints")
+            if "omit" in change and type(change["omit"]) is not bool:
+                raise ValueError("Use a boolean omit flag for a starter checkpoint")
+            if change.get("omit") is True:
+                defaults.pop(identifier, None)
+            else:
+                defaults[identifier] = {**defaults.get(identifier, {}), **{k: v for k, v in change.items() if k != "omit"}}
     rows = {}
     for identifier, row in defaults.items():
         fields(row, REQUIRED[CHECKLIST])
@@ -355,6 +368,7 @@ def add_commands(commands):
         if name == "launch-checklist":
             init = operations.add_parser("init", help="Start from the shared launch checklist")
             init.add_argument("--preview", action="store_true", help="Show starter checkpoints without writing")
+            init.add_argument("--starter-revision", help="Require the checkpoint template shown in a previous preview")
             entries.append(init)
         for operation in entries:
             operation.add_argument("product")
@@ -386,12 +400,13 @@ def render(result, output_format):
         print(json.dumps(result, indent=2, ensure_ascii=False))
 
 
-def execute(root, command, operation, product, initiative, *, expected=None, changes=None, write=False):
+def execute(root, command, operation, product, initiative, *, expected=None, changes=None, write=False, starter_revision=None):
     filename = {"task": TASKS, "launch-checklist": CHECKLIST}[command]
     relative = layout.initiative_work_path(product, initiative, filename)
     resolve_initiative(root, product, initiative)
     task_file, check_file = load_work(root, product, initiative)
     target, original, before, history = task_file if filename == TASKS else check_file
+    starter = None
     previous_history = history
     rows = before
     if operation == "apply":
@@ -402,7 +417,12 @@ def execute(root, command, operation, product, initiative, *, expected=None, cha
         if expected is not None and expected != revision(original):
             raise ValueError("The list changed. Read its current revision and review your edits")
         if original is None:
-            rows = template(root)
+            config = customizations.effective(root, customizations.read(root)[1])
+            changeset = customizations.for_product(config, product)["checkpoints"]
+            rows = template(root, changeset)
+            starter = revision(json.dumps(rows, sort_keys=True))
+            if starter_revision is not None and starter != starter_revision:
+                raise ValueError("The launch template changed. Preview the checklist again before saving.")
             changes = [{"id": key, "fields": row} for key, row in rows.items()]
     tasks = rows if filename == TASKS else task_file[2]
     checkpoints = rows if filename == CHECKLIST else check_file[2]
@@ -416,6 +436,8 @@ def execute(root, command, operation, product, initiative, *, expected=None, cha
         if write and (original is None or rows != before or history != previous_history):
             original = save(target, original, product, initiative, rows, history)
     result = view(filename, relative, original, rows, history, tasks, task_file[3])
+    if starter is not None and not write:
+        result["starter_revision"] = starter
     if filename == TASKS:
         task_views = {row["id"]: row for row in result["tasks"]}
         for key, check in checkpoints.items():

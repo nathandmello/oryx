@@ -13,6 +13,7 @@ import upgrades
 import conversion
 import storage
 import snapshots
+import studio_layout
 
 
 def identity(url):
@@ -41,7 +42,7 @@ def destination(root, role, settings):
     path = workspace.repo(root, role)
     expected = settings["remotes"][role]
     if not expected:
-        raise ValueError(f"{role}: confirm the repository URL, then set private/settings.json remotes.{role}")
+        raise ValueError(f"{role}: confirm the repository URL, then set {workspace.private_root(root).name}/settings.json remotes.{role}")
     urls = []
     for options in (("--all",), ("--push", "--all")):
         values = workspace.git(path, "remote", "get-url", *options, "origin").splitlines()
@@ -96,6 +97,57 @@ def matches_private_tree(path, head, incoming):
                 and not git("ls-files", "--others", "--exclude-standard", "-z"))
 
 
+def check_system_history(path, *revisions):
+    # A deletion in a later commit still publishes earlier PM blobs reachable from the branch.
+    if workspace.git(path, "rev-list", "--full-history", "--max-count=1", *revisions, "--", *storage.PRIVATE_PATHSPECS):
+        raise ValueError("Shared Git history tracks the private workspace. Inspect the branch before sharing it")
+
+
+def committed_object(path, revision, name):
+    blob = subprocess.run(["git", "-C", str(path), "cat-file", "blob", f"{revision}:{name}"], capture_output=True)
+    if blob.returncode:
+        return None
+    try:
+        value = json.loads(blob.stdout)
+    except (ValueError, UnicodeError):
+        return None
+    return value if isinstance(value, dict) else None
+
+
+def migrated_settings_or_layout(path, old, target, settings):
+    previous = committed_object(path, old, "settings.json")
+    if previous is None or settings["workspace_format"] != 2:
+        return False
+    if previous.get("workspace_format") == 1:
+        return True
+    # The version-only update written by an earlier system pull can already match the first machine's commit.
+    if previous != settings:
+        try:
+            workspace.validate_release({key: previous.get(key) for key in ("system_version", "workspace_format")})
+        except ValueError:
+            return False
+        return (previous == dict(settings, system_version=previous.get("system_version"))
+                and workspace.version(previous) < workspace.version(settings))
+    # Studio can introduce the tracked guide receipt without changing version or moving a personal file.
+    old_ledger = committed_object(path, old, upgrades.LEDGER)
+    if old_ledger is not None and upgrades.STUDIO_GUIDES not in old_ledger:
+        new_ledger = committed_object(path, target, upgrades.LEDGER)
+        if new_ledger is not None and new_ledger.get(upgrades.STUDIO_GUIDES) is True:
+            return True
+    # The Studio move also applies to restored repositories stamped with the current version.
+    return any(workspace.git(path, "ls-tree", old, "--", legacy)
+               and not workspace.git(path, "ls-tree", old, "--", name)
+               and not workspace.git(path, "ls-tree", target, "--", legacy)
+               and workspace.git(path, "ls-tree", target, "--", name)
+               for name, legacy in studio_layout.LEGACY.items())
+
+
+def matches_migration(path, old, target, settings):
+    if not migrated_settings_or_layout(path, old, target, settings):
+        return False
+    return committed_object(path, target, "settings.json") == settings and matches_private_tree(path, old, target)
+
+
 def adopt_private_migration(path, branch, incoming, settings):
     """Advance a second migrated installation without ever writing its working files."""
     with storage.writer_lock(path):
@@ -116,18 +168,28 @@ def adopt_private_migration(path, branch, incoming, settings):
         if saved is not None and head == target:
             journal.unlink()  # The ref advanced before the previous process could remove its receipt.
             return
-        if (old != head or target == head or settings["workspace_format"] != 2 or
-                json.loads(workspace.git(path, "show", head + ":settings.json")).get("workspace_format") != 1):
+        if old != head or target == head:
             raise ValueError(KEEP_CHANGES)
         for ancestor, descendant in ((old, target), (target, incoming)):
             if subprocess.run(["git", "-C", str(path), "merge-base", "--is-ancestor", ancestor, descendant],
                               capture_output=True).returncode:
                 raise ValueError(KEEP_CHANGES)
-        if json.loads(workspace.git(path, "show", target + ":settings.json")) != settings:
-            raise ValueError(KEEP_CHANGES)
         resume = saved is not None and index_matches(path, target)
-        if (not resume and not index_matches(path, head)) or not matches_private_tree(path, head, target):
+        if not resume and not index_matches(path, head):
             raise ValueError(KEEP_CHANGES)
+        if not matches_migration(path, old, target, settings):
+            if saved is not None:
+                raise ValueError(KEEP_CHANGES)
+            # Another machine may have kept working after it committed the migration.
+            # Only consider migration paths on the verified ancestry from HEAD to the fetched commit.
+            history = workspace.git(path, "rev-list", "--ancestry-path", "--full-history", old + ".." + incoming, "--",
+                                    "settings.json", upgrades.LEDGER, *studio_layout.LEGACY, *studio_layout.LEGACY.values())
+            for revision in history.splitlines():
+                if revision != target and matches_migration(path, old, revision, settings):
+                    target = receipt["after"] = revision
+                    break
+            else:
+                raise ValueError(KEEP_CHANGES)
         if saved is None:
             storage.replace_text(journal, None, json.dumps(receipt) + "\n")
         if not resume:
@@ -162,7 +224,9 @@ def run(root, role, operation):
     if tracking and (tracking != "origin" or tracked_branch != f"refs/heads/{branch}"):
         raise ValueError(f"{role}: branch tracks another destination; inspect it before synchronisation")
     if operation == "push":
-        if role == "workspace":
+        if role == "system":
+            check_system_history(path, "HEAD")
+        else:
             committed = subprocess.run(["git", "-C", str(path), "show", f"HEAD:{upgrades.LEDGER}"], capture_output=True)
             local = upgrades.read_state(path)[1]
             published = {} if committed.returncode else json.loads(committed.stdout)
@@ -181,15 +245,13 @@ def run(root, role, operation):
     metadata_path = "playbook/release.json" if role == "system" else "settings.json"
     incoming = json.loads(workspace.git(path, "show", f"{fetched}:{metadata_path}"))
     if role == "system":
-        for revision in ("HEAD", fetched):
-            if workspace.git(path, "ls-tree", revision, "--", "workspace", "private"):
-                raise ValueError("Shared Git history tracks the private workspace; stopped before merging")
+        check_system_history(path, "HEAD", fetched)
         if not workspace.git(path, "ls-tree", fetched, "--", workspace.FORMAT_FILE):
-            raise ValueError("Incoming Hub predates the release descriptor. Preserve this installation before restoring an older release")
+            raise ValueError("Incoming oryx release predates the release descriptor. Preserve this installation before restoring an older release")
         descriptor = json.loads(workspace.git(path, "show", f"{fetched}:{workspace.FORMAT_FILE}"))
         incoming = workspace.installed_release(incoming, descriptor)
         if workspace.version(incoming) < max(workspace.version(settings), workspace.version(workspace.release(root))):
-            raise ValueError("Incoming Hub predates this private workspace; use the documented recovery procedure")
+            raise ValueError("Incoming oryx release predates this private workspace; use the documented recovery procedure")
         if not workspace.supports_update(settings, incoming):
             raise ValueError("Incoming workspace format differs; review a migration before updating")
     if not isinstance(incoming, dict):
@@ -204,7 +266,7 @@ def run(root, role, operation):
         with storage.writer_lock(private):
             target = private / "settings.json"
             if target.resolve() != target:
-                raise ValueError("Use regular private settings inside PM Hub")
+                raise ValueError("Use regular private settings inside oryx")
             original = target.read_text(encoding="utf-8")
             latest = workspace.settings(root, compatible=False)
             if latest["workspace_format"] != settings["workspace_format"] or latest["system_version"] != settings["system_version"]:

@@ -12,6 +12,7 @@ from urllib.parse import quote, unquote, urlsplit, urlunsplit
 
 import conversion
 import layout
+import metric_registry
 import records
 import storage
 import upgrades
@@ -243,6 +244,8 @@ def require_supported_registers(private):
 
 def legacy_material(name):
     parts = Path(name).parts
+    if name == metric_registry.PRIVATE:
+        return False
     return parts[0] == "products" or (
         parts[0] == "context" and len(parts) > 1 and parts[1] not in {"company", "products", "initiatives", "pm", "sources"}
     )
@@ -273,17 +276,18 @@ def protected_sources(private, docs, ledger, saved):
     protected.update(name for name, row in saved.get("retained", {}).items()
                      if row.get("disposition", {}).get("status") == "source")
     protected.update(name for name, entry in ledger.items() if entry.get("role") == "source")
-    protected.update(name for name in docs if "sources" in Path(name).parts)
+    protected.update(name for name in docs if "sources" in Path(name).parts and not layout.is_customization(name))
     for name, text in docs.items():
-        if not name.lower().endswith(".md") or name in protected:
+        if not name.lower().endswith(".md") or name in protected or layout.is_customization(name):
             continue
         for match in LINK.finditer(records.section(text, "Sources") or ""):
             path = referenced(private, name, match["link"] or match["definition"])
             if path and private in path.parents:
                 relative = path.relative_to(private)
-                if not any(part.startswith(".") or part == "secrets" for part in relative.parts) and path.resolve() == path:
+                if (not layout.is_customization(relative) and path.resolve() == path
+                        and not any(part.startswith(".") or part == "secrets" for part in relative.parts)):
                     protected.add(relative.as_posix())
-    return protected
+    return {name for name in protected if not layout.is_customization(name)}
 
 
 def ignored_names(private, names):
@@ -291,10 +295,10 @@ def ignored_names(private, names):
     if not names:
         return set()
     result = subprocess.run(["git", "-C", str(private), "check-ignore", "--no-index", "-z", "--stdin"],
-                            input="\0".join(names) + "\0", capture_output=True, text=True)
+                            input=b"\0".join(map(os.fsencode, names)) + b"\0", capture_output=True)
     if result.returncode not in {0, 1}:
         raise ValueError("Could not verify Git ignore rules for migration destinations")
-    return set(result.stdout.split("\0")) - {""}
+    return {os.fsdecode(name) for name in result.stdout.split(b"\0") if name}
 
 
 def ambiguous_component(private, name):
@@ -310,10 +314,19 @@ def ambiguous_component(private, name):
     return False
 
 
+def reserved_paths(private):
+    """Keep index entries, worktree files, and destinations the PM has staged for deletion."""
+    paths = {path.relative_to(private) for path in storage.inventory(private)}
+    deleted = subprocess.run(["git", "-C", str(private), "diff", "--cached", "--no-renames", "--name-only",
+                              "--diff-filter=D", "-z", "--"], capture_output=True, check=True)
+    paths.update(Path(os.fsdecode(name)) for name in deleted.stdout.split(b"\0") if name)
+    return paths
+
+
 def check_destinations(private, moves, notes):
     destinations = {}
     # A tracked but locally deleted destination is still the PM's pending change.
-    occupied = {p.relative_to(private).as_posix().casefold() for p in storage.inventory(private)}
+    occupied = {path.as_posix().casefold() for path in reserved_paths(private)}
     for old, new in moves.items():
         destinations.setdefault(new.casefold(), []).append(old)
     ignored = ignored_names(private, moves.values())
@@ -357,13 +370,14 @@ def blocking_references(private, docs, moves, protected, guides):
         if name in {OLD_PROFILE, "settings.json"} or name in guides:
             continue
         markdown = Path(name).suffix.lower() in {".md", ".markdown"}
-        if name in protected:
+        if name in protected or layout.is_customization(name):
             for match in LINK.finditer(text):
                 target = referenced(private, name, match["link"] or match["definition"])
                 if target and private in target.parents:
                     subject = target.relative_to(private).as_posix()
                     if subject in moves:
-                        blocked[subject] = f"Original source {name} links here. Preserve that link before moving the record."
+                        owner = "Customization" if layout.is_customization(name) else "Original source"
+                        blocked[subject] = f"{owner} {name} links here. Preserve that link before moving the record."
         residual = "".join(LINK.sub("", part) if kind in {"active", "literal"} else part for kind, part in markdown_chunks(text)) if markdown else text
         # Detect common opaque href, wiki, and path-valued configuration spellings. Keep
         # the old file reachable until someone can update the consumer in its own syntax.
@@ -496,7 +510,7 @@ def plan(private):
     retired = {old: metadata[old][0] for old in moves}
     for name, before in docs.items():
         destination = moves.get(name, name)
-        if name in protected:
+        if name in protected or layout.is_customization(name):
             continue
         if name == OLD_PROFILE:
             if not candidate_profile:

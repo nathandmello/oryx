@@ -14,10 +14,12 @@ const token = sessionStorage.getItem(sessionKey);
 const requestedScreen = new URLSearchParams(location.search).get("screen");
 const state = {
   screen: Object.keys(screenPaths).find(screen => screenPaths[screen] === requestedScreen) || "roadmap",
-  catalog: null, product: "", cycle: "", area: "", board: null, edit: null,
+  catalog: null, product: "", cycle: "", area: "", board: null, edit: null, view: null,
   presenting: false, scope: { task: {}, "launch-checklist": {} }, list: null, filter: "",
 };
 let dragged = null;
+let boardRequest = 0;
+let workRequestNumber = 0;
 
 function node(tag, attributes = {}, ...children) {
   const element = document.createElement(tag);
@@ -74,7 +76,7 @@ function alert(message = "", error = false, dialog = null) {
 }
 
 async function api(endpoint, body = {}) {
-  if (!token) throw new Error("Open this browser session from the PM Hub launcher.");
+  if (!token) throw new Error("Open this browser session from the oryx launcher.");
   const response = await fetch("/api/" + endpoint, {
     method: "POST",
     headers: { "Content-Type": "application/json", "X-PM-Hub-Token": token },
@@ -129,10 +131,13 @@ function productOptions(onlyRoadmaps) {
     .map(product => [product.id, product.title]);
 }
 
-async function loadBoard() {
+async function loadBoard(view = state.view) {
+  const request = ++boardRequest;
   state.product ||= productOptions(true)[0]?.[0] || "";
-  state.board = state.product ? await api("roadmap", { product: state.product }) : null;
-  const board = state.board;
+  const board = state.product ? await api("roadmap", { product: state.product, view }) : null;
+  if (request !== boardRequest || state.screen !== "roadmap") return;
+  state.view = view;
+  state.board = board;
   if (!board?.cycles.some(cycle => cycle.cycle === state.cycle)) {
     state.cycle = board?.cycles.find(cycle => cycle.starts_on <= board.today && cycle.ends_on >= board.today)?.cycle
       || board?.cycles.at(-1)?.cycle || "";
@@ -295,25 +300,123 @@ async function showComparison(event) {
   });
 }
 
+function editRoadmapFields(row, view) {
+  const readers = new Map();
+  const controls = Object.entries(view.columns).filter(([key]) => Object.hasOwn(view.fields, key)).map(([key, title]) => {
+    const field = view.fields[key];
+    const value = row[key];
+    let control;
+    if (field.type === "multiple") {
+      control = node("select", { multiple: true }, field.choices.map(choice =>
+        node("option", { value: choice, selected: value?.includes(choice) }, choice)));
+      readers.set(key, () => {
+        const selected = Array.from(control.selectedOptions, option => option.value);
+        const previous = value || [];
+        if (!selected.length) return previous.length ? null : value ?? null;
+        return [...previous.filter(item => selected.includes(item)), ...selected.filter(item => !previous.includes(item))];
+      });
+    } else if (field.type === "choice" || field.type === "boolean") {
+      const choices = field.choices || ["true", "false"];
+      control = select([["", "Unset"], ...choices.map(choice => [choice, choice])], String(value ?? ""));
+      readers.set(key, () => control.value === "" ? null :
+        field.type === "boolean" ? control.value === "true" : control.value);
+    } else {
+      control = field.type === "text" ? textarea(value ?? "") : input(value, { type: field.type, step: field.type === "number" ? "any" : null });
+      const initial = control.value;
+      // Preserve original line endings and numeric precision in untouched controls.
+      const original = value ?? null;
+      readers.set(key, () => control.value === initial ? original :
+        control.value === "" ? null : field.type === "number" ? Number(control.value) : control.value);
+    }
+    return label(title, control);
+  });
+  const dialog = modal("Fields for " + row.title, formGrid(...controls), [
+    button("Save fields", event => attempt(event, async () => {
+      const values = Object.fromEntries(Array.from(readers, ([key, read]) => [key, read()]).filter(([key, value]) =>
+        JSON.stringify(value) !== JSON.stringify(row[key] ?? null) && !(row[key] == null && Array.isArray(value) && !value.length)));
+      if (Object.keys(values).length) {
+        await api("roadmap-fields", { product: row.product, id: row.id, revision: view.revision, values });
+      }
+      dialog.close();
+      await loadBoard();
+      render();
+    }), "primary"),
+  ]);
+}
+
+function customizedRoadmap(view, rows) {
+  const fields = Object.entries(view.columns);
+  const canEdit = !state.presenting && fields.some(([key]) => Object.hasOwn(view.fields, key));
+  const edit = row => button("Edit fields", () => editRoadmapFields(row, view), "compact",
+    { "aria-label": "Edit fields for " + row.title });
+  const groups = new Map();
+  for (const row of rows) {
+    const value = row[view.group];
+    const names = view.group === "none" ? [""] : Array.isArray(value) && value.length ? value :
+      [Array.isArray(value) || value == null || value === "" ? null : value];
+    for (const name of names) {
+      if (!groups.has(name)) groups.set(name, []);
+      groups.get(name).push(row);
+    }
+  }
+  const display = value => Array.isArray(value) ? value.join(", ") : String(value ?? "");
+  const wrapper = node("section", { class: "custom-roadmap " + view.density, "aria-label": view.title });
+  for (const [group, items] of groups) {
+    const title = group ?? (groups.has("Unassigned") ? "Unassigned (no value)" : "Unassigned");
+    const section = node("section", {}, group !== "" && node("h2", {}, String(title)));
+    if (view.layout === "table") {
+      section.append(node("table", {}, node("thead", {}, node("tr", {},
+        fields.map(([, title]) => node("th", { scope: "col" }, title)), canEdit && node("th", {}, "Actions"))),
+        node("tbody", {}, items.map(row => node("tr", {},
+          fields.map(([key]) => node("td", {}, display(row[key]))), canEdit && node("td", {}, edit(row)))))));
+    } else {
+      section.append(node("div", { class: "custom-cards" }, items.map(row =>
+        node("article", { class: "card" }, node("dl", {}, fields.map(([key, title]) =>
+          [node("dt", {}, title), node("dd", {}, display(row[key]))])), canEdit && edit(row)))));
+    }
+    wrapper.append(section);
+  }
+  if (!rows.length) wrapper.append(node("p", { class: "empty" }, "No initiatives"));
+  return wrapper;
+}
+
+function downloadRoadmap(view) {
+  return button("Download custom view", event => attempt(event, async () => {
+    const result = await api("roadmap-export", { product: state.product, cycle: state.cycle, area: state.area,
+      view: view.name, revision: view.revision, board_revision: state.board.revision, page_revision: view.page_revision });
+    const url = URL.createObjectURL(new Blob([result.html], { type: "text/html" }));
+    const download = node("a", { href: url, download: state.product + "-" + view.name + ".html" });
+    download.click();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }));
+}
+
 function roadmapScreen() {
   const products = productOptions(true);
   const cycle = selectedCycle();
   const selectedProduct = products.find(([id]) => id === state.product);
   const cycleDetail = cycle ? cycle.starts_on + " to " + cycle.ends_on + "  ·  " + cycle.reserved + " / "
     + cycle.capacity + " " + cycle.unit + " reserved" : "";
-  app.append(heading("Roadmap", selectedProduct ? [selectedProduct[1], cycleDetail].filter(Boolean).join("  ·  ") : "",
-    !state.edit && !state.presenting && state.board && button("New planning cycle", newCycleDialog, "primary"),
+  const view = state.board?.presentation;
+  const rows = cycleRows();
+  const visible = rows.filter(row => !state.area || row.areas.includes(state.area));
+  if (view?.custom && state.presenting) {
+    app.append(heading(view.title, "", view.page && downloadRoadmap(view)), customizedRoadmap(view, visible));
+    return;
+  }
+  app.append(heading(view?.custom ? view.title : "Roadmap", selectedProduct ? [selectedProduct[1], cycleDetail].filter(Boolean).join("  ·  ") : "",
+    !state.edit && !state.presenting && state.board && button("New planning cycle", event => attempt(event, newCycleDialog), "primary"),
     !state.edit && !state.presenting && !!cycle && button("Present", togglePresentation),
   ));
   if (!products.length) {
     app.append(node("div", { class: "panel empty" }, "Set up a signed product initiative register to open its roadmap."));
     return;
   }
-  const rows = cycleRows();
   const subjects = [...new Set(rows.flatMap(row => row.areas))].sort();
   const controls = node("div", { class: "filters" },
     label("Product", select(products, state.product, { disabled: !!state.edit, onchange: event => attempt(event, async () => {
       state.product = event.target.value;
+      state.view = null;
       state.cycle = state.area = "";
       state.board = null;
       try { await loadBoard(); } finally { render(); }
@@ -324,15 +427,22 @@ function roadmapScreen() {
         state.area = "";
         render();
       } })),
+    !state.edit && view && Object.keys(view.views).length > 1 && label("View", select(Object.entries(view.views), view.name,
+      { onchange: event => attempt(event, async () => {
+        await loadBoard(event.target.value);
+        render();
+      }) })),
     !state.edit && label("Product area", select([["", "All areas"], ...subjects.map(subject => [subject, readable(subject.split("/").at(-1))])],
       state.area, { onchange: event => { state.area = event.target.value; render(); } })),
     !state.edit && cycle && button("Refresh", event => attempt(event, async () => { await loadBoard(); render(); })),
+    !state.edit && view?.page && cycle && downloadRoadmap(view),
     !state.edit && !state.presenting && cycle && button("View comparison", showComparison),
     !state.edit && !state.presenting && cycle && button("Edit priorities", startEdit, "primary", {
       disabled: cycle.ends_on < state.board.today,
     }),
   );
   app.append(controls);
+  if (view?.warning) app.append(node("p", { role: "status" }, view.warning));
   if (!cycle) {
     app.append(node("div", { class: "panel empty" }, state.board
       ? "Create a planning cycle to compare and select approved candidates."
@@ -349,7 +459,10 @@ function roadmapScreen() {
     ));
   }
   const byId = new Map([...rows, ...(state.board?.candidates || []).map(row => ({ ...row, phase: "candidate" }))].map(row => [row.id, row]));
-  const visible = rows.filter(row => !state.area || row.areas.includes(state.area));
+  if (!state.edit && view?.custom) {
+    app.append(customizedRoadmap(view, visible));
+    return;
+  }
   app.append(node("section", { class: "board", "aria-label": "Roadmap horizons" },
     horizons.map(horizon => {
       const items = state.edit ? state.edit.order[horizon].map(id => byId.get(id)) : visible.filter(row => row.horizon === horizon);
@@ -382,10 +495,10 @@ function showRoadmapReview(proposal, onSaved = () => {}) {
         change.reason && node("p", { class: "muted small" }, change.reason + " · " + change.source));
     })),
     proposal.documents.map(doc => node("details", {}, node("summary", {}, doc.path), node("pre", {}, doc.text))),
-    !state.catalog.signing && node("p", { class: "muted" }, "Start PM Hub with a local signing key to approve changes."),
+    !state.catalog.signing && node("p", { class: "muted" }, "Start oryx with a local signing key to approve changes."),
   );
   const dialog = modal("Review roadmap proposal", review, [button("Approve on this computer", event => attempt(event, async () => {
-    alert("Confirm the proposal in the PM Hub desktop window.", false, dialog);
+    alert("Confirm the proposal in the oryx desktop window.", false, dialog);
     const result = await api("approve", { id: proposal.id });
     if (result.cancelled) {
       alert("Approval cancelled. You can review or approve again.", false, dialog);
@@ -402,7 +515,7 @@ function showRoadmapReview(proposal, onSaved = () => {}) {
   }), "primary", { disabled: !state.catalog.signing })]);
 }
 
-function newCycleDialog() {
+async function newCycleDialog() {
   const candidates = state.board.candidates;
   if (!candidates.length) {
     modal("New planning cycle", node("p", {}, "Approve at least one Initiative Brief to compare candidates."));
@@ -410,6 +523,8 @@ function newCycleDialog() {
   }
   const product = state.product;
   const expectedRoadmap = state.board.revision;
+  const starter = await api("comparison-template", { product });
+  if (state.screen !== "roadmap" || state.product !== product) return;
   const id = input("", { required: true, pattern: "[a-z0-9]+(?:-[a-z0-9]+)*", placeholder: "q1-renewals" });
   const dates = [input(state.board.today, { type: "date", required: true }), input("", { type: "date", required: true })];
   const capacity = input("", { type: "number", min: 0, required: true });
@@ -418,6 +533,30 @@ function newCycleDialog() {
   const source = input("", { placeholder: "Planning meeting or document" });
   const sections = Object.fromEntries(comparisonSections.map(name => [name, textarea("", { required: true })]));
   const comparisonNotes = sections.Comparison;
+  const comparisonFields = node("div", { class: "wide stack" });
+  let extraSections = new Map();
+  function showSections(comparison, isTemplate) {
+    extraSections = new Map();
+    comparisonFields.replaceChildren();
+    if (isTemplate) {
+      for (const message of starter.notices || []) comparisonFields.append(node("p", {}, message));
+    }
+    // JSON object keys that look like integers are enumerated first by JS.
+    for (const name of comparison.order) {
+      const body = comparison.sections[name];
+      const standard = comparisonSections.includes(name);
+      const control = standard ? sections[name] : textarea("", { required: true });
+      const value = name === "Comparison" ? body.split("\n").filter(line => !line.trim().startsWith("|")).join("\n").trim() : body;
+      const prompt = isTemplate && value.match(/^\{\{([^{}]+)\}\}$/);
+      control.placeholder = prompt ? prompt[1] : "";
+      control.value = prompt ? "" : value;
+      if (name === "Comparison") {
+        comparisonFields.append(node("h2", {}, "Compare approved candidates"), ...entries.map(entry => entry.card));
+      }
+      if (!standard) extraSections.set(name, control);
+      comparisonFields.append(label(name === "Comparison" ? "Alternatives and trade-offs" : name, control, true));
+    }
+  }
   let comparisonRevision = "absent";
   let loadedId = "";
   const entries = candidates.map(candidate => {
@@ -444,6 +583,7 @@ function newCycleDialog() {
         label("Rank", rank), label("Effort", effort)));
     return { candidate, include, assessment, horizon, rank, effort, card, update };
   });
+  showSections(starter, true);
   const loadExisting = button("Load existing comparison", event => attempt(event, async () => {
     if (!id.reportValidity()) return;
     const result = await api("comparison", { product, cycle: id.value });
@@ -451,8 +591,8 @@ function newCycleDialog() {
     if (!result.text) throw new Error("No saved comparison for that cycle ID.");
     comparisonRevision = result.revision;
     loadedId = id.value;
-    for (const name of comparisonSections) sections[name].value = result.sections[name] || "";
-    const rows = new Map(sections.Comparison.value.split("\n").filter(line => line.trim().startsWith("|"))
+    showSections(result, false);
+    const rows = new Map(result.sections.Comparison.split("\n").filter(line => line.trim().startsWith("|"))
       .map(line => line.split("|").slice(1, 3).map(cell => cell.trim())));
     const unavailable = [...rows.keys()].filter(key => key.includes("/") && !candidates.some(item => item.id === key));
     if (unavailable.length) alert("Review options no longer eligible for a new cycle: " + unavailable.join(", "), true, dialog);
@@ -461,16 +601,12 @@ function newCycleDialog() {
       entry.assessment.value = rows.get(entry.candidate.id) || "";
       entry.update();
     }
-    sections.Comparison.value = sections.Comparison.value.split("\n").filter(line => !line.trim().startsWith("|")).join("\n").trim();
   }), "compact");
   const form = formGrid(
     label("Cycle ID", id), node("div", { class: "actions" }, loadExisting),
     label("Period start", dates[0]), label("Period end", dates[1]),
     label("Capacity", capacity), label("Effort unit", unit),
-    label("Objectives and obligations", sections["Objectives and obligations"], true),
-    label("Capacity constraints", sections["Capacity constraints"], true),
-    node("h2", { class: "wide" }, "Compare approved candidates"), entries.map(entry => entry.card),
-    label("Alternatives and trade-offs", comparisonNotes, true), label("Sources", sections.Sources, true),
+    comparisonFields,
     label("Selection reason", reason), label("Decision source", source),
   );
   const dialog = modal("New planning cycle", form, [button("Save comparison and review", event => attempt(event, async () => {
@@ -481,11 +617,12 @@ function newCycleDialog() {
     const options = compared.map(entry => entry.candidate.id);
     const table = ["| Initiative ID | Assessment |", "| --- | --- |",
       ...compared.map(entry => "| " + entry.candidate.id + " | " + entry.assessment.value.trim() + " |")].join("\n");
-    const content = Object.fromEntries(comparisonSections.map(name => [name, sections[name].value]));
+    const content = Object.fromEntries([...Object.entries(sections), ...extraSections].map(([name, control]) => [name, control.value]));
     content.Comparison = table + "\n\n" + comparisonNotes.value;
     const proposal = await api("roadmap-preview", {
       mode: "new", product, cycle: id.value, revision: expectedRoadmap,
       comparison_revision: loadedId === id.value ? comparisonRevision : "absent",
+      starter_revision: starter.revision,
       sections: content, options, starts_on: dates[0].value, ends_on: dates[1].value,
       capacity: Number(capacity.value), unit: unit.value.trim(), reason: reason.value.trim(), source: source.value.trim(),
       placements: compared.filter(entry => entry.horizon.value).map(entry => ({
@@ -499,12 +636,15 @@ function newCycleDialog() {
 }
 
 async function loadWork() {
-  const scope = state.scope[state.screen];
+  const command = state.screen;
+  const request = ++workRequestNumber;
+  const scope = state.scope[command];
   scope.product ||= productOptions(false)[0]?.[0] || "";
   const product = state.catalog.products.find(item => item.id === scope.product);
   scope.initiative ||= Object.keys(product?.initiatives || {})[0] || "";
-  state.list = scope.product && scope.initiative
-    ? await api("work", { ...scope, command: state.screen, operation: "list" }) : null;
+  const list = scope.product && scope.initiative
+    ? await api("work", { ...scope, command, operation: "list" }) : null;
+  if (request === workRequestNumber && state.screen === command) state.list = list;
 }
 
 function workItems(list, command) {
@@ -541,7 +681,9 @@ function workScreen() {
     if (key === "product") scope.initiative = "";
     state.list = null;
     state.filter = "";
-    try { await loadWork(); } finally { render(); }
+    const loading = loadWork();
+    render();
+    try { await loading; } finally { render(); }
   });
   app.append(node("div", { class: "filters" },
     label("Product", select(productOptions(false), scope.product, { onchange: event => changeScope(event, "product") })),
@@ -603,7 +745,7 @@ async function startChecklist(event) {
       result.checkpoints.map(row => node("article", { class: "review-item" },
         node("h3", {}, row.title), node("p", { class: "small muted" }, readable(row.phase)), node("p", {}, row.criterion)))),
       [button("Create checklist", e => attempt(e, async () => {
-        const saved = await workRequest(command, scope, "init", { save: true, revision: result.revision });
+        const saved = await workRequest(command, scope, "init", { save: true, revision: result.revision, starter_revision: result.starter_revision });
         dialog.close();
         commitWork(saved, "Checklist created.");
       }), "primary")]);
@@ -767,6 +909,7 @@ async function navigate(screen) {
   state.filter = "";
   state.list = null;
   if (screen === "roadmap") state.board = null;
+  render();
   try {
     if (screen === "roadmap") await loadBoard();
     else await loadWork();

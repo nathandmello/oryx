@@ -1,4 +1,4 @@
-"""Discover and route the published PM Hub slash commands."""
+"""Discover and route published oryx slash commands."""
 
 from contextlib import redirect_stderr, redirect_stdout
 from io import StringIO
@@ -9,6 +9,7 @@ from shlex import join
 
 import storage
 import workspace
+import overrides
 
 
 CATALOG = "playbook/commands.json"
@@ -29,7 +30,7 @@ def description(value):
 def load(root, cli_parser=None):
     path = root / CATALOG
     if path.resolve() != path or not path.is_file():
-        raise ValueError("Use the regular shared command catalog inside PM Hub.")
+        raise ValueError("Use the regular shared command catalog inside oryx.")
     catalog = storage.json_input(path.read_text(encoding="utf-8"))
     if not isinstance(catalog, dict) or catalog.keys() != {"domains", "verbs", "aliases", "commands"}:
         raise ValueError("Define domains, verbs, aliases, and commands.")
@@ -177,7 +178,7 @@ def route(root, args):
         parts.append(part)
     if len(parts) < 3:
         if parts and not any(path.startswith(" ".join(parts) + " ") for path in catalog["commands"]):
-            raise ValueError("Unknown Hub action. Run pm.py action to list domains.")
+            raise ValueError("Unknown oryx action. Run pm.py action to list domains.")
         if help_requested and len(args) != len(parts) + 1:
             raise ValueError("Use help on its own after a domain or subject.")
         show(catalog, parts)
@@ -185,10 +186,10 @@ def route(root, args):
     path = " ".join(parts)
     if path not in catalog["commands"]:
         if parts[0] not in catalog["domains"]:
-            raise ValueError("Unknown Hub domain. Run pm.py action to list domains.")
+            raise ValueError("Unknown oryx domain. Run pm.py action to list domains.")
         subject = " ".join(parts[:2])
         menu = subject if any(key.startswith(subject + " ") for key in catalog["commands"]) else parts[0]
-        raise ValueError(f"Unknown Hub action. Run pm.py action {menu} to see the available paths.")
+        raise ValueError(f"Unknown oryx action. Run pm.py action {menu} to see the available paths.")
     entry = catalog["commands"][path]
     arguments = args[3:]
     if describe:
@@ -202,6 +203,10 @@ def route(root, args):
     if arguments in (["-h"], ["--help"]):
         print(f"/pm {path} [guided]\n{entry['summary']}\nWorkflow: {entry['guide']}")
     else:
-        print(json.dumps({"command": path, "effect": "guided", "task": entry["summary"],
-                          "guide": entry["guide"], "arguments": arguments}, indent=2))
+        result = {"command": path, "effect": "guided", "task": entry["summary"],
+                  "guide": entry["guide"], "arguments": arguments}
+        private = workspace.optional_repo(root)
+        if private is not None:
+            result["workflow_guidance"] = overrides.guidance(private)
+        print(json.dumps(result, indent=2))
     return None
