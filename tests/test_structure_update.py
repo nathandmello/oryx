@@ -224,6 +224,9 @@ with storage.writer_lock(private), patch.object(conversion, 'recoverable_swap', 
                     self.check_cli(consumer, "align")
                 else:
                     self.check_cli(consumer, "git", "system", "pull")
+                self.assertFalse(private.exists())
+                private = consumer / "studio"
+                plan = private / PLAN
                 preview = json.loads(self.check_cli(consumer, *offered))
                 self.assertFalse(preview["structure_review"]["needs_scan"])
                 self.assertEqual(preview["structure_review"]["records"][0]["path"], PLAN)
@@ -233,7 +236,7 @@ with storage.writer_lock(private), patch.object(conversion, 'recoverable_swap', 
                     with zipfile.ZipFile(private / ".hub-history/historical-filing.zip") as recovery:
                         self.assertEqual(recovery.read("original/" + PLAN), original)
                 if method == "section-lead":
-                    self.assertEqual(company.read_bytes(), company_before)
+                    self.assertEqual((private / "context/company/overview.md").read_bytes(), company_before)
                     context = self.check_cli(consumer, "task-context", "--company", "Prepare a partner handoff.")
                     self.assertIn(fact, context)
                 installed = workspace.settings(consumer)

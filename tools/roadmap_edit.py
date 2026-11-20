@@ -3,6 +3,7 @@
 from datetime import date
 import re
 
+import customizations
 import filing
 import initiative_events
 import initiative_store
@@ -27,9 +28,21 @@ def snapshot(root, product):
     return initiative_store.digest(initiative_store.canonical(payload)), register
 
 
-def board(root, product):
+def board(root, product, view=None):
     revision, register = snapshot(root, product)
+    rows = initiative_views.roadmap([(product, register)], private=storage.private_root(root))
+    try:
+        presentation = customizations.projection(root, rows, view, product=product)
+    except (ValueError, OSError) as exc:
+        presentation = customizations.projection(root, rows, "core")
+        presentation["warning"] = f"Showing the core roadmap. Review workspace customization: {exc}"
+    if presentation["page"]:
+        try:
+            presentation["page_revision"] = customizations.revision(customizations.page_template(root, presentation["page"]))
+        except (OSError, ValueError):
+            presentation["page_revision"] = ""  # Editing the roadmap still works while the page is unavailable.
     return {
+        "presentation": presentation,
         "revision": revision,
         "today": date.today().isoformat(),
         "cycles": [
@@ -38,7 +51,7 @@ def board(root, product):
                "reserved": sum(place["effort"] for place in cycle["placements"] if place["reserved"])}
             for cycle in sorted(register.cycles.values(), key=lambda cycle: (cycle["starts_on"], cycle["cycle"]))
         ],
-        "rows": initiative_views.roadmap([(product, register)], private=storage.private_root(root)),
+        "rows": rows,
         "candidates": [
             {"id": item["id"], "title": item["title"], "outcome": item["description"]["outcome"],
              "eligible_cycles": [cycle["cycle"] for cycle in register.cycles.values()
@@ -167,17 +180,40 @@ def read_comparison(root, product, cycle):
     return target, contents.decode("utf-8")
 
 
+def comparison_sections(text):
+    sections = {}
+    for name, _, start, end in records.section_blocks(text):
+        if name in sections:
+            raise ValueError(f"Planning comparison has duplicate sections named {name}. Give each a distinct heading before editing")
+        sections[name] = text[start:end].strip()
+    sections.pop("Work state", None)
+    return sections
+
+
+def comparison_template(root, product):
+    target = storage.private_root(root) / layout.prioritization(product, "preview")
+    source = (root / "templates/prioritization.md").read_text(encoding="utf-8")
+    notices = []
+    sections = comparison_sections(customizations.draft_template(root, "prioritization", target, source, notices=notices))
+    inputs = list(sections.items())
+    if notices:
+        inputs.append(("studio-notices", notices))
+    return {"sections": sections, "order": list(sections), "notices": notices,
+            "revision": initiative_store.digest(initiative_store.canonical(inputs))}
+
+
 def comparison(root, product, cycle):
     _, register = snapshot(root, product)
     target, original = read_comparison(root, product, cycle)
+    sections = comparison_sections(original) if original else {}
     return {"revision": initiative_store.digest(original.encode("utf-8")) if original is not None else "absent",
             "signed": cycle in register.cycles, "text": original,
-            "sections": {name: (records.section(original, name) or "").strip() for name in SECTIONS}
-            if original else {}, "path": target.relative_to(storage.private_root(root)).as_posix()}
+            "sections": sections, "order": list(sections),
+            "path": target.relative_to(storage.private_root(root)).as_posix()}
 
 
-def save_comparison(root, product, cycle, options, sections, expected, register_revision, prepare_write):
-    if not isinstance(sections, dict) or set(sections) != set(SECTIONS):
+def save_comparison(root, product, cycle, options, sections, expected, register_revision, prepare_write, starter_revision=None):
+    if not isinstance(sections, dict) or not set(SECTIONS) <= sections.keys():
         raise ValueError("Fill the planning comparison sections")
     for value in sections.values():
         if not isinstance(value, str) or not records.specific(value.strip()) or re.search(r"(?m)^#(?: |# )", value):
@@ -203,7 +239,11 @@ def save_comparison(root, product, cycle, options, sections, expected, register_
         title = cycle.replace("-", " ").capitalize()
         if original is None:
             filing.check_new(private, "prioritization", relative, title)
+            if starter_revision is not None and starter_revision != comparison_template(root, product)["revision"]:
+                raise ValueError("The planning template changed. Reopen the cycle form to review the new sections")
         draft = original if original is not None else records.draft_text(root, "prioritization", target, title)
+        if sections.keys() - comparison_sections(draft).keys():
+            raise ValueError("Use editable sections from this planning comparison")
         content = dict(sections)
         state, _ = records.work_state(draft)
         state.update({"State": "complete", "Last checkpoint": f"{date.today().isoformat()}: Comparison prepared for review.",

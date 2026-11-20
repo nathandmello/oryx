@@ -17,6 +17,8 @@ BROWSER_WORKFLOW_FILES = {
     "templates/launch-checklist.json",
     "templates/prioritization.md",
     "templates/views/roadmap.json",
+    "tools/customizations.py",
+    "playbook/customization-defaults.json",
     "tools/initiative_events.py",
     "tools/initiative_store.py",
     "tools/initiative_views.py",
@@ -206,7 +208,7 @@ def main():
         current["head"]["sha"], current["base"]["sha"], current["body"]
     ):
         raise ValueError("The pull request changed during review. Run review again")
-    print("PM Hub release review passed.")
+    print("oryx release review passed.")
 
 
 if __name__ == "__main__":

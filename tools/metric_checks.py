@@ -215,6 +215,10 @@ def check(payload, definitions=None):
               "unit": "percentage points" if kind == "percentage_points" else "percent", "issues": issues}
     if definitions:
         result["approved_reporting_windows"] = {label: window_basis(row) for label, row in definitions.items()}
+        fields = ("metric", "authority", "origin", "approved_by", "effective_on", "revision", "source", "based_on")
+        result["definition_provenance"] = {
+            label: {key: row[key] for key in fields if key in row} for label, row in definitions.items() if row
+        }
         unconfirmed = [label for label, row in definitions.items() if row and not window_basis(row)]
         if unconfirmed:
             result["window_notes"] = [

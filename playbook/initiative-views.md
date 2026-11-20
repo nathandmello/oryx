@@ -84,7 +84,7 @@ If evidence is pending, give `follow_up` an `on` date and an `action`. The due v
 
 ## Where the fields come from
 
-| Source pattern | Fields or behavior in PM Hub | Primary source |
+| Source pattern | Fields or behavior in oryx | Primary source |
 | --- | --- | --- |
 | Names, workflow stages, relative priority, and effort estimates | `title`, `phase`, `rank`, `effort`, `unit` | [Atlassian Jira product backlog template](https://www.atlassian.com/software/jira/templates/product-backlog-template) |
 | An evolving product backlog refined as evidence changes | One product register supports intake, ongoing review, and ordering | [2020 Scrum Guide, Product Backlog](https://scrumguides.org/scrum-guide) |

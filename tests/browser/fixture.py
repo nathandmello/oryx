@@ -1,4 +1,4 @@
-"""Serve an isolated PM Hub with fictional records and its own signing key."""
+"""Serve an isolated oryx installation with fictional records and a local signing key."""
 
 import json
 import os

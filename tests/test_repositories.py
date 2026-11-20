@@ -18,6 +18,7 @@ import git_ops
 import pm
 import records
 import workspace
+import storage
 
 
 WORK_NOTE = ("# Notes\n\n## Scope\n\nCompare fixture offers.\n\n## Evidence\n\n{}\n\n"
@@ -78,7 +79,7 @@ class RepositoryTests(unittest.TestCase):
     def test_private_work_is_ignored_by_system_and_checked_explicitly(self):
         target = records.create(self.root, "problem", "workspace/problems/example.md")
         self.assertTrue(self.git(self.root, "check-ignore", str(target)))
-        self.assertNotIn("private/", self.git(self.root, "ls-files", "--others", "--exclude-standard"))
+        self.assertNotIn("studio/", self.git(self.root, "ls-files", "--others", "--exclude-standard"))
         self.assertIn("workspace/problems/example.md", self.git(self.work, "ls-files", "--others", "--exclude-standard"))
         target.write_text(target.read_text().replace("| Mode | thought-partner |", "| Mode | invalid |"))
         self.assertTrue(any("Mode must" in error for error in pm.check(self.root)))
@@ -136,6 +137,63 @@ class RepositoryTests(unittest.TestCase):
             self.assertEqual((self.work / "settings.json").read_bytes(), settings)
         self.assertFalse((legacy / "settings.json").exists())
 
+    def test_all_colliding_roots_and_dangling_links_require_resolution(self):
+        for existing, duplicate in (("studio", "private"), ("private", "workspace"), ("studio", "workspace")):
+            with self.subTest(existing=existing, duplicate=duplicate):
+                current = self.root / existing
+                if current != self.work:
+                    self.work.rename(current)
+                extra = self.root / duplicate
+                extra.mkdir()
+                try:
+                    with self.assertRaisesRegex(ValueError, "Multiple PM repository roots"):
+                        pm.alignment(self.root, prepare=True)
+                    self.assertTrue((current / "settings.json").is_file())
+                    self.assertFalse((extra / "settings.json").exists())
+                finally:
+                    extra.rmdir()
+                    if current != self.work:
+                        current.rename(self.work)
+        if os.name == "posix":
+            link = self.root / "private"
+            link.symlink_to(self.root.parent / "missing", target_is_directory=True)
+            with self.assertRaisesRegex(ValueError, "Multiple PM repository roots"):
+                workspace.initialise(self.root)
+            self.assertTrue(link.is_symlink())
+
+    def test_studio_setup_rejects_pm_data_left_in_the_core_index(self):
+        old = self.root.parent / "saved-checkout"
+        self.work.rename(old)
+        leaked = self.root / "private" / "secret.txt"
+        leaked.parent.mkdir()
+        leaked.write_text("fixture")
+        self.git(self.root, "add", "-f", "private/secret.txt")
+        leaked.unlink()
+        leaked.parent.rmdir()
+        with self.assertRaisesRegex(ValueError, "shared Git index"):
+            workspace.initialise(self.root)
+        self.assertFalse(self.work.exists())
+
+    def test_case_variant_root_respects_filesystem_identity_and_stays_out_of_core(self):
+        original = self.work / "settings.json"
+        before = original.read_bytes()
+        # Use an intermediate name so a case-only rename works on either type of filesystem.
+        transient = self.root.parent / "saved-case"
+        self.work.rename(transient)
+        variant = self.root / "Studio"
+        transient.rename(variant)
+        self.assertTrue(self.git(self.root, "check-ignore", "--", "Studio/settings.json"))
+        if self.work.exists():
+            self.assertTrue(self.work.samefile(variant))
+            self.assertEqual(workspace.private_root(self.root), variant)
+            self.assertNotIn("private_root_move", pm.alignment(self.root, prepare=True))
+        else:
+            for operation in (lambda: workspace.initialise(self.root), lambda: pm.alignment(self.root, True)):
+                with self.assertRaisesRegex(ValueError, "lowercase"):
+                    operation()
+            self.assertFalse(self.work.exists())
+        self.assertEqual((variant / "settings.json").read_bytes(), before)
+
     def test_missing_private_git_cannot_fall_back_to_system(self):
         shutil.rmtree(self.work / ".git")
         with self.assertRaisesRegex(ValueError, "own local Git"):
@@ -144,7 +202,7 @@ class RepositoryTests(unittest.TestCase):
 
     def test_force_added_private_git_link_is_rejected_without_reading_data(self):
         self.commit(self.work, "Private fixture")
-        self.git(self.root, "add", "--force", "private")
+        self.git(self.root, "add", "--force", "studio")
         original = Path.read_text
 
         def read(path, *args, **kwargs):
@@ -172,13 +230,13 @@ class RepositoryTests(unittest.TestCase):
         self.connect()
         system_files = self.git(self.remotes["system"], "ls-tree", "-r", "--name-only", "main")
         private_files = self.git(self.remotes["workspace"], "ls-tree", "-r", "--name-only", "main")
-        self.assertNotIn("private/", system_files)
+        self.assertNotIn("studio/", system_files)
         self.assertNotIn("workspace/backlogs/compare-offers.md", system_files)
         self.assertIn("workspace/backlogs/compare-offers.md", private_files)
         restored = self.root.parent / "restored"
         self.git(self.root.parent, "clone", str(self.remotes["system"]), str(restored))
         self.assertEqual(pm.check(restored, include_workspace=False), [])
-        self.git(restored, "clone", str(self.remotes["workspace"]), str(restored / "private"))
+        self.git(restored, "clone", str(self.remotes["workspace"]), str(restored / "studio"))
         self.assertEqual(pm.check(restored), [])
 
     def test_network_operations_require_confirmed_remote_and_detect_push_url_mismatch(self):
@@ -217,6 +275,31 @@ class RepositoryTests(unittest.TestCase):
         self.assertEqual((self.work / "workspace/backlogs/compare-offers.md").read_bytes(), note)
         self.assertEqual(workspace.settings(self.root)["system_version"], metadata["system_version"])
 
+    def test_core_pull_retires_only_a_fully_covered_override(self):
+        self.connect()
+        contributor = self.contributor("system")
+        desired = {"scope": "Weekly reviews", "behavior": "Show decisions first, then an owner."}
+        rule = self.cli("override", "set", "weekly-review-order", "--scope", desired["scope"],
+                        "--behavior", desired["behavior"])
+        self.assertEqual(rule.returncode, 0, rule.stdout)
+        for complete in (False, True):
+            default = desired if complete else dict(desired, behavior="Show decisions first.")
+            (contributor / "playbook/workflow-defaults.json").write_text(json.dumps({"weekly-review-order": default}))
+            self.commit(contributor, "Publish the next weekly review default")
+            self.git(contributor, "push", "origin", "main")
+            if complete:
+                self.git(self.root, "pull", "--ff-only")
+                payload = json.dumps({"hook_event_name": "SessionStart", "cwd": str(self.root)})
+                result = subprocess.run(pm.CODEX_COMMAND, shell=True, cwd=self.root, input=payload,
+                                        capture_output=True, text=True)
+            else:
+                result = self.cli("git", "system", "pull")
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            state = json.loads(self.cli("override", "list").stdout)
+            self.assertEqual(state["effective"]["weekly-review-order"], [desired])
+            self.assertEqual("weekly-review-order" in state["rules"], not complete)
+            self.assertEqual(len(state["retired"]), int(complete))
+
     def test_ordinary_shared_pull_aligns_forward_same_format_with_a_backup(self):
         self.connect()
         source = self.contributor("system")
@@ -234,7 +317,7 @@ class RepositoryTests(unittest.TestCase):
         self.assertEqual(settings.read_bytes(), original)
         report = pm.alignment(self.root, prepare=True)
         with tarfile.open(report["installation_backup"]) as backup:
-            self.assertEqual(backup.extractfile("private/settings.json").read(), original)
+            self.assertEqual(backup.extractfile("studio/settings.json").read(), original)
         self.assertEqual(workspace.settings(self.root)["system_version"], release["system_version"])
         (self.root / "playbook/release.json").write_text(json.dumps(dict(release, system_version=previous)))
         with self.assertRaisesRegex(ValueError, "Unsupported workspace version"):
@@ -341,16 +424,39 @@ class RepositoryTests(unittest.TestCase):
         head = self.git(self.root, "rev-parse", "HEAD")
         local = self.work / "local-notes.md"
         local.write_text("Original private untracked bytes.")
-        collision = contributor / "private/local-notes.md"
+        collision = contributor / "studio/local-notes.md"
         collision.parent.mkdir()
         collision.write_text("Incoming shared path")
-        self.git(contributor, "add", "-f", "private/local-notes.md")
+        self.git(contributor, "add", "-f", "studio/local-notes.md")
         self.git(contributor, "commit", "-m", "Fictional accidental private-tree collision")
         self.git(contributor, "push", "origin", "main")
         with self.assertRaisesRegex(ValueError, "tracks the private workspace"):
             git_ops.run(self.root, "system", "pull")
         self.assertEqual(self.git(self.root, "rev-parse", "HEAD"), head)
         self.assertEqual(local.read_text(), "Original private untracked bytes.")
+
+    def test_system_sync_refuses_private_history_even_when_removed_from_tip(self):
+        self.connect()
+        remote = self.remotes["system"]
+        head = self.git(remote, "rev-parse", "main")
+        contributor = self.contributor("system")
+        for checkout, name in ((self.root, "PriVate"), (contributor, "STuDio")):
+            fixture = checkout / name / "made-up-record.txt"
+            fixture.parent.mkdir()
+            fixture.write_text("Synthetic file history")
+            self.git(checkout, "add", "--force", "--", fixture.relative_to(checkout).as_posix())
+            self.git(checkout, "commit", "-m", "Accidental synthetic PM file")
+            self.git(checkout, "rm", "--", fixture.relative_to(checkout).as_posix())
+            self.git(checkout, "commit", "-m", "Remove synthetic PM file")
+        with self.assertRaisesRegex(ValueError, "tracks the private workspace"):
+            git_ops.run(self.root, "system", "push")
+        self.assertEqual(self.git(remote, "rev-parse", "main"), head)
+        # A raw Git client can publish this synthetic history to our disposable local remote.
+        self.git(contributor, "push", "origin", "main")
+        self.git(self.root, "reset", "--hard", head)
+        with self.assertRaisesRegex(ValueError, "tracks the private workspace"):
+            git_ops.run(self.root, "system", "pull")
+        self.assertEqual(self.git(self.root, "rev-parse", "HEAD"), head)
 
     def test_official_private_push_checks_recovery_bytes_in_the_commit(self):
         import conversion
@@ -388,7 +494,7 @@ class RepositoryTests(unittest.TestCase):
             self.git(self.root.parent, "clone", str(self.remotes["system"]), str(outer))
             self.git(outer, "clone", str(self.remotes["workspace"]), str(outer / "workspace"))
             pm.alignment(outer, prepare=True)
-            installations.append(outer / "private")
+            installations.append(outer / "studio")
         first, second = installations
         self.commit(first, "Save migrated private layout")
         git_ops.run(first.parent, "workspace", "push")
@@ -451,6 +557,94 @@ class RepositoryTests(unittest.TestCase):
         self.assertEqual(before, {p.relative_to(second): p.read_bytes() for p in pm.inventory(second) if p.is_file()})
         self.assertEqual(pm.check(second.parent), [])
 
+    def test_restored_format_two_studios_can_pull_only_an_identical_unstaged_migration(self):
+        self.connect()
+        legacy = ".hub-overrides.json"
+        current = "customizations/rules.json"
+        (self.work / legacy).write_text(json.dumps({"rules": {}, "retired": [], "reports": {},
+                                                   "pending": [], "reporting": False}))
+        self.commit(self.work, "Save pre-Studio layout at the same workspace format")
+        self.git(self.work, "push", "origin", "main")
+        old = self.git(self.work, "rev-parse", "HEAD")
+        clone = self.root.parent / "second"
+        self.git(self.root.parent, "clone", str(self.remotes["system"]), str(clone))
+        self.git(clone, "clone", str(self.remotes["workspace"]), str(clone / "private"))
+        pm.alignment(self.root, prepare=True)
+        pm.alignment(clone, prepare=True)
+        self.commit(self.work, "Save Studio layout")
+        git_ops.run(self.root, "workspace", "push")
+        second = clone / "studio"
+        path = second / current
+        original = path.read_bytes()
+        path.write_bytes(original + b" ")
+        self.git(second, "add", "--", current)
+        staged = self.git(second, "write-tree")
+        path.write_bytes(original)
+        with self.assertRaisesRegex(ValueError, "preserve local changes"):
+            git_ops.run(clone, "workspace", "pull")
+        self.assertEqual(self.git(second, "write-tree"), staged)
+        self.assertEqual(self.git(second, "rev-parse", "HEAD"), old)
+        self.git(second, "reset", "HEAD", "--", current)
+        extra = second / "local-only.dat"
+        extra.write_bytes(b"untracked work")
+        with self.assertRaisesRegex(ValueError, "preserve local changes"):
+            git_ops.run(clone, "workspace", "pull")
+        self.assertEqual(extra.read_bytes(), b"untracked work")
+        extra.unlink()
+        git_ops.run(clone, "workspace", "pull")
+        self.assertEqual(self.git(second, "rev-parse", "HEAD"), self.git(self.work, "rev-parse", "HEAD"))
+        self.assertEqual(self.git(second, "status", "--porcelain"), "")
+        self.assertEqual(path.read_bytes(), original)
+
+    def test_same_version_receipt_only_migration_can_precede_a_later_pm_commit(self):
+        import upgrades
+        self.connect()
+        ledger = self.work / upgrades.LEDGER
+        previous = json.loads(ledger.read_text())
+        previous.pop(upgrades.STUDIO_GUIDES)
+        ledger.write_text(upgrades.encode(previous))
+        self.commit(self.work, "Pre-Studio private receipt at the same system version")
+        self.git(self.work, "push", "origin", "main")
+        other = self.root.parent / "restored"
+        self.git(self.root.parent, "clone", str(self.remotes["system"]), str(other))
+        self.git(other, "clone", str(self.remotes["workspace"]), "private")
+        pm.alignment(self.root, prepare=True)
+        pm.alignment(other, prepare=True)
+        self.commit(self.work, "Accept Studio guide inventory")
+        (self.work / "context/field-note.txt").write_text("Keep the agreed date.")
+        self.commit(self.work, "Save the following PM work")
+        git_ops.run(self.root, "workspace", "push")
+        git_ops.run(other, "workspace", "pull")
+        self.assertEqual(self.git(other / "studio", "status", "--porcelain"), "")
+        self.assertEqual((other / "studio/context/field-note.txt").read_text(), "Keep the agreed date.")
+
+    def test_second_format_two_machine_accepts_a_version_only_update(self):
+        self.connect()
+        settings = workspace.settings(self.root)
+        (self.work / "settings.json").write_text(json.dumps(dict(settings, system_version="0.10.0")))
+        self.commit(self.work, "Save a format-two workspace from the preceding release")
+        self.git(self.work, "push", "origin", "main")
+        clone = self.root.parent / "second"
+        self.git(self.root.parent, "clone", str(self.remotes["system"]), str(clone))
+        self.git(clone, "clone", str(self.remotes["workspace"]), str(clone / "private"))
+        pm.alignment(self.root, prepare=True)
+        pm.alignment(clone, prepare=True)
+        self.commit(self.work, "Save accepted system version")
+        git_ops.run(self.root, "workspace", "push")
+        git_ops.run(clone, "workspace", "pull")
+        second = clone / "studio"
+        self.assertEqual(self.git(second, "rev-parse", "HEAD"), self.git(self.work, "rev-parse", "HEAD"))
+        self.assertEqual(self.git(second, "status", "--porcelain"), "")
+        self.assertEqual(workspace.settings(clone), settings)
+        # An unrelated identical edit in two ordinary worktrees is outside migration handoff.
+        for copy in (self.work, second):
+            (copy / "local-note.txt").write_text("Matching independent work")
+        self.commit(self.work, "A later ordinary change")
+        git_ops.run(self.root, "workspace", "push")
+        with self.assertRaisesRegex(ValueError, "preserve local changes"):
+            git_ops.run(clone, "workspace", "pull")
+        self.assertEqual((second / "local-note.txt").read_text(), "Matching independent work")
+
     def interrupt_historical_filing(self, outer, private):
         """Run the installed 0.2 converter and interrupt it after recovering the loose record."""
         import hashlib
@@ -490,6 +684,172 @@ with storage.writer_lock(private), patch.object(storage, 'replace_text', side_ef
         self.assertTrue((private / ".hub-filing-pending.json").is_file())
         self.assertFalse(loose.exists())
         return loose.name, original, quote
+
+    def preceding_release_remote(self):
+        prior = "a3f09f76eb158e5f9637f4afb056be22f361d043"  # Released 0.10.0 wrapper.
+        base = self.root.parent
+        publisher = base / "publisher"
+        self.git(base, "clone", "--quiet", "--no-local", "--no-checkout", str(pm.ROOT), str(publisher))
+        self.git(publisher, "checkout", "--quiet", "-B", "main", prior)
+        self.git(publisher, "rm", "-qr", ".")
+        for path in pm.inventory(pm.ROOT):
+            if path.is_file():
+                destination = publisher / path.relative_to(pm.ROOT)
+                destination.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copyfile(path, destination)
+        self.commit(publisher, "Current Hub candidate")
+        origin = base / "candidate.git"
+        self.git(base, "clone", "--quiet", "--bare", str(publisher), str(origin))
+        return prior, origin
+
+    def test_released_original_and_restored_studios_adopt_only_verified_private_work(self):
+        self.verify_released_studio_restore(custom_guide=False)
+
+    def test_released_studios_with_a_committed_custom_guide_converge(self):
+        self.verify_released_studio_restore(custom_guide=True)
+
+    def verify_released_studio_restore(self, *, custom_guide):
+        prior, origin = self.preceding_release_remote()
+        base = self.root.parent
+        machines = [base / name for name in ("primary", "restored", "delayed", "edited")]
+        primary, restored, delayed, edited = machines
+        private_remote = base / "pm.git"
+
+        def command(machine, *args, success=True):
+            result = subprocess.run([sys.executable, "-B", str(machine / "tools/pm.py"), *args],
+                                    cwd=machine, text=True, capture_output=True)
+            self.assertEqual(result.returncode == 0, success, result.stdout + result.stderr)
+            return result.stdout
+
+        for machine in machines:
+            self.git(base, "clone", "--quiet", str(origin), str(machine))
+            self.git(machine, "reset", "--hard", prior)
+        command(primary, "init-workspace", "--owner", "Fixture PM")
+        command(primary, "new", "goal", "workspace/goals/launch.md")
+        old = primary / "private"
+        old_readme = (old / "README.md").read_bytes()
+        if custom_guide:
+            old_readme += b"\nBring the signed dates to the Friday review.\n"
+            (old / "README.md").write_bytes(old_readme)
+        settings = json.loads((old / "settings.json").read_text())
+        settings["remotes"] = {"system": str(origin), "workspace": str(private_remote)}
+        (old / "settings.json").write_text(json.dumps(settings, indent=2) + "\n")
+        self.commit(old, "Released PM workspace")
+        self.git(base, "clone", "--quiet", "--bare", str(old), str(private_remote))
+        self.git(old, "remote", "add", "origin", str(private_remote))
+        for machine in machines[1:]:
+            self.git(machine, "clone", "--quiet", str(private_remote), "private")
+        edited_guide = edited / "private/README.md"
+        edited_guide.write_bytes(old_readme + b"\nUse the Friday review.\n")
+        self.git(edited / "private", "add", "--", "README.md")
+        staged = self.git(edited / "private", "rev-parse", ":README.md")
+        working = edited_guide.read_bytes() + b"\nReview signed dates.\n"
+        edited_guide.write_bytes(working)
+        for machine in machines:
+            command(machine, "git", "system", "pull")
+        for machine in (primary, restored, delayed):
+            self.assertEqual((machine / "studio/README.md").read_bytes(), old_readme)
+            self.assertEqual((machine / "studio/.hub-upgrades.json").read_bytes(),
+                             (primary / "studio/.hub-upgrades.json").read_bytes())
+        primary_reviews = json.loads((primary / "studio/.hub-upgrades.json").read_text())["record-filing-0.2"]
+        self.assertEqual("README.md" in primary_reviews, custom_guide)
+        if custom_guide:
+            self.assertEqual(primary_reviews["README.md"]["status"], "pending")
+        self.assertIn("README.md", json.loads((edited / "studio/.hub-upgrades.json").read_text())["record-filing-0.2"])
+        self.commit(primary / "studio", "Save verified migration")
+        command(primary, "git", "workspace", "push")
+        command(restored, "git", "workspace", "pull")
+        self.assertEqual(self.git(restored / "studio", "status", "--porcelain"), "")
+        command(primary, "override", "set", "contract-review", "--scope", "Contract review",
+                "--behavior", "Name the renewal owner.")
+        self.commit(primary / "studio", "Continue work after migration")
+        command(primary, "git", "workspace", "push")
+        command(delayed, "git", "workspace", "pull")
+        self.assertEqual(self.git(delayed / "studio", "rev-parse", "HEAD"),
+                         self.git(primary / "studio", "rev-parse", "HEAD"))
+        self.assertEqual(self.git(delayed / "studio", "status", "--porcelain"), "")
+        self.assertIn("preserve local changes", command(edited, "git", "workspace", "pull", success=False))
+        self.assertEqual((edited / "studio/README.md").read_bytes(), working)
+        self.assertEqual(self.git(edited / "studio", "rev-parse", ":README.md"), staged)
+
+    def test_fresh_studio_restore_keeps_current_handoffs_and_discovers_other_unfiled_work(self):
+        self.connect()
+        guides = ("README.md", "workspace/README.md", "context/README.md")
+        guide_bytes = {}
+        for name in guides:
+            path = self.work / name
+            guide_bytes[name] = path.read_bytes() + b"\nUse Friday for our planning review.\n"
+            path.write_bytes(guide_bytes[name])
+        self.commit(self.work, "Save PM-authored handoffs after Studio setup")
+        self.git(self.work, "push", "origin", "main")
+        target = self.root.parent / "restored-current"
+        self.git(self.root.parent, "clone", str(self.remotes["system"]), str(target))
+        self.git(target, "clone", str(self.remotes["workspace"]), "studio")
+        private = target / "studio"
+        self.assertEqual(pm.alignment(target, True)["outstanding"], [])
+        self.assertEqual(self.git(private, "status", "--porcelain"), "")
+        for name in guides:
+            self.assertEqual((private / name).read_bytes(), guide_bytes[name])
+        # A different restoration also brings a loose PM record which still needs filing review.
+        other = self.root.parent / "restored-with-notes"
+        self.git(self.root.parent, "clone", str(self.remotes["system"]), str(other))
+        self.git(other, "clone", str(self.remotes["workspace"]), "studio")
+        (other / "studio/negotiation-notes.md").write_text("# Negotiation notes\n")
+        outstanding = pm.alignment(other, True)["outstanding"]
+        self.assertEqual([item["path"] for item in outstanding], ["negotiation-notes.md"])
+
+    def test_last_private_release_updates_to_studio_by_wrapper_and_direct_pull(self):
+        prior, origin = self.preceding_release_remote()
+        base = self.root.parent
+        for method in ("wrapper", "direct"):
+            with self.subTest(method=method):
+                consumer = base / method
+                self.git(base, "clone", "--quiet", str(origin), str(consumer))
+                self.git(consumer, "reset", "--hard", prior)
+
+                def command(*args):
+                    result = subprocess.run([sys.executable, "-B", str(consumer / "tools/pm.py"), *args],
+                                            cwd=consumer, text=True, capture_output=True)
+                    self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+                    return result.stdout
+                command("init-workspace", "--owner", "Fixture PM")
+                old = consumer / "private"
+                settings = json.loads((old / "settings.json").read_text())
+                settings["remotes"]["system"] = str(origin)
+                (old / "settings.json").write_text(json.dumps(settings))
+                tracked = Path("context/sources/a PM's notes.txt")
+                (old / tracked).parent.mkdir(exist_ok=True)
+                (old / tracked).write_bytes(b"committed\r\n")
+                self.commit(old, "Private fixture history")
+                private_head = self.git(old, "rev-parse", "HEAD")
+                (old / tracked).write_bytes(b"staged\r\n")
+                self.git(old, "add", "--", str(tracked))
+                staged_blob = self.git(old, "rev-parse", ":" + tracked.as_posix())
+                (old / tracked).write_bytes(b"working\r\n")
+                (old / ".env.local").write_bytes(b"ignored\x00bytes")
+                loose = Path("context/sources/untracked.dat")
+                (old / loose).write_bytes(b"untracked\x00bytes")
+                if method == "wrapper":
+                    command("git", "system", "pull")
+                else:
+                    self.git(consumer, "pull", "--ff-only")
+                    self.assertEqual(json.loads(command("align", "--status"))["private_root_move"],
+                                     {"from": "private", "to": "studio"})
+                    self.assertTrue(old.is_dir())
+                    command("align")
+                studio = consumer / "studio"
+                self.assertFalse(old.exists())
+                self.assertEqual(self.git(studio, "rev-parse", "HEAD"), private_head)
+                self.assertEqual(self.git(studio, "rev-parse", ":" + tracked.as_posix()), staged_blob)
+                self.assertEqual((studio / tracked).read_bytes(), b"working\r\n")
+                self.assertEqual((studio / loose).read_bytes(), b"untracked\x00bytes")
+                self.assertEqual((studio / ".env.local").read_bytes(), b"ignored\x00bytes")
+                self.assertEqual(self.git(consumer, "status", "--porcelain"), "")
+                with self.assertRaisesRegex(ValueError, "repository moved"):
+                    with storage.writer_lock(old):
+                        self.fail("Writer received a lock on the retired path")
+                self.assertNotIn("private_root_move", json.loads(command("align")))
+                self.assertIn("PASS", command("check"))
 
     def test_published_updaters_reach_the_new_layout_and_preserve_private_history(self):
         revisions = {"0.1.0": "315e31ab6ed46bf72ef72faa8e18225b7d091093",
@@ -558,7 +918,7 @@ with storage.writer_lock(private), patch.object(storage, 'replace_text', side_ef
                 command("git", "system", "pull")
                 # The old 0.1 wrapper calls the newly installed check. Session start then runs align.
                 command("align")
-                private = outer / "private"
+                private = outer / "studio"
                 self.assertFalse(legacy.exists())
                 self.assertEqual(self.git(private, "rev-parse", "HEAD"), private_head)
                 installed = json.loads((private / "settings.json").read_text())

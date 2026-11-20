@@ -212,9 +212,21 @@ def heading_order(kind, template):
     return order
 
 
+def record_order(text, order):
+    # A released template may acquire a heading that an older personalized
+    # draft already placed elsewhere. Preserve that draft's placement while
+    # enforcing core order for all its other standard sections.
+    preamble = text.split("\n## ", 1)[0]
+    match = re.search(r"(?m)^<!-- studio:positioned ([^\n ]+) -->$", preamble)
+    if not match:
+        return order
+    positioned = {unquote(name) for name in match[1].split(",")} - CONTEXT_RESERVED_SECTIONS - {"Parent initiative"}
+    return [name for name in order if name not in positioned]
+
+
 def ordered_sections(text, order):
     blocks = section_blocks(text)
-    positions = {name: index for index, name in enumerate(order)}
+    positions = {name: index for index, name in enumerate(record_order(text, order))}
     standard = iter(sorted((block for block in blocks if block[0] in positions), key=lambda item: positions[item[0]]))
     sorted_blocks = [next(standard) if block[0] in positions else block for block in blocks]
     if sorted_blocks == blocks:
@@ -239,7 +251,8 @@ def structure_errors(kind, text, order):
     headings = [name for name, *_ in section_blocks(text)]
     sections = set(headings)
     errors = []
-    if [name for name in headings if name in order] != [name for name in order if name in sections]:
+    positions = record_order(text, order)
+    if [name for name in headings if name in positions] != [name for name in positions if name in sections]:
         errors.append(f"use the section order from the {kind} template")
     if kind in CONTEXT_KINDS:
         errors.extend(f"unknown context section: {name}. Use a supported heading or a sourced section with a lead"
@@ -410,6 +423,26 @@ def context_table_errors(text, name, draft):
     return errors
 
 
+def local_source_links(reference):
+    for name in re.findall(r"\[[^\]\n]+\]\((<[^>\n]+>|[^\s)]+)\)", reference):
+        target = name.strip("<>")
+        if re.match(r"(?:[a-z][a-z0-9+.-]*:|//)", target, re.I):
+            continue
+        parsed = urlsplit(target)
+        if not parsed.scheme and not parsed.netloc and parsed.path:
+            yield Path(unquote(parsed.path))
+
+
+def uses_customization_source(record, reference):
+    # A bibliography can name a Studio-relative file directly or link from its record.
+    name = Path(reference)
+    if layout.is_customization(name) or (len(name.parts) >= 2 and name.parts[0] in storage.PRIVATE_ROOTS
+                                         and layout.is_customization(Path(*name.parts[1:]))):
+        return True
+    return any(layout.is_customization(normpath((Path(record).parent / link).as_posix()))
+               for link in local_source_links(reference))
+
+
 def context_errors(path, text, kind, texts, content_sections, template=False):
     errors, parent = [], None
     state = work_state(text)[0].get("State")
@@ -474,7 +507,7 @@ def context_errors(path, text, kind, texts, content_sections, template=False):
                 if not product_path or not same_product or not marker or marker[1] != "product-context":
                     errors.append("Parent context must link to the same product's product-context record")
             elif not parent.startswith("context/") or not marker or marker[1] != "company-context":
-                errors.append("Parent context must link to a company-context record inside PM Hub")
+                errors.append("Parent context must link to a company-context record inside oryx")
 
     rows, problems = table(text, "Sources", SOURCE_COLUMNS)
     errors.extend(problems)
@@ -489,6 +522,8 @@ def context_errors(path, text, kind, texts, content_sections, template=False):
         sources.add(identifier)
         if not specific(reference):
             errors.append(f"{identifier}: Source needs a link or a named person and discussion reference")
+        if uses_customization_source(path, reference):
+            errors.append(f"{identifier}: Cite the underlying decision evidence. Studio customizations describe working methods.")
         published = None
         if source_date not in {"unknown", "undated"}:
             published = day(source_date, f"{identifier} Source date", past=True)
@@ -619,7 +654,7 @@ def retarget_links(text, source, target, root, copies=None):
         linked = (source.parent / unquote(parsed.path)).resolve()
         linked = (copies or {}).get(linked, linked)
         if root not in linked.parents and linked != root:
-            raise ValueError("Template link leaves PM Hub")
+            raise ValueError("Template link leaves oryx")
         relative_link = quote(Path(relpath(linked, target.parent)).as_posix())
         return f"[{label}]({urlunsplit(('', '', relative_link, parsed.query, parsed.fragment))})"
     return re.sub(r"\[([^\]\n]+)\]\((<[^>\n]+>|[^\s)]+)\)", retarget, text)
@@ -635,7 +670,7 @@ def create(root, kind, destination, title=None, owner="", filing_contract=None, 
         raise ValueError("Initialise the private repository before PM work")
     target = workspace / relative
     if target.resolve() != target or target.suffix != ".md":
-        raise ValueError("Use a direct Markdown path inside PM Hub")
+        raise ValueError("Use a direct Markdown path inside oryx")
     storage.require_visible(workspace, relative.as_posix())
     if kind not in KINDS:
         raise ValueError(f"Unknown template: {kind}")
@@ -656,8 +691,10 @@ def create(root, kind, destination, title=None, owner="", filing_contract=None, 
 def draft_text(root, kind, target, title=None, owner="", product_parent=None, initiative_id=None):
     source = root / "templates" / f"{kind}.md"
     if source.resolve() != source:
-        raise ValueError("Templates must be regular files inside PM Hub")
+        raise ValueError("Templates must be regular files inside oryx")
     text = source.read_text(encoding="utf-8")
+    import customizations
+    text = customizations.draft_template(root, kind, target, text)
     marker = MARKER.match(text)
     if not marker or marker[1] != kind or work_state(text)[1]:
         raise ValueError("Repair the source template before creating a draft")

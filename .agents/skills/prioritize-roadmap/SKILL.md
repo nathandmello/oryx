@@ -5,7 +5,7 @@ description: Compare approved candidates, verify capacity, propose investment se
 
 # Prioritize the roadmap
 
-For a request to see the roadmap, run `roadmap --product PRODUCT`. For an area-specific request, add `--area AREA`. Use [the view templates](../../../playbook/initiative-views.md) for exports.
+For a request to see the roadmap, run `roadmap --product PRODUCT`. For an area-specific request, add `--area AREA`. Exports use the selected [roadmap view](../../../playbook/customization.md#roadmap-data-and-views).
 
 For a selection decision, read [the initiative workflow](../../../playbook/opportunities.md). Load the product strategy, current objectives, obligations, existing commitments, and each candidate's evidence.
 
@@ -18,7 +18,7 @@ Before selection, use the [conversation guide](../../../playbook/conversation.md
 3. Identify how each option supports acquisition, retention, expansion, margin, obligations, product health, or strategic advantage.
 4. Cite the buyer, customer, engineering, or financial evidence. Distinguish commercial exposure from attributable impact. Mark estimates and unresolved claims.
 5. Compare customer benefit, urgency, confidence, effort, risk, dependencies, and reversibility. Identify which existing commitment or alternative would give way.
-6. Open the [planning comparison](../../../templates/prioritization.md) named for the cycle ID. Keep incomplete comparisons in draft.
+6. Open the planning comparison for the cycle. Create a missing comparison with the [draft command](../../../templates/README.md#create-a-draft). Keep incomplete comparisons in draft.
 7. Under `Comparison`, use the columns `Initiative ID` and `Assessment`. Include each proposed cycle option exactly once.
 8. With one eligible option, compare it with existing commitments or keeping capacity available. Record that alternative in prose.
 

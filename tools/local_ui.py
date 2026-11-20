@@ -1,4 +1,4 @@
-"""Serve the PM Hub browser app on the presenter's machine."""
+"""Serve the oryx browser app on the presenter's machine."""
 
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import json
@@ -11,6 +11,7 @@ import webbrowser
 
 import initiative_store
 import layout
+import customizations
 import roadmap_edit
 import storage
 import task_context
@@ -68,7 +69,7 @@ class App:
                 cycle_event = changes[0]
                 roadmap_edit.save_comparison(
                     self.root, product, cycle_event["cycle"], cycle_event["options"], body["sections"],
-                    body["comparison_revision"], body["revision"], self.prepare_write,
+                    body["comparison_revision"], body["revision"], self.prepare_write, body.get("starter_revision"),
                 )
             elif body.get("mode") == "edit":
                 changes = roadmap_edit.placement_changes(self.root, product, body)
@@ -95,7 +96,7 @@ class App:
 
     def approve(self, identifier):
         if self.key is None:
-            raise ValueError("Start PM Hub with --key to approve the roadmap from this machine")
+            raise ValueError("Start oryx with --key to approve the roadmap from this machine")
         with self.approval_lock:
             if self.review is None or identifier != self.review[0]["id"]:
                 raise ValueError("Review a current proposal before approval")
@@ -129,11 +130,31 @@ class App:
                 self.root, command, operation, product, layout.slug(body["initiative"]),
                 expected=body.get("revision"), changes=body.get("changes"),
                 write=operation != "list" and body.get("save") is True,
+                **({"starter_revision": body["starter_revision"]} if "starter_revision" in body else {}),
             )
+        if path == "/api/roadmap-fields":
+            values = body["values"]
+            if not isinstance(values, dict):
+                raise ValueError("Supply the initiative field values")
+            self.prepare_write(self.root)
+            return customizations.apply(self.root, {"revision": body["revision"], "values": [
+                {"product": product, "id": body["id"], "field": key, "value": value} for key, value in values.items()]})
         workspace.repo(self.root, "workspace")
         workspace.settings(self.root)
         if path == "/api/roadmap":
-            return roadmap_edit.board(self.root, product)
+            return roadmap_edit.board(self.root, product, body.get("view"))
+        if path == "/api/roadmap-export":
+            board = roadmap_edit.board(self.root, product, body["view"])
+            view = board["presentation"]
+            if (view.get("warning") or view["name"] != body["view"]
+                    or ("revision" in body and body["revision"] != view["revision"])
+                    or ("board_revision" in body and body["board_revision"] != board["revision"])):
+                raise ValueError("The custom view changed. Refresh the roadmap before exporting.")
+            rows = [row for row in board["rows"] if row["cycle"] == body["cycle"]
+                    and (not body.get("area") or body["area"] in row["areas"])]
+            return {"html": customizations.page(self.root, view, rows, expected_page=body.get("page_revision"))}
+        if path == "/api/comparison-template":
+            return roadmap_edit.comparison_template(self.root, product)
         if path == "/api/comparison":
             return roadmap_edit.comparison(self.root, product, layout.slug(body["cycle"]))
         if path == "/api/candidate":
@@ -148,7 +169,7 @@ class App:
             return {"text": contents.decode("utf-8"), "path": reference["path"]}
         if path == "/api/roadmap-preview":
             return self.preview(product, body)
-        raise ValueError("Unknown PM Hub operation")
+        raise ValueError("Unknown oryx operation")
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -178,7 +199,7 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_GET(self):
         if not self.local_host():
-            self.json_response(403, {"error": "Use the local PM Hub address"})
+            self.json_response(403, {"error": "Use the local oryx address"})
             return
         asset = ASSETS.get(self.path.partition("?")[0])
         if asset is None:
@@ -191,7 +212,7 @@ class Handler(BaseHTTPRequestHandler):
     def do_POST(self):
         if (not self.local_host() or self.headers.get_all("Origin") != [self.server.origin]
                 or not secrets.compare_digest(self.headers.get("X-PM-Hub-Token", "").encode(), self.server.token.encode())):
-            self.json_response(403, {"error": "Open this session from the PM Hub launcher"})
+            self.json_response(403, {"error": "Open this session from the oryx launcher"})
             return
         try:
             lengths = self.headers.get_all("Content-Length") or []
@@ -203,7 +224,7 @@ class Handler(BaseHTTPRequestHandler):
                 raise ValueError("Supply a JSON object")
             result = self.server.app.dispatch(self.path, body)
         except (KeyError, TypeError, AttributeError):
-            self.json_response(400, {"error": "Supply the fields for this PM Hub operation"})
+            self.json_response(400, {"error": "Supply the fields for this oryx operation"})
         except (OSError, ValueError, subprocess.SubprocessError) as exc:
             self.json_response(400, {"error": str(exc)})
         else:
@@ -226,7 +247,7 @@ def confirm_on_desktop(root, review):
         return True
     if response.returncode == 1:
         return False
-    raise ValueError("The PM approval window could not open. Start PM Hub from your desktop with Tk available")
+    raise ValueError("The approval window could not open. Start oryx from your desktop with Tk available")
 
 
 def serve(root, key, no_open, prepare_write, run_work, *, screen="roadmap"):
@@ -238,7 +259,7 @@ def serve(root, key, no_open, prepare_write, run_work, *, screen="roadmap"):
     with make_server(app) as server:
         query = urlencode({"screen": screen})
         address = f"{server.origin}/?{query}#{server.token}"
-        print(f"PM Hub is open at {address}", flush=True)
+        print(f"oryx is open at {address}", flush=True)
         if not no_open:
             webbrowser.open(address)
         try:

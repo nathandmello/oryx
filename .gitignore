@@ -12,3 +12,8 @@ secrets/
 .codex/*.local.*
 /workspace/
 /private/
+/studio/
+# Protect case variants when PM checkouts travel between filesystems.
+/[Ss][Tt][Uu][Dd][Ii][Oo]/
+/[Pp][Rr][Ii][Vv][Aa][Tt][Ee]/
+/[Ww][Oo][Rr][Kk][Ss][Pp][Aa][Cc][Ee]/

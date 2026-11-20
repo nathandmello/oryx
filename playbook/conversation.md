@@ -26,7 +26,7 @@ When stuck, name the block. Find one fact, run a reversible test, isolate a trad
 
 Ask for the deciding assumption, known evidence versus inference, a material risk, and a credible objection.
 A placeholder leaves the question open. Give the strongest unanswered question priority.
-Offer the relevant Hub workflow when the remaining uncertainty is clear.
+Offer the relevant oryx workflow when the remaining uncertainty is clear.
 
 | Moment | Focus |
 | --- | --- |
@@ -70,7 +70,7 @@ Prefer the workflow that addresses the decision's most material blocker. Offer w
 | Changed readiness or outcome evidence | Review the launch checklist or the outcome decision. |
 | Resolved decision with a useful surprise | Reflect on what would change a future call. |
 
-Offer workflows the Hub can run. Keep routine lookups, summaries, capture, acknowledgments, and requested independent reviews direct.
+Offer workflows oryx can run. Keep routine lookups, summaries, capture, acknowledgments, and requested independent reviews direct.
 Quiet mode suppresses coaching offers. Report applicable risks. Accepting an offer authorizes only its requested step.
 
 ## Continue after a pause

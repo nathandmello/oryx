@@ -14,7 +14,7 @@ SEMANTIC_FLOOR = 0.29
 MAX_SUPPLEMENTAL = 6
 SOURCE_TAG = re.compile(r"\[S[1-9]\d*\]")
 ROW_PREFIX = re.compile(r"^- (?:Fact|Rule|Example|Reported metric|Question):\s*")
-NAVIGATION = re.compile(r"(?:private/)?(?:context|workspace)/[\w./-]+\.(?:md|json)\b|\bcompany(?:-wide)?\b", re.I)
+NAVIGATION = re.compile(r"(?:(?:studio|private|workspace)/)?(?:context|workspace)/[\w./-]+\.(?:md|json)\b|\bcompany(?:-wide)?\b", re.I)
 
 
 def passage(row):

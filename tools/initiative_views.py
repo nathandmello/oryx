@@ -32,7 +32,7 @@ def view_template(root, view):
     expected = {"backlog": BACKLOG_FIELDS, "roadmap": ROADMAP_FIELDS}[view]
     path = root / "templates" / "views" / f"{view}.json"
     if path.resolve() != path or not path.is_file():
-        raise ValueError(f"Use a regular {view} view template inside PM Hub")
+        raise ValueError(f"Use a regular {view} view template inside oryx")
     data = json.loads(path.read_text(encoding="utf-8"))
     if not isinstance(data, dict):
         raise ValueError(f"Invalid {view} view template")
@@ -312,6 +312,8 @@ def cell(value):
 
 
 def csv_cell(value):
+    if type(value) in (int, float):
+        return value
     value = cell(value)
     return "'" + value if value.lstrip().startswith(("=", "+", "-", "@")) else value
 
@@ -322,14 +324,14 @@ def render(template, rows, style):
         return json.dumps([{key: row[key] for key in fields} for row in rows], ensure_ascii=False, indent=2)
     if style == "csv":
         output = StringIO()
-        writer = csv.writer(output, lineterminator="\n")
+        writer = csv.writer(output, lineterminator="\r\n")
         writer.writerow(fields)
         writer.writerows([csv_cell(row[key]) for key in fields] for row in rows)
-        return output.getvalue().rstrip("\n")
+        return output.getvalue().removesuffix("\r\n")
     headers = tuple(fields.values())
-    lines = [f"# {template['title']}", "", "| " + " | ".join(headers) + " |",
+    lines = [f"# {escape(template['title'])}", "", "| " + " | ".join(escape(h).replace("|", "&#124;") for h in headers) + " |",
              "| " + " | ".join("---" for _ in headers) + " |"]
     for row in rows:
-        values = [escape(cell(row[key])).replace("|", "&#124;") for key in fields]
+        values = ["<br>".join(escape(cell(row[key])).replace("|", "&#124;").splitlines()) for key in fields]
         lines.append("| " + " | ".join(values) + " |")
     return "\n".join(lines)

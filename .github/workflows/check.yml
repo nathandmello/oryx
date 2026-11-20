@@ -1,4 +1,4 @@
-name: PM Hub checks
+name: oryx checks
 
 on:
   pull_request:
@@ -29,7 +29,7 @@ jobs:
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
         run: python3 tools/release_candidate.py >> "$GITHUB_OUTPUT"
-      - name: Check Hub structure and published commands
+      - name: Check oryx structure and published commands
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
         run: python3 tools/pm.py check --system-only --command-base "$BASE_SHA"
@@ -62,6 +62,6 @@ jobs:
         if: needs.tests.outputs.native == 'true'
         env:
           PYTHONPATH: tests
-        run: python3 -m unittest -v test_release.BackupTests test_repositories test_context_search
+        run: python3 -m unittest -v test_release.BackupTests test_repositories test_context_search test_overrides test_layout_entrypoints test_studio_layout test_studio_contract
       - name: Tested tree ${{ needs.tests.outputs.tree }}
         run: 'true'

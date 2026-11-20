@@ -75,7 +75,7 @@ def render_prompt(case):
     parts = [case["request"]]
     if isinstance(sources, list):
         parts.append(
-            "Apply PM Hub's section rules. Give each proposed section as a heading with a one-line lead beneath it. "
+            "Apply oryx's section rules. Give each proposed section as a heading with a one-line lead beneath it. "
             "Say what the section covers and name a task or decision that calls for it."
         )
         sources = "\n\n".join(

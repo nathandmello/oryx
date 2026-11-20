@@ -1,6 +1,6 @@
 ---
 name: check-numbers
-description: Use for material quantitative claims in any Hub task, including revenue growth, churn, forecasts, and reported metrics.
+description: Use for material quantitative claims in any oryx task, including revenue growth, churn, forecasts, and reported metrics.
 ---
 
 # Check numbers

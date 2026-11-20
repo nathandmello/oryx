@@ -9,7 +9,7 @@ Read [the initiative workflow](../../../playbook/opportunities.md). Use `initiat
 
 Use the [conversation guide](../../../playbook/conversation.md) to compare credible alternatives before drafting.
 
-1. Start or resume the [Initiative Brief](../../../templates/initiative-brief.md) using the registered initiative ID. Enter known facts and leave gaps open.
+1. Open the Initiative Brief for the registered initiative. Create a missing brief with the [draft command](../../../templates/README.md#create-a-draft). Enter known facts and leave gaps open.
 2. Propose `prepare-brief` when the PM chooses definition. Cite the discovery findings or the evidence supporting direct definition.
 3. Describe the solution, customer benefit, business value, and credible options.
 4. Set a first increment, exclusions, rough effort, dependencies, delivery approach, rollout, and enablement.

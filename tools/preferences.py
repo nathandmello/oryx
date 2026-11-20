@@ -11,9 +11,10 @@ import workspace
 
 START = "<!-- pm-hub-preferences -->"
 END = "<!-- /pm-hub-preferences -->"
+# Earlier releases also parse this heading when reading a shared PM profile.
 HEADING = "## Hub reply preferences"
 BLOCK = re.compile(HEADING + r"\n\n```json\n(?P<values>.+)\n```\n", re.S)
-CHECK_PREFIX = f"private/{pm_profile.PATH}: Hub reply preferences: "
+CHECK_PREFIX = f"{pm_profile.PATH}: oryx reply preferences: "
 CHOICES = {
     "detail": {
         "concise": "Keep optional explanation brief.",
@@ -81,12 +82,12 @@ def effective(values):
 
 def guidance(values):
     lines = [
-        "Current PM Hub presentation preferences for this turn supersede earlier preference snapshots.",
+        "Current oryx presentation preferences for this turn supersede earlier preference snapshots.",
         "Apply them only to reply presentation and optional draft prose.",
-        "Follow Hub rules, required artifact content, and the PM's current task instructions first.",
+        "Follow oryx rules, required artifact content, and the PM's current task instructions first.",
     ]
     for name, value in effective(values).items():
-        lines.append(CHOICES[name].get(value, f"Use the Hub default for reply {name}."))
+        lines.append(CHOICES[name].get(value, f"Use the oryx default for reply {name}."))
     return " ".join(lines)
 
 
@@ -137,12 +138,12 @@ def add_commands(commands):
     group = commands.add_parser("preferences", help="View or tune the PM's reply preferences", allow_abbrev=False)
     group.set_defaults(hub_action=run)
     actions = group.add_subparsers(dest="preference_action", required=True)
-    actions.add_parser("show", help="Show the current values and Hub defaults")
+    actions.add_parser("show", help="Show the current values and oryx defaults")
     for verb, help_text in (("preview", "Try changes on a sample"), ("set", "Save changes")):
         action = actions.add_parser(verb, help=help_text, allow_abbrev=False)
         for name, choices in CHOICES.items():
             action.add_argument(f"--{name}", choices=choices, action="append")
-    reset = actions.add_parser("reset", help="Restore Hub defaults for one or all preferences")
+    reset = actions.add_parser("reset", help="Restore oryx defaults for one or all preferences")
     reset.add_argument("field", nargs="?", choices=[*CHOICES, "all"], default="all")
 
 

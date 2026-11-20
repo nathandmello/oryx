@@ -213,7 +213,7 @@ class HubTests(unittest.TestCase):
             ("Write", {"file_path": str(cwd / "README.md")}, False),
             ("Write", {"file_path": str(self.work / "workspace/initiatives/example/plan.md")}, False),
             ("Write", {"file_path": str(self.work / "workspace/roadmaps/example.md")}, True),
-            ("apply_patch", {"command": "*** Add File: ../../templates/new.md\n+x"}, False),
+            ("apply_patch", {"command": "*** Add File: ../../templates/new.md\n+x"}, True),
         ):
             with self.subTest(tool=tool, inputs=inputs):
                 result = self.run_hook(json.dumps({"hook_event_name": "PreToolUse", "cwd": str(cwd),
@@ -222,7 +222,8 @@ class HubTests(unittest.TestCase):
                 output = json.loads(result.stdout)
                 if denied:
                     self.assertEqual(output["hookSpecificOutput"]["permissionDecision"], "deny")
-                    self.assertIn("route-context", output["hookSpecificOutput"]["permissionDecisionReason"])
+                    self.assertIn("Core is read-only" if "templates/new.md" in str(inputs) else "route-context",
+                                  output["hookSpecificOutput"]["permissionDecisionReason"])
                 else:
                     self.assertEqual(output, {})
 

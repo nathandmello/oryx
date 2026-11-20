@@ -77,7 +77,7 @@ Use the same preview, confirmation and apply commands for each change. Replace t
 }
 ```
 
-Preserve the observation's original wording. A private Markdown or text citation must contain the exact quote. The preview fingerprints that file. For an external HTTPS source, inspect the evidence with the PM and retain the URL, date and exact excerpt. Hub validates the citation fields and retains the PM-confirmed excerpt. Verification of an external page depends on the reviewer.
+Preserve the observation's original wording. A private Markdown or text citation must contain the exact quote. The preview fingerprints that file. For an external HTTPS source, inspect the evidence with the PM and retain the URL, date and exact excerpt. oryx validates the citation fields and retains the PM-confirmed excerpt. Verification of an external page depends on the reviewer.
 
 ```json
 {
@@ -97,8 +97,8 @@ Confirm `true` or `false` only when dated evidence on or after the resolution da
 
 ## Compatibility and recovery
 
-Forecasts live in `private/workspace/forecasts/forecast-<id>.json`. The private record retains the reviewed decision citation and its evidence as they stood at creation. Historical forecasts can be resolved after the owning decision changes. Existing decisions and private files need no conversion.
+Forecasts live in `studio/workspace/forecasts/forecast-<id>.json`. The private record retains the reviewed decision citation and its evidence as they stood at creation. Historical forecasts can be resolved after the owning decision changes. Existing decisions and private files need no conversion.
 
-Use the release’s normal backup and alignment steps on every client before sharing the first new forecast. An earlier Hub can still replay a signed rationale, but its workspace checker predates the forecast file type. Preserve a backup of the current private checkout before rolling back. Restore a matching Hub and workspace backup into a separate checkout for older-client use. Reopen the preserved current checkout with a compatible Hub to recover later forecast history. [Installation updates and backups](updates.md)
+Use the release’s normal backup and alignment steps on every client before sharing the first new forecast. An earlier oryx release can still replay a signed rationale, but its workspace checker predates the forecast file type. Preserve a backup of the current private checkout before rolling back. Restore matching oryx and Studio backups into a separate checkout for older-client use. Reopen the preserved current checkout with a compatible release to recover later forecast history. [Installation updates and backups](updates.md)
 
 After a failed write, read the error and preview again if the evidence or record changed. Replay the exact saved proposal after a lost receipt. For a saved revision mismatch, inspect private Git history and restore the intended reviewed version.

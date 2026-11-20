@@ -1,9 +1,9 @@
 ---
 name: review-hub-upgrade
-description: Explain Hub updates, audit installed artifacts, and give the user a choice before transforming existing work.
+description: Explain oryx updates, audit installed artifacts, and give the user a choice before transforming existing work.
 ---
 
-# Review a Hub update
+# Review an oryx update
 
 Use [the installed-workspace procedure](../../../playbook/updates.md). Keep the compatibility alignment and the user's artifact decisions distinct.
 

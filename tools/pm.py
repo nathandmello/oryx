@@ -1,4 +1,4 @@
-"""Check PM Hub and generate its Claude skill adapters. Python 3.9+, standard library."""
+"""Check oryx and generate its Claude skill adapters. Python 3.9+, standard library."""
 
 from __future__ import annotations
 
@@ -33,6 +33,11 @@ import layout
 import layout_upgrade
 import opportunities
 import pm_profile
+import company_source
+import customizations
+import studio_layout
+import agent_session
+import overrides
 import preferences
 import hub_commands
 import initiatives_cli
@@ -49,7 +54,8 @@ REQUIRED = (
     "tools/context_capture.py", "tools/evidence_reviews.py", "playbook/evidence-reviews.md", "tools/task_context.py", "tools/metric_checks.py", "tools/storage.py", "tools/upgrades.py",
     "playbook/numbers.md", "playbook/metrics.md", "playbook/saas-metrics.json", "tools/metric_registry.py",
     "tools/decision_authority.py", "tools/decision_review.py", "tools/decision_forecasts.py", "playbook/decision-review.md", "playbook/decision-forecasts.md",
-    "tools/preferences.py", ".agents/skills/pm/SKILL.md", ".claude/skills/pm/SKILL.md",
+    customizations.DEFAULTS, "tools/customizations.py", overrides.DEFAULTS_FILE, "tools/overrides.py", "tools/agent_session.py", "tools/preferences.py", ".agents/skills/pm/SKILL.md", ".claude/skills/pm/SKILL.md",
+    "tools/studio_layout.py", "tools/company_source.py", "playbook/customization.md", "playbook/overrides.md",
     "tools/conversation.py", conversation.GUIDE,
     "tools/hub_commands.py", "playbook/commands.md", hub_commands.CATALOG,
     ".agents/skills/extend-hub/SKILL.md", ".claude/skills/extend-hub/SKILL.md",
@@ -81,11 +87,19 @@ ROOT_DIRS = {"playbook", "templates", "tools", "tests",
              ".agents", ".claude", ".codex", ".github"}
 SKILL_SOURCE = Path(".agents/skills")
 SKILL_COPY = Path(".claude/skills")
-HOOK_SCRIPT = ('from pathlib import Path; import runpy, sys; p=Path.cwd().resolve(); '
-               'root=next(p for p in (p, *p.parents) if (p/"playbook/release.json").is_file() '
-               'and (p/"tools/hook.py").is_file()); '
-               'sys.path.insert(0, str(root/"tools")); '
-               'runpy.run_path(str(root/"tools/hook.py"), run_name="__main__")')
+HOOK_SCRIPT = """from pathlib import Path
+import os, runpy, sys
+cwd = Path.cwd().resolve()
+bound = os.environ.get("PM_HUB_PROTECTED_ROOT")
+candidates = (Path(bound).resolve(),) if bound else (cwd, *cwd.parents)
+roots = [root for root in candidates if cwd.is_relative_to(root)
+         and (root / "playbook/release.json").is_file() and (root / "tools/hook.py").is_file()]
+if len(roots) != 1:
+    print("Cannot identify a single oryx checkout for this directory. Open a protected PM session from the intended checkout.", file=sys.stderr)
+    sys.exit(2)
+root = roots[0]
+sys.path.insert(0, str(root / "tools"))
+runpy.run_path(str(root / "tools/hook.py"), run_name="__main__")"""
 CODEX_COMMAND = "python3 -c '" + HOOK_SCRIPT + "'"
 
 ARTIFACT = re.compile(
@@ -192,7 +206,7 @@ def link_errors(root: Path, path: Path, text: str, planned=()) -> list[str]:
                 continue
             destination = (path.parent / unquote(target.path)).resolve() if target.path else path.resolve()
             if root != destination and root not in destination.parents:
-                errors.append(f"{line}: link leaves PM Hub: {match[2]}")
+                errors.append(f"{line}: link leaves oryx: {match[2]}")
             elif not destination.exists() and destination not in planned:
                 errors.append(f"{line}: broken link: {match[2]}")
     return errors
@@ -266,14 +280,14 @@ def hook_errors(texts: dict[str, str]) -> list[str]:
             for event in ("SessionStart", "UserPromptSubmit", "Stop", "PreToolUse"):
                 group = {"hooks": [dict(handler, timeout=600 if event == "SessionStart" else 15)]}
                 if event == "PreToolUse":
-                    group["matcher"] = "Write|Edit|MultiEdit" if claude else "apply_patch"
+                    group["matcher"] = "Write|Edit|MultiEdit|NotebookEdit|Bash|PowerShell" if claude else "apply_patch|Bash"
                 elif len(hooks.get(event, [])) != 1 or set(hooks[event][0]) != {"hooks"}:
                     errors.append(f"{name}: {event} must run without a matcher")
                 if hooks.get(event) != [group]:
                     errors.append(f"{name}: {event} must call the shared checker once")
         except (ValueError, KeyError, TypeError):
             errors.append(f"{name}: invalid hook configuration")
-    if texts.get(".codex/config.toml", "").strip() != 'sandbox_mode = "workspace-write"':
+    if texts.get(".codex/config.toml", "").strip() != 'default_permissions = ":workspace"':
         errors.append(".codex/config.toml: preserve the workspace write boundary")
     return errors
 
@@ -284,7 +298,7 @@ def check_workspace(root: Path, system_texts: dict[str, str]) -> list[str]:
         private = workspace.repo(root, "workspace")
         workspace.settings(root)
     except (OSError, ValueError) as exc:
-        return [f"private/: {exc}"]
+        return [f"PM repository: {exc}"]
     legacy, legacy_structure, structure_review = {}, set(), set()
     retained, original_paths = {}, set()
     try:
@@ -299,33 +313,46 @@ def check_workspace(root: Path, system_texts: dict[str, str]) -> list[str]:
         structure_review = set(upgrades.structure_review(root, private, state, originals))
         for identifier, digest in state.get(upgrades.TRANSACTIONS, {}).items():
             if upgrades.fingerprint(conversion.archive_path(private, identifier)) != digest:
-                errors.append(f"private/: missing or changed recovery archive for {identifier}")
+                errors.append(f"{private.name}/: missing or changed recovery archive for {identifier}")
         if layout_upgrade.pending(private):
-            errors.append("private/: finish the interrupted layout upgrade before sharing changes")
+            errors.append(f"{private.name}/: finish the interrupted layout upgrade before sharing changes")
         if conversion.pointer(private).exists():
-            errors.append("private/: finish the pending recoverable filing plan before sharing changes")
+            errors.append(f"{private.name}/: finish the pending recoverable filing plan before sharing changes")
     except (OSError, ValueError) as exc:
-        errors.append(f"private/{upgrades.LEDGER}: {exc}")
+        errors.append(f"{private.name}/{upgrades.LEDGER}: {exc}")
     try:
         context_capture.read_remit(private)
     except (OSError, ValueError) as exc:
-        errors.append(f"private/{context_capture.REMIT_PATH}: {exc}")
+        errors.append(f"{private.name}/{context_capture.REMIT_PATH}: {exc}")
     try:
         metric_registry.history(private)
     except (OSError, ValueError) as exc:
-        errors.append(f"private/{metric_registry.PRIVATE}: {exc}")
+        errors.append(f"{private.name}/{metric_registry.PRIVATE}: {exc}")
     try:
         preferences.load(private)
     except (OSError, ValueError) as exc:
-        errors.append(f"{preferences.CHECK_PREFIX}{exc}")
+        errors.append(f"{private.name}/{preferences.CHECK_PREFIX}{exc}")
+    try:
+        overrides.read(private)
+    except (OSError, ValueError) as exc:
+        errors.append(f"{private.name}/{overrides.FILE}: {exc}")
+    try:
+        customizations.validate(root, customizations.read(root)[1])
+    except (OSError, ValueError) as exc:
+        errors.append(f"{private.name}/{customizations.FILE}: {exc}")
+    try:
+        company_source.workflow_rules(root)
+        studio_layout.moves(private)
+    except (OSError, ValueError) as exc:
+        errors.append(f"{private.name}/customizations/: {exc}")
     errors.extend(decision_forecasts.check_workspace(private))
     files = inventory(private)
     initiative_work_homes = set()
     for path in files:
         rel = path.relative_to(private).as_posix()
-        label = f"private/{rel}"
+        label = f"{private.name}/{rel}"
         if path.is_symlink() or any(p.is_symlink() for p in path.parents if p != root):
-            errors.append(f"{label}: use regular files inside PM Hub")
+            errors.append(f"{label}: use regular files inside oryx")
             continue
         if path.name == ".env" or path.name.startswith(".env.") or "secrets" in path.relative_to(private).parts:
             errors.append(f"{label}: private file must stay outside Git")
@@ -335,7 +362,7 @@ def check_workspace(root: Path, system_texts: dict[str, str]) -> list[str]:
         parts = path.relative_to(private).parts
         if (len(parts) == 3 and parts[:2] == ("workspace", "forecasts") and path.suffix == ".json"):
             continue  # The forecast checker validates every receipt in this directory.
-        if rel == metric_registry.PRIVATE:
+        if parts[0] == "customizations" or rel in {metric_registry.PRIVATE, *studio_layout.LEGACY.values()}:
             continue
         if parts[0] in {"context", "products", "workspace"} and any(part.startswith(".") for part in parts[1:]):
             continue  # Editor metadata and private local files are outside the artifact inventory.
@@ -392,22 +419,22 @@ def check_workspace(root: Path, system_texts: dict[str, str]) -> list[str]:
                     errors.extend(f"{label}:{e}" for e in link_errors(root, path, content))
             except (OSError, UnicodeError) as exc:
                 errors.append(f"{label}: cannot read text: {exc}")
-    errors.extend(f"private/{error}" for error in filing.topic_structure_errors(private))
+    errors.extend(f"{private.name}/{error}" for error in filing.topic_structure_errors(private))
     for required in ("README.md", ".gitignore", "settings.json", "context/README.md", "workspace/README.md"):
         if not (private / required).is_file():
-            errors.append(f"private/{required}: required file is missing")
+            errors.append(f"{private.name}/{required}: required file is missing")
     try:
         registrations = dict(initiative_store.registrations(root))
-        errors.extend(f"private/{error}" for error in initiative_work.check(root, initiative_work_homes, registrations))
-        errors.extend(f"private/{e}" for e in experiment_drafts.misplaced(private, files, registrations))
+        errors.extend(f"{private.name}/{error}" for error in initiative_work.check(root, initiative_work_homes, registrations))
+        errors.extend(f"{private.name}/{e}" for e in experiment_drafts.misplaced(private, files, registrations))
         for product, register in registrations.items():
-            errors.extend(f"private/{e}" for e in experiment_drafts.check(private, product, register))
-            errors.extend(f"private/: {error}" for error in initiative_store.live_errors(root, register))
-        errors.extend(f"private/{error}" for error in initiative_store.draft_errors(texts, registrations))
+            errors.extend(f"{private.name}/{e}" for e in experiment_drafts.check(private, product, register))
+            errors.extend(f"{private.name}/: {error}" for error in initiative_store.live_errors(root, register))
+        errors.extend(f"{private.name}/{error}" for error in initiative_store.draft_errors(texts, registrations))
     except (OSError, ValueError, subprocess.SubprocessError) as exc:
-        errors.append(f"private/: {exc}")
+        errors.append(f"{private.name}/: {exc}")
     templates = {p: t for p, t in system_texts.items() if p.startswith("templates/")}
-    errors.extend(f"private/{e}" for e in records.validate(dict(templates, **texts), legacy_structure=legacy_structure))
+    errors.extend(f"{private.name}/{e}" for e in records.validate(dict(templates, **texts), legacy_structure=legacy_structure))
     return errors
 
 
@@ -416,11 +443,11 @@ def check(root: Path = ROOT, include_workspace=True, *, command_base=None) -> li
     errors, texts, safe = [], {}, set()
     for path in inventory(root):
         rel = path.relative_to(root).as_posix()
-        if Path(rel).parts[0] in {"workspace", "private"}:
-            errors.append("private/: PM data must never be tracked by the system repository")
+        if Path(rel).parts[0].casefold() in storage.PRIVATE_ROOTS:
+            errors.append(f"{Path(rel).parts[0]}/: PM data must never be tracked by the system repository")
             continue  # do not read data exposed by an incorrect system index
         if path.is_symlink() or any(parent.is_symlink() for parent in path.parents if parent != root):
-            errors.append(f"{rel}: use regular files inside PM Hub")
+            errors.append(f"{rel}: use regular files inside oryx")
             continue
         if path.name == ".env" or path.name.startswith(".env.") or "secrets" in path.relative_to(root).parts:
             errors.append(f"{rel}: private file must stay outside Git")
@@ -448,12 +475,22 @@ def check(root: Path = ROOT, include_workspace=True, *, command_base=None) -> li
                 errors.extend(f"{rel}:{error}" for error in writing_errors(texts[rel]))
             errors.extend(f"{rel}:{error}" for error in link_errors(root, path, texts[rel]))
             if records.MARKER.match(texts[rel]) and not rel.startswith("templates/"):
-                errors.append(f"{rel}: PM records belong inside private/")
+                errors.append(f"{rel}: PM records belong inside studio/")
     for rel in REQUIRED:
         if root / rel not in safe:
             errors.append(f"{rel}: required file is missing or unsafe")
     if texts.get("CLAUDE.md", "").strip() != "@AGENTS.md":
         errors.append("CLAUDE.md: import AGENTS.md without duplicate instructions")
+    if root / customizations.DEFAULTS in safe:
+        try:
+            customizations.validate(root, {}, system_only=True)
+        except (OSError, ValueError) as exc:
+            errors.append(f"{customizations.DEFAULTS}: {exc}")
+    if root / overrides.DEFAULTS_FILE in safe:
+        try:
+            overrides.defaults(root)
+        except (OSError, ValueError) as exc:
+            errors.append(f"{overrides.DEFAULTS_FILE}: {exc}")
     errors.extend(skill_errors(root, safe))
     for view in ("backlog", "roadmap"):
         try:
@@ -479,8 +516,8 @@ def check(root: Path = ROOT, include_workspace=True, *, command_base=None) -> li
         errors.append(f"{hub_commands.CATALOG}: {exc}")
     errors.extend(hook_errors(texts))
     errors.extend(records.validate(texts))
-    if not {"/workspace/", "/private/"} <= set(texts.get(".gitignore", "").splitlines()):
-        errors.append(".gitignore: exclude /workspace/ and /private/ from the system repository")
+    if not {f"/{name}/" for name in storage.PRIVATE_ROOTS} <= set(texts.get(".gitignore", "").splitlines()):
+        errors.append(".gitignore: exclude /studio/, /private/, and /workspace/ from the system repository")
     try:
         workspace.release(root)
     except (OSError, ValueError) as exc:
@@ -580,17 +617,20 @@ def alignment(root, prepare=False, record=None, outcome=None, digest=None, note=
         changing = any(settings[key] != value for key, value in release.items())
         if not workspace.supports_update(settings, release):
             raise ValueError("Unsupported workspace version; inspect release compatibility before updating")
-        moving = private.name == "workspace"
+        moving = private.name.casefold() != storage.STUDIO
         if moving:
             workspace.check_relocation(root, private)
+        studio_moves = studio_layout.moves(private)
         review_pending = conversion.pointer(private).exists()
         state = upgrades.read_state(private)[1]
         layout_upgrade.receipt(private, state)
         recovery = None
         # Old filing transactions must finish with their accepted paths before layout planning.
-        if prepare and (changing or old_layout or moving or review_pending or record or for_conversion
-                        or upgrades.RULE not in state or not upgrades.scan_marker(private).exists()):
-            recovery = snapshots.ensure(root, release["system_version"], layout_change=old_layout or moving)
+        if prepare and (changing or old_layout or moving or studio_moves or review_pending or record or for_conversion
+                        or not {upgrades.RULE, upgrades.STUDIO_GUIDES} <= set(state) or not upgrades.scan_marker(private).exists()):
+            recovery = snapshots.ensure(root, release["system_version"], layout_change=old_layout or moving, studio_change=bool(studio_moves))
+        if prepare and studio_moves:
+            studio_layout.relocate(private, studio_moves)
         if prepare and review_pending:
             validator = filing_validator(root, legacy_replay=old_layout, legacy_structure=upgrades.STRUCTURE_RULE not in state)
             conversion.resume(private, validator, LINK, legacy=old_layout)
@@ -610,6 +650,17 @@ def alignment(root, prepare=False, record=None, outcome=None, digest=None, note=
             if changing:
                 settings.update(release)
                 storage.replace_text(settings_file, original, json.dumps(settings, indent=2) + "\n")
+        try:
+            result["covered_customizations"] = customizations.reconcile(root, release["system_version"], prepare)
+        except (OSError, ValueError) as exc:
+            result["customization_review"] = str(exc)
+        _, company_review = company_source.inspection(root)
+        if company_review:
+            result["company_review"] = company_review
+            result["covered_overrides"] = []
+        else:
+            result["covered_overrides"] = overrides.reconcile(private, release["system_version"], prepare)
+        result["studio_moves"] = studio_moves
         result["layout"] = layout_plan
         result["structure_review"] = upgrades.align_structure(root, private, prepare=prepare)
         pending = {item["path"]: item for item in result["outstanding"]}
@@ -617,14 +668,14 @@ def alignment(root, prepare=False, record=None, outcome=None, digest=None, note=
             pending.setdefault(item["path"], item)
         result["outstanding"] = list(pending.values())
         result["needs_setup"] |= (
-            changing or moving or layout_plan["changed"] or review_pending or result["structure_review"]["needs_scan"]
+            changing or moving or bool(studio_moves) or layout_plan["changed"] or review_pending or result["structure_review"]["needs_scan"]
         ) and not prepare
         if recovery:
             result["installation_backup"] = str(recovery)
         if backup:
             result["backups"] = upgrades.backup(private, backup)
         if moving:
-            result["private_root_move"] = {"from": "workspace", "to": "private"}
+            result["private_root_move"] = {"from": private.name, "to": storage.STUDIO}
         return result
 
     if not prepare:
@@ -635,7 +686,7 @@ def alignment(root, prepare=False, record=None, outcome=None, digest=None, note=
         private = workspace.repo(root, "workspace")
         with storage.repository_lock(private):
             result = inspect(private)
-        if private.name == "workspace":
+        if private.name.casefold() != storage.STUDIO:
             workspace.relocate_private(root, private)
         return result
 
@@ -644,9 +695,9 @@ def prepare_private_write(root):
     private = workspace.repo(root, "workspace")
     settings = workspace.settings(root, compatible=False)
     state = upgrades.read_state(private)[1]
-    if (private.name == "workspace" or any(settings[key] != value for key, value in workspace.release(root).items())
+    if (private.name.casefold() != storage.STUDIO or studio_layout.moves(private) or any(settings[key] != value for key, value in workspace.release(root).items())
             or not layout_upgrade.complete(private) or layout_upgrade.pending(private)
-            or not {upgrades.RULE, upgrades.STRUCTURE_RULE} <= set(state) or conversion.pointer(private).exists()):
+            or not {upgrades.RULE, upgrades.STRUCTURE_RULE, upgrades.STUDIO_GUIDES} <= set(state) or conversion.pointer(private).exists()):
         alignment(root, prepare=True)
     return workspace.settings(root)
 
@@ -672,6 +723,10 @@ def alignment_notice(root, result=None):
     items = result["outstanding"]
     review = result["structure_review"]
     notices = []
+    if result.get("company_review"):
+        notices.append(result["company_review"])
+    if result.get("customization_review"):
+        notices.append("Workspace customizations need review: " + result["customization_review"])
     if result["needs_setup"] or items:
         notices.append(f"Workspace update has {len(items)} earlier review item(s). Follow playbook/updates.md. "
                        "Inspect and explain the evidence. Seek the user's choice before transforming existing artifacts.")
@@ -708,7 +763,11 @@ def capture_errors(root, target, text):
 def build_parser():
     parser = argparse.ArgumentParser(description=__doc__)
     commands = parser.add_subparsers(dest="command", required=True)
-    commands.add_parser("action", help="Discover and run published PM Hub actions")
+    commands.add_parser("action", help="Discover and run published oryx actions")
+    commands.add_parser("agent").add_argument("client", choices=("codex", "claude"))
+    company_source.add_commands(commands)
+    customizations.add_commands(commands)
+    overrides.add_commands(commands)
     preferences.add_commands(commands)
     checks = commands.add_parser("check")
     checks.add_argument("--system-only", action="store_true")
@@ -726,7 +785,7 @@ def build_parser():
     commands.add_parser("sync-skills")
     new = commands.add_parser("new")
     new.add_argument("kind", choices=(*records.KINDS, "pm-context"))
-    new.add_argument("path", help="Path inside private/, starting with context/ or workspace/")
+    new.add_argument("path", help="Path inside studio/, starting with context/ or workspace/")
     new.add_argument("--title")
     new.add_argument("--parent")
     new.add_argument("--basis", choices=filing.BASES)
@@ -738,7 +797,7 @@ def build_parser():
     initiative_work.add_commands(commands)
     decision_review.add_commands(commands)
     decision_forecasts.add_commands(commands)
-    ui = commands.add_parser("ui", help="Open the local PM Hub browser app")
+    ui = commands.add_parser("ui", help="Open the local oryx browser app")
     ui.add_argument("--screen", choices=("roadmap", "tasks", "launch-checklists"), default="roadmap",
                     help="Choose the first screen (default: roadmap)")
     ui.add_argument("--key", help="Absolute path to the PM signing key or its agent-backed public key")
@@ -764,7 +823,7 @@ def build_parser():
     for operation in ("list", "show", "set"):
         metric = metric_commands.add_parser(operation)
         if operation != "list":
-            metric.add_argument("id", type=layout.slug)
+            metric.add_argument("id", type=metric_registry.metric_id)
         metric.add_argument("--product", type=layout.slug)
         if operation == "set":
             metric.add_argument("--write", action="store_true", help="Save the PM-confirmed definition")
@@ -790,6 +849,21 @@ def main() -> int:
             if argv is None:
                 return 0
         args = build_parser().parse_args(argv)
+        if args.command == "agent":
+            agent_session.launch(ROOT, args.client)
+            return 0
+        if args.command == "customize":
+            if args.operation == "apply":
+                prepare_private_write(ROOT)
+            else:
+                workspace.optional_repo(ROOT)
+            print(json.dumps(customizations.run(ROOT, args), indent=2, ensure_ascii=False))
+            return 0
+        if args.command == "override":
+            if args.operation not in {"list", "show"}:
+                prepare_private_write(ROOT)
+            print(json.dumps(overrides.run(ROOT, args), indent=2, ensure_ascii=False))
+            return 0
         if hasattr(args, "hub_action"):
             args.hub_action(ROOT, args, prepare_private_write)
             return 0
@@ -825,7 +899,7 @@ def main() -> int:
             return 0
         if args.command == "init-workspace":
             workspace.initialise(ROOT, args.owner, args.delivery_system)
-            print("Initialised private/ as a separate Git repository. No remote, commit, or push was created.")
+            print("Initialised studio/ as a separate Git repository. No remote, commit, or push was created.")
             print(context_capture.REMIT_PROMPT)
             return 0
         if args.command == "git":
@@ -850,6 +924,7 @@ def main() -> int:
             writing = args.operation != "list" and not args.preview
             changes = storage.json_input(os.sys.stdin.read()) if args.operation == "apply" else None
             result = run_initiative_work(ROOT, args.command, args.operation, args.product, args.initiative, write=writing,
+                                         starter_revision=getattr(args, "starter_revision", None),
                                          expected=getattr(args, "revision", None), changes=changes)
             initiative_work.render(result, getattr(args, "format", "json"))
             return 0
@@ -912,12 +987,12 @@ def main() -> int:
             payload = storage.json_input(os.sys.stdin.read())
             definitions = None
             if isinstance(payload, dict) and "metric" in payload:
-                key = layout.slug(payload["metric"])
+                key = metric_registry.metric_id(payload["metric"])
                 fallback = payload.get("as_of")
                 if fallback is not None:
                     metric_registry.day(fallback)
                 labels = ("current", "baseline") if payload.get("kind") in ("growth", "percentage_points") else ("current",)
-                private = workspace.private_root(ROOT)
+                private = workspace.optional_repo(ROOT) or ROOT / storage.STUDIO
                 definitions = {
                     label: metric_registry.effective(ROOT, private, payload.get("product"),
                                                      metric_checks.observation_day(payload.get(label), fallback)).get(key)
@@ -929,16 +1004,15 @@ def main() -> int:
             print(json.dumps(result, indent=2))
             return int(result["status"] != "consistent")
         if args.command == "metric":
-            private = workspace.private_root(ROOT)
-            if private.exists() or args.operation == "set":
-                private = workspace.repo(ROOT, "workspace")
             if args.operation == "set":
+                private = workspace.repo(ROOT, "workspace")
                 request = storage.json_input(os.sys.stdin.read())
                 if args.write:
                     prepare_private_write(ROOT)
                     private = workspace.repo(ROOT, "workspace")
                 result = metric_registry.set_definition(ROOT, private, args.id, args.product, request, args.write)
             else:
+                private = workspace.optional_repo(ROOT) or ROOT / storage.STUDIO
                 result = metric_registry.effective(ROOT, private, args.product, args.as_of)
                 if args.operation == "show":
                     if args.id not in result:
@@ -950,14 +1024,12 @@ def main() -> int:
             prepare_private_write(ROOT)
             private = workspace.repo(ROOT, "workspace")
             context_capture.write_remit(private, json.load(os.sys.stdin))
-            print(f"Saved private/{context_capture.REMIT_PATH}.")
+            print(f"Saved studio/{context_capture.REMIT_PATH}.")
             return 0
         if args.command == "route-context":
             if args.write is not None:
                 settings = prepare_private_write(ROOT)
-            private = workspace.private_root(ROOT)
-            if private.exists() or private.is_symlink() or args.write is not None:
-                workspace.repo(ROOT, "workspace")
+            private = workspace.optional_repo(ROOT) or ROOT / storage.STUDIO
             remit, error = context_capture.inspect_remit(private)
             plan = context_capture.route(json.load(os.sys.stdin), private, remit)
             definitions = {}
@@ -989,7 +1061,7 @@ def main() -> int:
             report = alignment(ROOT)
             system_errors = check(include_workspace=False, command_base=args.command_base)
             if not system_errors and report["needs_setup"]:
-                print("Shared Hub checks passed. Private format 1 checks await session alignment.")
+                print("Shared oryx checks passed. Private format 1 checks await session alignment.")
                 return 0
         errors = check(include_workspace=not args.system_only, command_base=args.command_base)
         if not args.system_only:
@@ -1001,7 +1073,7 @@ def main() -> int:
         return 1
     for error in errors:
         print(f"FAIL: {error}")
-    print(f"PM Hub: {'FAIL' if errors else 'PASS'} ({len(errors)} error(s)).")
+    print(f"oryx: {'FAIL' if errors else 'PASS'} ({len(errors)} error(s)).")
     return int(bool(errors))
 
 

@@ -100,14 +100,16 @@ def create(root, store, archive):
                 raise ValueError(f"Backup verification failed for {name}")
             seen.add(name)
     if seen != before.keys() or entries(root, store) != before:
-        raise ValueError("The Hub changed during backup; retry after other writers finish")
+        raise ValueError("The checkout changed during backup; retry after other writers finish")
 
 
-def ensure(root, version, *, layout_change=False):
+def ensure(root, version, *, layout_change=False, studio_change=False):
     """Caller holds the private writer lock. A receipt belongs to this checkout and release."""
     if not re.fullmatch(r"\d+\.\d+\.\d+", version):
         raise ValueError("Invalid snapshot release")
     label = f"{version}-layout-2" if layout_change else version
+    if studio_change:
+        label = f"{version}-studio"
     receipt = storage.private_root(root) / ".git" / f"pm-hub-backup-{label}.json"
     store = root / ".git" / "pm-hub-backups"
     if receipt.resolve() != receipt or store.resolve() != store:

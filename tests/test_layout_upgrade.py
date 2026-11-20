@@ -34,6 +34,23 @@ class LayoutMigrationTests(unittest.TestCase):
     def run_upgrade(self, apply=True):
         return layout_upgrade.run(self.private, apply=apply)
 
+    def test_personal_skill_links_survive_layout_changes_without_becoming_evidence(self):
+        company = self.write("context/company.md", "<!-- pm: company-context -->\n# Company\n")
+        product = self.write("products/credit/guide.md", "<!-- pm: product-context -->\n# Credit\n")
+        old = self.write("customizations/views/notes.md", "## Sources\n\n[Example](../../context/company.md)\n")
+        raw = self.write("customizations/skills/week/sources/method.md", "# How we write updates\n")
+        registry = self.write("context/metrics.json", '{"version": 1, "revisions": []}\n')
+        original = {path: path.read_bytes() for path in (old, raw, registry)}
+        result = self.run_upgrade()
+        self.assertIn("products/credit/guide.md", result["moves"])
+        self.assertTrue(company.exists())
+        self.assertFalse(product.exists())
+        receipt = layout_upgrade.receipt(self.private, upgrades.read_state(self.private)[1])
+        self.assertFalse(set(receipt.get("sources", ())) & {"customizations/skills/week/sources/method.md", "context/company.md"})
+        self.assertNotIn("context/metrics.json", receipt.get("retained", {}))
+        self.assertIn("Customization", receipt["retained"]["context/company.md"]["note"])
+        self.assertTrue(all(path.read_bytes() == data for path, data in original.items()))
+
     def test_moves_references_stable_identity_and_profile_with_replay(self):
         company = self.write("context/company.md", "<!-- pm: company-context -->\r\n# Company\r\nExcluded permanently.\r\n")
         original = company.read_bytes()

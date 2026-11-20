@@ -12,6 +12,7 @@ from urllib.parse import unquote, urlsplit
 import zipfile
 
 import filing
+import layout
 import records
 import storage
 import upgrades
@@ -54,6 +55,8 @@ def check_plan(private, plan, *, legacy_replay=False):
             raise ValueError("Each change needs a path, its current digest, and text or a fold destination")
         name = row["path"]
         upgrades.review_path(private, name)
+        if layout.is_customization(name) and not legacy_replay:
+            raise ValueError("Studio customizations are outside record filing")
         if "sources" in Path(name).parts:
             raise ValueError("Keep original source files in place")
         if not isinstance(row.get("replacements", []), list):
@@ -178,7 +181,7 @@ def navigation_line(private, name, line, link_pattern):
     return bool(visible.strip("# ")) and set(re.findall(r"[\w’']+", visible.casefold())) <= NAVIGATION_WORDS
 
 
-def check_coverage(private, originals, edits, folds, link_pattern):
+def check_coverage(private, originals, edits, folds, link_pattern, *, legacy_replay=False):
     """Every removed content line survives in a named destination or has a verified replacement."""
     visible = set(storage.inventory(private))
     def canonical_links(line, name):
@@ -220,6 +223,7 @@ def check_coverage(private, originals, edits, folds, link_pattern):
                 raise ValueError("Give the full authoritative source line")
             path = private / source
             if (path.resolve() != path or path not in visible or source in edits or source in folds
+                    or (layout.is_customization(source) and not legacy_replay)
                     or any(p.startswith(".") or p == "secrets" for p in Path(source).parts)
                     or Path(source).is_absolute() or path.suffix.lower() not in (".md", ".txt", ".pdf")):
                 raise ValueError("Use an unchanged local primary source for a replacement")
@@ -375,7 +379,7 @@ def apply(private, plan, validate, link_pattern, *, preview=False, legacy_replay
     if exists:
         with zipfile.ZipFile(archive) as saved:
             originals = {row["path"]: (saved.read("original/" + row["path"]) if row["before"] != "absent" else b"") for row in plan["changes"]}
-    check_coverage(private, originals, edits, folds, link_pattern)
+    check_coverage(private, originals, edits, folds, link_pattern, legacy_replay=legacy_replay)
     check_references(private, edits, folds, link_pattern)
     validate(edits, folds, archive, originals)
     summary = {"id": plan["id"], "edited": list(edits), "folded": list(folds),

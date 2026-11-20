@@ -38,7 +38,7 @@ def cache_path(private):
             raise ValueError("Redirected cache directory")
     identity = private.stat()
     key = sha256(os.fsencode(private.resolve()) + f"/{identity.st_dev}/{identity.st_ino}".encode()).hexdigest()
-    path = root / (key + "-v1.sqlite")
+    path = root / (key + "-v2.sqlite")
     if path.is_symlink() or (path.exists() and not path.is_file()):
         raise ValueError("Redirected cache file")
     return path

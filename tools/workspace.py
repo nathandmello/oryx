@@ -10,7 +10,7 @@ from urllib.parse import urlsplit
 
 import records
 import upgrades
-from storage import private_root
+from storage import PRIVATE_PATHSPECS, STUDIO, private_root, rename_exclusive
 
 
 def git(path, *args):
@@ -30,6 +30,16 @@ def repo(root, role):
     if Path(git(path, "rev-parse", "--show-toplevel")).resolve() != path:
         raise ValueError(f"{role}: Git root does not match the selected repository")
     return path
+
+
+def optional_repo(root):
+    """Distinguish a core-only checkout from an unusable PM installation."""
+    path = private_root(root)
+    if not os.path.lexists(path):
+        return None
+    installed = repo(root, "workspace")
+    settings(root, compatible=False)
+    return installed
 
 
 def validate_release(value):
@@ -73,14 +83,23 @@ def supports_update(settings, incoming):
     )
 
 
+def require_studio_boundary(root):
+    if git(root, "ls-files", "--", *PRIVATE_PATHSPECS):
+        raise ValueError("Remove PM data from the shared Git index before setting up Studio")
+    ignored = subprocess.run(["git", "-C", str(root), "check-ignore", "--no-index", "--quiet", "--", STUDIO + "/"],
+                             capture_output=True, text=True)
+    if ignored.returncode == 1:
+        raise ValueError("Add /studio/ to the system .gitignore before setting up Studio")
+    if ignored.returncode:
+        raise ValueError(ignored.stderr.strip() or "Cannot verify the Studio ignore rule")
+
+
 def check_relocation(root, previous):
     """Check fixed worktree bindings and the outer Git boundary before any conversion."""
-    if previous != root / "workspace" or private_root(root) != previous or previous.resolve() != previous:
-        raise ValueError("The private repository location changed. Inspect both directories")
-    if git(root, "ls-files", "--", "private", "workspace"):
-        raise ValueError("Remove private data from the shared Git index before moving either repository")
-    if not git(root, "check-ignore", "--no-index", "private/"):
-        raise ValueError("The system must ignore private/ before moving the private repository")
+    if (previous.parent != root or previous.name.casefold() not in {"private", "workspace"}
+            or private_root(root) != previous or previous.resolve() != previous):
+        raise ValueError("The private repository location changed. Inspect the checkout directories")
+    require_studio_boundary(root)
     if (previous / ".git/worktrees").exists() or "core.worktree=" in git(previous, "config", "--local", "--list").lower():
         raise ValueError("Resolve private Git worktree bindings before moving the repository")
     if os.name != "nt" and not (sys.platform.startswith("linux") or sys.platform == "darwin"):
@@ -90,27 +109,13 @@ def check_relocation(root, previous):
 def relocate_private(root, previous):
     """Move the whole repository without replacing an existing path or rebuilding Git history."""
     check_relocation(root, previous)
-    target = root / "private"
-    if os.name == "nt":
-        os.rename(previous, target)  # Windows refuses an existing destination.
-        return
-    import ctypes
-    libc = ctypes.CDLL(None, use_errno=True)
-    if sys.platform.startswith("linux") and hasattr(libc, "renameat2"):
-        result = libc.renameat2(-100, os.fsencode(previous), -100, os.fsencode(target), 1)
-    elif sys.platform == "darwin" and hasattr(libc, "renamex_np"):
-        result = libc.renamex_np(os.fsencode(previous), os.fsencode(target), 4)
-    else:
-        raise ValueError("This filesystem needs an exclusive directory rename. Preserve both paths for review")
-    if result:
-        code = ctypes.get_errno()
-        raise OSError(code, os.strerror(code), str(target))
+    rename_exclusive(previous, root / STUDIO)
 
 
 def release(root):
     path = root / "playbook/release.json"
     if path.resolve() != path:
-        raise ValueError("System release metadata must be a regular file inside PM Hub")
+        raise ValueError("System release metadata must be a regular file inside oryx")
     descriptor = root / FORMAT_FILE
     if descriptor.resolve() != descriptor:
         raise ValueError("Use regular private format metadata")
@@ -153,8 +158,7 @@ def initialise(root, owner="", delivery_system="Delivery workspace"):
     path = private_root(root)
     if path.exists() or path.is_symlink():
         raise ValueError("The private directory already exists; preserve it and inspect its repository before setup")
-    if not git(root, "check-ignore", "private/"):
-        raise ValueError("Add /private/ to the system .gitignore before setup")
+    require_studio_boundary(root)
     path.mkdir()
     git(path, "init", "--initial-branch=main")
     metadata = dict(release(root), owner=owner, delivery_system=delivery_system,
@@ -174,6 +178,7 @@ def initialise(root, owner="", delivery_system="Delivery workspace"):
         text = records.retarget_links(source.read_text(encoding="utf-8"), source, target, root, copies)
         with target.open("x", encoding="utf-8") as output:
             output.write(text)
+    (path / "customizations").mkdir(exist_ok=True)
     upgrades.fresh(path)
     import layout_upgrade
     layout_upgrade.mark_fresh(path)

@@ -1,4 +1,4 @@
-name: PM Hub review evidence
+name: oryx review evidence
 on:
   pull_request:
     branches: [main]

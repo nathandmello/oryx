@@ -63,6 +63,145 @@ class MetricRegistryTests(unittest.TestCase):
         self.assertEqual(self.definition("--product", "example", "--as-of", "2025-07-31")["authority"], "company")
         self.assertIn("PASS", self.cli("check"))
 
+    def test_company_id_is_explicit_and_scenarios_keep_their_approved_basis(self):
+        self.cli("metric", "show", "company.logo-churn", error="Choose a metric ID")
+        missing = json.loads(self.cli("task-context", "--product", "example", "Use company.logo-churn for paid customer churn."))
+        self.assertFalse(missing.get("metrics"))
+        self.assertTrue(any("No approved definition of company.logo-churn" in warning for warning in missing["warnings"]))
+        request = self.change("Finance decision 4", "Beginning paid contracts.")
+        self.cli("metric", "set", "company.logo-churn", "--product", "example", value=request, error="Omit --product")
+        self.cli("metric", "set", "logo-churn", "--write", value=request)
+        official = self.definition(metric="company.logo-churn")
+        self.assertEqual(official["revision"], self.definition()["revision"])
+        self.assertEqual((official["approved_by"], official["source"], official["origin"]),
+                         ("Fixture Finance owner", "Finance decision 4", "local"))
+        self.cli("metric", "show", "company.logo-churn", "--as-of", "2025-06-30", error="Choose a metric ID")
+        product = self.change("Product decision", "Opening accounts in the trial.", "2025-08-01")
+        self.cli("metric", "set", "logo-churn", "--product", "example", "--write", value=product)
+        self.assertNotEqual(self.definition("--product", "example")["denominator"], official["denominator"])
+        self.assertEqual(self.definition("--product", "example", metric="company.logo-churn"), official)
+        scenario = dict(self.change("PM planning review", "Customers under annual contracts.", "2025-08-02"),
+                        based_on="company.logo-churn")
+        self.cli("metric", "set", "scenario.annual", value=scenario, error="own display name")
+        scenario["changes"]["name"] = "Annual-contract churn sensitivity"
+        self.cli("metric", "set", "scenario.annual", "--product", "example", "--write", value=scenario)
+        variant = self.definition("--product", "example", metric="scenario.annual")
+        self.assertEqual((variant["based_on"], variant["authority"]), (official["reference"], "scenario"))
+        self.assertEqual(variant["formula"], official["formula"])
+        self.assertFalse(json.loads(self.cli("metric", "set", "scenario.annual", "--product", "example", "--write",
+                                             value=scenario))["written"])
+        self.cli("metric", "show", "scenario.annual", "--product", "elsewhere", error="Choose a metric ID")
+        for prompt, expected in [("Report paid customer churn.", {"logo-churn"}),
+                                 ("Report paid customer churn using company.logo-churn.", {"company.logo-churn"}),
+                                 ("Use scenario.annual for paid customer churn.", {"scenario.annual"}),
+                                 ("Model Annual-contract churn sensitivity.", {"scenario.annual"}),
+                                 ("Compare company.logo-churn and scenario.annual.", {"company.logo-churn", "scenario.annual"})]:
+            with self.subTest(prompt=prompt):
+                ctx = json.loads(self.cli("task-context", "--product", "example", prompt))
+                self.assertEqual({row["metric"] for row in ctx["metrics"]}, expected)
+        self.cli("metric", "set", "company.logo-churn", "--write",
+                 value=self.change("Finance decision 5", "Opening prepaid contracts.", "2025-09-01"))
+        self.assertEqual(self.definition("--product", "example", metric="scenario.annual"), variant)
+        self.assertEqual(self.definition("--as-of", "2025-08-31", metric="company.logo-churn"), official)
+
+    def test_qualified_company_evidence_survives_product_and_company_changes(self):
+        official = json.loads(self.cli("metric", "set", "company.logo-churn", "--write",
+                                       value=self.change("Finance policy", "All paid accounts.")))["proposed"]
+        self.submit(self.setup_event(), self.capture(), {"type": "metric", "metric": "official-churn",
+                                                        "registry_metric": "company.logo-churn"})
+        signed = self.ledger.read_bytes()
+        self.preview({"type": "metric", "metric": "duplicate-churn", "registry_metric": "logo-churn"},
+                     error="Reuse the existing")
+        self.cli("metric", "set", "logo-churn", "--product", "example", "--write",
+                 value=self.change("Billing exception", "Paid accounts with active usage.", "2025-08-01"))
+        self.preview(dict(self.target(), metric="official-churn"))
+        self.preview({"type": "metric", "metric": "product-churn", "registry_metric": "logo-churn"})
+        observation = {"definition": official["reference"], "population": official["population"], "unit": "percent",
+                       "start": "2025-08-01", "end": "2025-09-01", "basis": "calendar month", "complete": True,
+                       "timezone": "UTC", "source": "Finance ledger", "numerator": 3, "denominator": 10,
+                       "numerator_subset": True, "denominator_basis": official["denominator"]}
+        payload = {"metric": "company.logo-churn", "product": "example", "kind": "proportion", "current": observation}
+        checked = json.loads(self.cli("check-metric", value=payload))
+        self.assertEqual(checked["definition_provenance"]["current"]["source"], "Finance policy")
+        self.assertEqual(checked["value"], "30")
+        self.cli("check-metric", value=dict(payload, metric="logo-churn"), error="definition differs")
+        self.cli("metric", "set", "company.logo-churn", "--write",
+                 value=self.change("New Finance policy", "Starting paid contracts.", "2025-09-15"))
+        self.assertEqual(json.loads(self.cli("check-metric", value=payload))["metric_reference"], official["reference"])
+        self.assertEqual(self.ledger.read_bytes(), signed)
+        trace = json.loads(self.cli("initiative", "show", "example"))
+        self.assertEqual(trace["metrics"]["official-churn"]["contract"], official)
+        self.assertEqual(trace["current_metric_registry"]["official-churn"]["source"], "New Finance policy")
+        self.preview(dict(self.target(), metric="official-churn"), error="under a new metric ID")
+
+    def test_new_company_revenue_and_an_independent_forecast(self):
+        revenue = {"approved_by": "Controller", "source": "Policy revision 6", "effective_on": "2025-01-01",
+                   "changes": {"name": "Recognized revenue", "aliases": ["revenue"], "unit": "currency",
+                               "definition": "Revenue recognized for completed services.", "formula": "Sum posted net lines.",
+                               "population": "Settled customer invoices.", "period": "One closed calendar month.",
+                               "denominator": "none", "notes": "Exclude deferred revenue and sales tax."}}
+        self.cli("metric", "set", "company.revenue", "--write", value=revenue)
+        official = self.definition(metric="company.revenue")
+        self.assertEqual(official["revision"], self.definition(metric="revenue")["revision"])
+        self.assertEqual(official["reference"], "company.revenue@" + official["revision"])
+        scenario = {"approved_by": "Planning PM", "source": "Upside forecast", "effective_on": "2025-01-10",
+                    "based_on": "company.revenue", "changes": {"name": "Upside revenue",
+                                                              "formula": "Add likely renewals to recognized sales."}}
+        self.cli("metric", "set", "scenario.upside", "--write", value=scenario)
+        self.cli("metric", "set", "company.revenue", "--write", value=scenario, error="named scenario")
+        self.cli("metric", "set", "scenario.upside", "--write", value=dict(scenario, based_on="scenario.upside"),
+                 error="different definition")
+        self.submit(self.setup_event(), self.capture(),
+                    {"type": "metric", "metric": "revenue", "registry_metric": "company.revenue"},
+                    {"type": "metric", "metric": "forecast", "registry_metric": "scenario.upside"})
+        signed = self.ledger.read_bytes()
+        self.cli("metric", "set", "scenario.upside", "--write",
+                 value={"approved_by": "Planning PM", "source": "Quarter-end sensitivity", "effective_on": "2025-02-01",
+                        "changes": {"formula": "Add contracted renewals only."}})
+        self.assertEqual(self.ledger.read_bytes(), signed)
+        self.assertEqual(self.definition(metric="company.revenue"), official)
+        trace = json.loads(self.cli("initiative", "show", "example"))["metrics"]
+        self.assertEqual(trace["revenue"]["contract"]["revision"], official["revision"])
+        self.assertEqual(trace["forecast"]["contract"]["based_on"], official["reference"])
+        self.assertEqual(trace["forecast"]["contract"]["formula"], scenario["changes"]["formula"])
+
+    def test_two_studios_can_apply_the_same_finance_file(self):
+        other = self.Fixture()
+        other.setUp()
+        self.addCleanup(other.doCleanups)
+        approval = {"approved_by": "Controller", "source": "Finance decision 16", "effective_on": "2025-03-01",
+                    "changes": {"name": "Revenue", "aliases": ["recognized sales"], "unit": "currency",
+                                "definition": "Revenue recognized during the month.", "formula": "Sum posted sales.",
+                                "population": "Posted general ledger entries.", "period": "One closed calendar month.",
+                                "denominator": "none", "notes": "Exclude tax and deferred revenue."}}
+        finance_file = self.parent / "finance.json"
+        finance_file.write_text(json.dumps(approval), encoding="utf-8")
+        other.cli("metric", "set", "company.revenue", "--write",
+                  value=dict(approval, effective_on="2025-01-01",
+                             changes=dict(approval["changes"], period="Reported each Friday.", reporting_window="week")))
+        for studio in (self, other):
+            formula = "Invoiced product lines." if studio is self else "Recognized product sales."
+            studio.cli("metric", "set", "revenue", "--product", "example", "--write",
+                       value=dict(approval, effective_on="2024-12-01", changes=dict(approval["changes"], formula=formula)))
+        self.cli("metric", "set", "scenario.expansion", "--product", "example", "--write",
+                 value=dict(approval, effective_on="2025-02-01", based_on="revenue",
+                            changes={"name": "Expansion forecast", "formula": "Include planned expansion."}))
+        variant = self.definition("--product", "example", metric="scenario.expansion")
+        for studio in (self, other):
+            with finance_file.open(encoding="utf-8") as data:
+                run = subprocess.run([sys.executable, str(studio.root / "tools/pm.py"), "metric", "set",
+                                      "company.revenue", "--write"], stdin=data, cwd=studio.work, env=studio.env,
+                                     text=True, capture_output=True, check=True)
+            self.assertTrue(json.loads(run.stdout)["written"])
+        official = self.definition(metric="company.revenue")
+        self.assertNotIn("reporting_window", official)
+        for studio, change in ((self, "Invoiced product lines."), (other, "Recognized product sales.")):
+            active = json.loads(studio.cli("metric", "show", "revenue", "--product", "example"))
+            self.assertEqual(active["formula"], change)
+            self.assertEqual(json.loads(studio.cli("metric", "show", "company.revenue", "--product", "example")), official)
+        other.cli("metric", "show", "scenario.expansion", "--product", "example", error="Choose a metric ID")
+        self.assertEqual(self.definition("--product", "example", metric="scenario.expansion"), variant)
+
     def test_hooks_and_arithmetic_use_the_effective_definition(self):
         default = self.definition()
         definition = self.change("PM and Finance review", "Beginning subscribers plus newly active subscribers.")

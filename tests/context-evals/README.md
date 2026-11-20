@@ -1,6 +1,6 @@
-# PM Hub context evaluations
+# oryx context evaluations
 
-Run from the Hub root with Python 3.9 or later.
+Run from the oryx root with Python 3.9 or later.
 
 ```sh
 python3 -B tests/context-evals/run.py

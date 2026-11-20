@@ -1,6 +1,6 @@
 # Filing PM work
 
-Choose the purpose first. File information used for reference in `context/`. File work the PM plans, prioritises, executes, or measures in `workspace/`. Both paths start at the private repository root.
+File reference material in `context/` and PM work in `workspace/` inside Studio. Keep personal skills and methods in `customizations/`. Cite the underlying business evidence for decisions.
 
 | Reader need | Home |
 | --- | --- |
@@ -40,7 +40,7 @@ In Markdown, put the prose below the `<!-- pm: context-lead -->` marker. Start t
 An unmarked legacy section can retain its original prose. Verify and label its claims when adopting a lead.
 Indent level-two headings inside examples so capture can identify section boundaries.
 
-Update older Hub clients before syncing briefs with section leads.
+Update older oryx clients before syncing briefs with section leads.
 
 ```markdown
 ## UK merchant adoption before rollout

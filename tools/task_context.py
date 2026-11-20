@@ -36,7 +36,12 @@ FOLLOW_UP = re.compile(r"^(?:please\s+)?(?:(?:can|could|would) you\s+(?:please\s
 SWITCH = re.compile(
     r"^(?:(?:please|now|let's|let’s)\s+)*(?:switch|move)\s+(?:from\b.+?\b)?to\s+", re.I
 )
-WORK_RECORD = re.compile(r"(?:private/)?(workspace/[\w./-]+?\.md)\b")
+WORK_RECORD = re.compile(r"(?:(?:studio|private|workspace)/)?(workspace/[\w./-]+?\.md)\b")
+# Personal methods can contain examples with the same names as real PM records.
+CUSTOMIZATION_PATH = re.compile(
+    r"""(["'`])(?:(?:/[^"'\x60\n]*/)?(?:studio|private|workspace)/)?customizations/[^"'\x60\n]+\1"""
+    r"|<(?:(?:/[^<>\n]*/)?(?:studio|private|workspace)/)?customizations/[^<>\n]+>"
+    r"|(?:(?<![\w.-])(?:studio|private|workspace)/|(?<![\w./-]))customizations/[\w./%+-]+", re.I)
 COMPANY_QUERY = re.compile(r"\bcompany(?:-wide| context| overview| policy)\b", re.I)
 IDENTIFIER = re.compile(r"\b[a-z][\w-]*\.[a-z][\w.-]*[a-z0-9]\b", re.I)
 DATE = re.compile(r"\b(?:as of|on)\s+(\d{4}-\d{2}-\d{2}|"
@@ -98,7 +103,7 @@ def read_document(relative, path, *, text=None, through=None):
         "initiative": initiative, "parent": parent, "text": text, "company": entity == Path(layout.COMPANY).parent,
         "sources": {row[0]: {**dict(zip(records.SOURCE_COLUMNS, row)), "coverage": coverage.get(row[0], "unrecorded")}
                     for row in sources
-                    if re.fullmatch(r"S[1-9]\d*", row[0])},
+                    if re.fullmatch(r"S[1-9]\d*", row[0]) and not records.uses_customization_source(name, row[1])},
     }
 
 
@@ -223,7 +228,7 @@ def choose_scope(private, documents, prompt, cwd, previous, explicit):
         return {}, []
     switched = bool(SWITCH.match(prompt))
     prompt = SWITCH.sub("", prompt)
-    artifacts = re.findall(r"(?:private/)?((?:context|workspace)/[\w./-]+?\.(?:md|json))\b", prompt)
+    artifacts = re.findall(r"(?:(?:studio|private|workspace)/)?((?:context|workspace)/[\w./-]+?\.(?:md|json))\b", prompt)
     known = [scope for name in artifacts if (name.endswith(".md") or layout.initiative_work_identity(name))
              and (scope := resolved_artifact(name, documents))]
     for value in re.findall(r"\bproduct/([a-z0-9-]+)(?:/area/([a-z0-9-]+))?", prompt):
@@ -369,6 +374,7 @@ def resolve(private, prompt="", *, cwd=None, previous=None, explicit=None, expla
 
 def resolve_inventory(private, prompt, *, cwd, previous, explicit, explain, include_history,
                       work_record=None, new_owner=None):
+    prompt = CUSTOMIZATION_PATH.sub(" ", prompt)
     through = as_of(prompt)
 
     def collect(index, docs, loaded, stamps):
@@ -422,6 +428,8 @@ def resolve_current(private, prompt, cwd, previous, explicit, explain, include_h
     status = "ambiguous" if choices else "resolved" if scope else "unscoped"
     result = {"status": status, "scope": scope, "choices": choices, "entries": [], "warnings": []}
     metrics = metric_registry.effective(private.parent, private, scope.get("product"), through.isoformat())
+    for key in sorted(metric_registry.qualified_ids(prompt) - metrics.keys()):
+        result["warnings"].append(f"No approved definition of {key} exists for this scope on {through.isoformat()}.")
     if not scope:
         if explain:
             result["retrieval"] = {"mode": status, "eligible": 0}
@@ -628,7 +636,7 @@ def turn_context(private, prompt, *, cwd=None, saved=None, explicit=None, work_r
         except (TypeError, ValueError):
             prior_scope = {}
     can_continue = previous.get("can_continue", True)
-    named = WORK_RECORD.search(prompt) if work_record is None else None
+    named = WORK_RECORD.search(CUSTOMIZATION_PATH.sub(" ", prompt)) if work_record is None else None
     selected_owner = work_record or (named[1] if named else None)
     selected_new_owner = selected_owner is not None and selected_owner != previous.get("record")
     checkpoint = conversation.read_checkpoint(private, work_record) if work_record is not None else None

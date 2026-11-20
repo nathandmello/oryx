@@ -5,6 +5,7 @@ import sys
 
 from initiative_events import (DECISION_FIELDS, EVALUATION_FIELDS, FIELDS, HORIZONS, OPTIONAL_FIELDS,
                                RATIONALE_FIELDS, OUTCOME_STATUSES, PHASES, RESULTS, RISKS, SIGNAL_ACTIONS, SIGNAL_IMPACTS, TRANSITIONS)
+import customizations
 import experiment_drafts
 import initiative_areas
 import storage
@@ -41,11 +42,12 @@ def add_commands(commands):
     scope.add_argument("--all-phases", action="store_true", help="Include selected, deferred, and closed initiatives")
     backlog.add_argument("--due", action="store_true", help="Show reviews due today or earlier and report review issues")
     roadmap = commands.add_parser("roadmap", help="Generate the current selected roadmap")
+    roadmap.add_argument("--view", help="Use a named workspace roadmap view")
     roadmap.add_argument("--cycle", help="Show one planning cycle")
     for view in (backlog, roadmap):
         view.add_argument("--product")
         view.add_argument("--area", help="Full product area subject, or area slug with --product")
-        view.add_argument("--format", choices=("json", "csv", "markdown"), default="json")
+        view.add_argument("--format", choices=("json", "csv", "markdown", "html") if view is roadmap else ("json", "csv", "markdown"), default="json")
 
 
 def run(root, args):
@@ -66,7 +68,7 @@ def run(root, args):
                 "value": "Use a numeric value in the declared unit with an observation. Use decimal strings for exact figures.",
                 "correct-measurement": "Give the active measurement ID, reason, source and optional comparable replacement ID. Cite comparison_source for a legacy reading.",
                 "guardrail_dispositions": "On review-outcomes, give each breached or unavailable guardrail ID and the PM's disposition.",
-                "recorded_on": "The Hub supplies the date of signing for new evidence transactions.",
+                "recorded_on": "oryx supplies the date of signing for new evidence transactions.",
             },
             "evaluation_fields": EVALUATION_FIELDS,
             "optional_decision_rationale": {"required": RATIONALE_FIELDS, "optional": ["review_on"],
@@ -144,7 +146,14 @@ def run(root, args):
                                           args.key, args.confirm_distinct)
         print(f"Recorded PM-signed revision {revision}.")
         return
-    output = initiative_views.render(initiative_views.view_template(root, args.command), rows, args.format)
+    if args.command == "roadmap":
+        template = customizations.projection(root, rows, args.view, product=product)
+    else:
+        template = initiative_views.view_template(root, args.command)
+    if args.format == "html":
+        output = customizations.page(root, template, rows)
+    else:
+        output = initiative_views.render(template, rows, args.format)
     if due_view:
         for _, register in registers:
             for issue in initiative_store.live_errors(root, register, area=area):

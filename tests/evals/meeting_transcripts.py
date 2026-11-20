@@ -92,7 +92,7 @@ def prepare(case, run, source_file, source_view):
     overview = pm.layout.initiative(case["initiative"], "eval-product")
     hub_command(hub, "new", "initiative-context", overview, "--parent", product, "--title", case["title"])
     print(hub_command(hub, "check").strip())
-    baseline = {"system": snapshot(hub), "private": snapshot(hub / "private")}
+    baseline = {"system": snapshot(hub), "private": snapshot(hub / "studio")}
     (run / "baseline.json").write_text(json.dumps(baseline, sort_keys=True))
     (run / "prompt.txt").write_text(case["prompt"] + "\n")
     print(run / "prompt.txt")
@@ -107,7 +107,7 @@ def replay(case, prior, run):
     hub = run / "hub"
     shutil.copytree(prior / "hub", hub)
     shutil.copytree(prior / "input", run / "input")
-    baseline = {"system": snapshot(hub), "private": snapshot(hub / "private"), "replay": True}
+    baseline = {"system": snapshot(hub), "private": snapshot(hub / "studio"), "replay": True}
     (run / "baseline.json").write_text(json.dumps(baseline, sort_keys=True))
     (run / "prompt.txt").write_text(case["prompt"] + " We may already have filed this meeting. Please check.\n")
 
@@ -115,7 +115,7 @@ def replay(case, prior, run):
 def check(case, run):
     hub = run / "hub"
     before = json.loads((run / "baseline.json").read_text())
-    after = snapshot(hub / "private")
+    after = snapshot(hub / "studio")
     changed = {p for p in before["private"].keys() | after.keys() if before["private"].get(p) != after.get(p)}
     prompt = case["prompt"]
     if before.get("replay"):
@@ -125,13 +125,13 @@ def check(case, run):
     if before.get("replay"):
         tests["existing evidence and note unchanged"] = not changed.difference({"README.md"})
     elif case["mode"] == "capture":
-        overview = pm.records.initiative_home(hub / "private", "eval-product", case["initiative"])
+        overview = pm.records.initiative_home(hub / "studio", "eval-product", case["initiative"])
         entity = Path(overview).parent
         notes = [p for p in changed if Path(p).parent == entity and Path(p).name.startswith(case["date"] + "-")
-                 and after.get(p) and (hub / "private" / p).read_text().startswith("<!-- pm: context-note -->")]
+                 and after.get(p) and (hub / "studio" / p).read_text().startswith("<!-- pm: context-note -->")]
         tests["initiative overview updated"] = overview in changed and overview in after
         tests["one dated meeting note"] = len(notes) == 1
-        overview_text = (hub / "private" / overview).read_text() if overview in after else ""
+        overview_text = (hub / "studio" / overview).read_text() if overview in after else ""
         tests["overview links to dated note"] = len(notes) == 1 and f"({Path(notes[0]).name})" in overview_text
         tests["only initiative records and checkpoint changed"] = not changed.difference(notes, [overview, "README.md"])
     elif case["mode"] == "clarify":

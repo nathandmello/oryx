@@ -5,7 +5,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 -c 'from pathlib import Path; import runpy, sys; p=Path.cwd().resolve(); root=next(p for p in (p, *p.parents) if (p/\"playbook/release.json\").is_file() and (p/\"tools/hook.py\").is_file()); sys.path.insert(0, str(root/\"tools\")); runpy.run_path(str(root/\"tools/hook.py\"), run_name=\"__main__\")'",
+            "command": "python3 -c 'from pathlib import Path\nimport os, runpy, sys\ncwd = Path.cwd().resolve()\nbound = os.environ.get(\"PM_HUB_PROTECTED_ROOT\")\ncandidates = (Path(bound).resolve(),) if bound else (cwd, *cwd.parents)\nroots = [root for root in candidates if cwd.is_relative_to(root)\n         and (root / \"playbook/release.json\").is_file() and (root / \"tools/hook.py\").is_file()]\nif len(roots) != 1:\n    print(\"Cannot identify a single oryx checkout for this directory. Open a protected PM session from the intended checkout.\", file=sys.stderr)\n    sys.exit(2)\nroot = roots[0]\nsys.path.insert(0, str(root / \"tools\"))\nrunpy.run_path(str(root / \"tools/hook.py\"), run_name=\"__main__\")'",
             "timeout": 600
           }
         ]
@@ -16,7 +16,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 -c 'from pathlib import Path; import runpy, sys; p=Path.cwd().resolve(); root=next(p for p in (p, *p.parents) if (p/\"playbook/release.json\").is_file() and (p/\"tools/hook.py\").is_file()); sys.path.insert(0, str(root/\"tools\")); runpy.run_path(str(root/\"tools/hook.py\"), run_name=\"__main__\")'",
+            "command": "python3 -c 'from pathlib import Path\nimport os, runpy, sys\ncwd = Path.cwd().resolve()\nbound = os.environ.get(\"PM_HUB_PROTECTED_ROOT\")\ncandidates = (Path(bound).resolve(),) if bound else (cwd, *cwd.parents)\nroots = [root for root in candidates if cwd.is_relative_to(root)\n         and (root / \"playbook/release.json\").is_file() and (root / \"tools/hook.py\").is_file()]\nif len(roots) != 1:\n    print(\"Cannot identify a single oryx checkout for this directory. Open a protected PM session from the intended checkout.\", file=sys.stderr)\n    sys.exit(2)\nroot = roots[0]\nsys.path.insert(0, str(root / \"tools\"))\nrunpy.run_path(str(root / \"tools/hook.py\"), run_name=\"__main__\")'",
             "timeout": 15
           }
         ]
@@ -27,7 +27,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 -c 'from pathlib import Path; import runpy, sys; p=Path.cwd().resolve(); root=next(p for p in (p, *p.parents) if (p/\"playbook/release.json\").is_file() and (p/\"tools/hook.py\").is_file()); sys.path.insert(0, str(root/\"tools\")); runpy.run_path(str(root/\"tools/hook.py\"), run_name=\"__main__\")'",
+            "command": "python3 -c 'from pathlib import Path\nimport os, runpy, sys\ncwd = Path.cwd().resolve()\nbound = os.environ.get(\"PM_HUB_PROTECTED_ROOT\")\ncandidates = (Path(bound).resolve(),) if bound else (cwd, *cwd.parents)\nroots = [root for root in candidates if cwd.is_relative_to(root)\n         and (root / \"playbook/release.json\").is_file() and (root / \"tools/hook.py\").is_file()]\nif len(roots) != 1:\n    print(\"Cannot identify a single oryx checkout for this directory. Open a protected PM session from the intended checkout.\", file=sys.stderr)\n    sys.exit(2)\nroot = roots[0]\nsys.path.insert(0, str(root / \"tools\"))\nrunpy.run_path(str(root / \"tools/hook.py\"), run_name=\"__main__\")'",
             "timeout": 15
           }
         ]
@@ -35,11 +35,11 @@
     ],
     "PreToolUse": [
       {
-        "matcher": "apply_patch",
+        "matcher": "apply_patch|Bash",
         "hooks": [
           {
             "type": "command",
-            "command": "python3 -c 'from pathlib import Path; import runpy, sys; p=Path.cwd().resolve(); root=next(p for p in (p, *p.parents) if (p/\"playbook/release.json\").is_file() and (p/\"tools/hook.py\").is_file()); sys.path.insert(0, str(root/\"tools\")); runpy.run_path(str(root/\"tools/hook.py\"), run_name=\"__main__\")'",
+            "command": "python3 -c 'from pathlib import Path\nimport os, runpy, sys\ncwd = Path.cwd().resolve()\nbound = os.environ.get(\"PM_HUB_PROTECTED_ROOT\")\ncandidates = (Path(bound).resolve(),) if bound else (cwd, *cwd.parents)\nroots = [root for root in candidates if cwd.is_relative_to(root)\n         and (root / \"playbook/release.json\").is_file() and (root / \"tools/hook.py\").is_file()]\nif len(roots) != 1:\n    print(\"Cannot identify a single oryx checkout for this directory. Open a protected PM session from the intended checkout.\", file=sys.stderr)\n    sys.exit(2)\nroot = roots[0]\nsys.path.insert(0, str(root / \"tools\"))\nrunpy.run_path(str(root / \"tools/hook.py\"), run_name=\"__main__\")'",
             "timeout": 15
           }
         ]

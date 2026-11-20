@@ -14,9 +14,9 @@ Use ASD-STE100 Simplified Technical English (STE), Issue 9, dated 15 January 202
 
 For dictionary use, see rules 1.1–1.4. For procedures and descriptions, see Sections 5 and 6. The publisher controls the full text and its reproduction. [Official distribution](https://www.asd-ste100.org/STE_downloads.html)
 
-The Hub checks approximate word counts, paragraph length, and a few house terms. A reviewer must check approved meanings, syntax, technical terminology, and exceptions against the standard.
+oryx checks approximate word counts, paragraph length, and a few house terms. A reviewer must check approved meanings, syntax, technical terminology, and exceptions against the standard.
 
-Record the passages and rules actually checked before reporting a standards review. A passing Hub check alone supports no claim of full STE compliance.
+Record the passages and rules actually checked before reporting a standards review. A passing oryx check alone supports no claim of full STE compliance.
 
 ## Hemingway and meaning
 
@@ -30,4 +30,4 @@ Keep negation, obligation, conditions, uncertainty, and ownership explicit in PM
 
 Both sentences belong in the company constraints. Removing the first loses a strategic exclusion. Changing “may” to “will” can turn an option into a commitment.
 
-The Hub's 800-word house limit applies to authored prose. Edit repetition first. Apply [the filing test](filing.md) before creating another record.
+The 800-word limit in oryx applies to authored prose. Edit repetition first. Apply [the filing test](filing.md) before creating another record.

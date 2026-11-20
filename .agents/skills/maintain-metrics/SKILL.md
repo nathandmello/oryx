@@ -16,4 +16,5 @@ Use the [conversation guide](../../../playbook/conversation.md) when a metric ch
 5. Preview the definition with `pm.py metric set`. Apply the confirmed change with `--write`.
 6. Use `metric show` to verify the resulting reference. Identify any comparisons or signed targets that need review.
 
+Use `company.<metric>` for an official company calculation. Record what-if assumptions under `scenario.<name>` and cite the original revision with `based_on`.
 Link to the registry from working records. Preserve source definitions when reporting third-party figures.

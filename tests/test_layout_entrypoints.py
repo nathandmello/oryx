@@ -42,7 +42,7 @@ class LayoutEntrypointTests(unittest.TestCase):
         first = self.cli("align")
         self.assertEqual(first.returncode, 0, first.stdout + first.stderr)
         result = json.loads(first.stdout)
-        self.assertEqual(result["private_root_move"], {"from": "workspace", "to": "private"})
+        self.assertEqual(result["private_root_move"], {"from": "workspace", "to": "studio"})
         self.assertTrue(Path(result["installation_backup"]).is_file())
         self.assertFalse(previous.exists())
         path = self.work / asset.relative_to(previous)
@@ -59,6 +59,52 @@ class LayoutEntrypointTests(unittest.TestCase):
         self.assertFalse(json.loads(second.stdout)["layout"]["changed"])
         checked = self.cli("check")
         self.assertEqual(checked.returncode, 0, checked.stdout + checked.stderr)
+
+    def test_private_rename_rejects_bound_worktrees_before_any_migration(self):
+        previous = self.root / "private"
+        self.work.rename(previous)
+        settings = previous / "settings.json"
+        original = settings.read_bytes()
+        (previous / ".git/worktrees").mkdir()
+        result = self.cli("align")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("worktree bindings", result.stdout + result.stderr)
+        self.assertEqual(settings.read_bytes(), original)
+        self.assertFalse(self.work.exists())
+        self.assertFalse((self.root / ".git/pm-hub-backups").exists())
+
+    def test_unignored_studio_stops_before_opening_a_new_checkout(self):
+        rules = self.root / ".gitignore"
+        rules.write_text("\n".join(row for row in rules.read_text().splitlines()
+                                   if row not in {"/studio/", "/[Ss][Tt][Uu][Dd][Ii][Oo]/"}) + "\n")
+        previous = self.root / "private"
+        self.work.rename(previous)
+        settings = (previous / "settings.json").read_bytes()
+        result = self.cli("align")
+        self.assertIn("Add /studio/ to the system .gitignore", result.stdout + result.stderr)
+        self.assertEqual((previous / "settings.json").read_bytes(), settings)
+        self.assertFalse(self.work.exists())
+
+    def test_exclusive_rename_preserves_competing_file_and_empty_directory(self):
+        for directory in (False, True):
+            with self.subTest(directory=directory):
+                source = self.work / f"source-{directory}"
+                target = self.work / f"destination-{directory}"
+                if directory:
+                    source.mkdir()
+                    (source / "note").write_bytes(b"old data")
+                    target.mkdir()
+                else:
+                    source.write_bytes(b"old data")
+                    target.write_bytes(b"new data")
+                with self.assertRaises(FileExistsError):
+                    storage.rename_exclusive(source, target)
+                if directory:
+                    self.assertEqual((source / "note").read_bytes(), b"old data")
+                    self.assertEqual(list(target.iterdir()), [])
+                else:
+                    self.assertEqual(source.read_bytes(), b"old data")
+                    self.assertEqual(target.read_bytes(), b"new data")
 
     def test_backup_reads_both_locked_files_through_their_own_handles(self):
         locks = {self.root / ".git/pm-hub-writer.lock": b"outer lock\x00\x17",

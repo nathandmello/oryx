@@ -16,7 +16,7 @@ For registered initiatives, use these paths relative to the private repository:
 | Metric-linked experiment drafts | `workspace/experiments/<product>/<initiative>/experiment.<metric-id>.draft.json` |
 | Planning comparison for one cycle | `workspace/roadmaps/<product>/<cycle>.md` |
 
-Run `python3 tools/pm.py backlog --product PRODUCT` or `python3 tools/pm.py roadmap --product PRODUCT` from the Hub root.
+Run `python3 tools/pm.py backlog --product PRODUCT` or `python3 tools/pm.py roadmap --product PRODUCT` from the oryx root.
 Add `--area AREA` for work explicitly linked to that product area. Follow the [opportunity workflow](../../../playbook/opportunities.md) for stage decisions.
 
 Use the [initiative work commands](../../../playbook/initiative-work.md) to manage tasks and review launch readiness.

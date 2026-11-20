@@ -14,6 +14,10 @@ INITIATIVE_WORK_RESERVED = {"sources", "secrets"}
 MAX_TOPICS = 6
 
 
+def is_customization(name):
+    return Path(name).parts[:1] == ("customizations",)
+
+
 def slug(value):
     if not isinstance(value, str) or not SLUG.fullmatch(value):
         raise ValueError("Choose a named entity with a lowercase, hyphen-separated slug")

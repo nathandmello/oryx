@@ -66,7 +66,7 @@ class BackupTests(unittest.TestCase):
             copy = restored / repo.relative_to(self.root)
             subprocess.run(["git", "-C", str(copy), "fsck", "--full"], capture_output=True, check=True)
             self.assertEqual(subprocess.check_output(["git", "-C", str(copy), "status", "--porcelain"]), status)
-        self.assertEqual(json.loads((self.root / "private/settings.json").read_text())["system_version"], pm.workspace.release(self.root)["system_version"])
+        self.assertEqual(json.loads((self.root / "studio/settings.json").read_text())["system_version"], pm.workspace.release(self.root)["system_version"])
         pm.alignment(self.root, True)
         self.assertEqual(list(store.glob("*/hub.tar.gz")), [archive])
 

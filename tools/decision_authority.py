@@ -5,7 +5,6 @@ from html import unescape
 from os.path import normpath
 from pathlib import Path
 import re
-from urllib.parse import unquote, urlsplit
 
 import evidence_reviews
 import initiative_events
@@ -46,11 +45,7 @@ def cited_archive(private, record, source):
     """Keep the dated bibliography and fingerprint any locally cited evidence file."""
     archive = dict(source)
     attachments = {}
-    for name in re.findall(r"\[[^\]\n]+\]\((<[^>\n]+>|[^\s)]+)\)", source["Source"]):
-        parsed = urlsplit(name.strip("<>"))
-        if parsed.scheme or parsed.netloc or not parsed.path:
-            continue
-        raw = Path(unquote(parsed.path))
+    for raw in records.local_source_links(source["Source"]):
         if raw.is_absolute() or "\\" in str(raw):
             raise ValueError("Choose a local decision source inside the private workspace")
         relative = Path(normpath((Path(record).parent / raw).as_posix()))

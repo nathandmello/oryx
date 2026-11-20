@@ -5,6 +5,8 @@ from copy import deepcopy
 from datetime import date, timedelta
 import json
 import os
+import subprocess
+import sys
 from unittest.mock import patch
 import unittest
 
@@ -43,6 +45,72 @@ class ForecastTests(unittest.TestCase):
         return {"operation": "create", "decision": self.authority(), "event": "Renewals exceed 80% in the pilot",
                 "probability": 75, "made_on": self.today, "resolve_on": self.later,
                 "criterion": "Use paid renewals divided by eligible pilot renewals at quarter close."}
+
+    def test_public_readers_after_restore_and_studio_alignment(self):
+        def cli(*args, data=None):
+            run = subprocess.run([sys.executable, str(self.root / "tools/pm.py"), *args], cwd=self.root,
+                                 input=json.dumps(data), text=True, capture_output=True)
+            self.assertEqual(run.returncode, 0, run.stderr + run.stdout)
+            return json.loads(run.stdout)
+
+        metric = cli("metric", "set", "company.mrr", "--write", data={
+            "approved_by": "Finance", "source": "Approved revenue policy", "effective_on": self.today,
+            "changes": {"formula": "Sum eligible recurring invoice lines."}})["proposed"]
+        forecast = cli("forecast", "preview", data=self.request())
+        cli("forecast", "apply", data=forecast)
+        expected = cli("forecast", "list")
+        skill_name = "customizations/samples/context/products/billing/overview.md"
+        skill = self.private / skill_name
+        skill.parent.mkdir(parents=True)
+        skill.write_text(self.record.read_text().replace("Keep manual reminders.", "Conjure personal canary."))
+        before = {p.relative_to(self.private): p.read_bytes() for p in [
+            skill, self.record, self.source, self.private / "context/metrics.json",
+            self.private / "workspace/forecasts" / (expected[0]["id"] + ".json")]}
+        actual = self.private
+        for alias in ("private", "workspace", "studio"):
+            if alias == "studio":
+                cli("align")
+            else:
+                actual.rename(self.root / alias)
+            actual = self.root / alias
+            with self.subTest(root=alias):
+                self.assertEqual(cli("metric", "show", "company.mrr", "--product", "billing"), metric)
+                self.assertEqual(cli("forecast", "list", "--product", "billing"), expected)
+                decisions = cli("forecast", "decisions", "--context", self.name)
+                self.assertEqual(decisions[0]["decision"], expected[0]["decision"])
+                self.assertIn(self.name, {row["record"] for row in cli("catalog")})
+                self.assertNotIn(skill_name, {row["record"] for row in cli("catalog")})
+                prompt = f"Review {alias}/workspace/roadmaps/billing/q4.md and the renewal decision."
+                context = cli("task-context", prompt)
+                self.assertEqual(context["scope"]["product"], "billing")
+                self.assertIn("Keep manual reminders.", str(context["entries"]))
+                self.assertNotIn("personal canary", str(context))
+                example = cli("task-context", f"Read {alias}/{skill_name}.")
+                self.assertFalse(example["scope"])
+                spaced = f'{alias}/customizations/Friday sketches/context/products/billing/overview.md'
+                self.assertFalse(cli("task-context", f'Read "{spaced}".')["scope"])
+                self.assertTrue(all((actual / rel).read_bytes() == contents for rel, contents in before.items()))
+
+    def test_personal_workflow_is_not_forecast_evidence(self):
+        method = self.private / "customizations/skills/billing/SKILL.md"
+        method.parent.mkdir(parents=True)
+        method.write_bytes(self.source.read_bytes())
+        self.record.write_text(self.record.read_text().replace("](sources/minutes.txt)", "](" +
+                              os.path.relpath(method, self.record.parent) + ")"))
+        run = subprocess.run([sys.executable, str(self.root / "tools/pm.py"), "forecast", "decisions",
+                              "--context", self.name], cwd=self.root, text=True, capture_output=True)
+        self.assertNotEqual(run.returncode, 0)
+        self.assertIn("Cite the underlying decision evidence", run.stdout)
+        lookup = subprocess.run([sys.executable, str(self.root / "tools/pm.py"), "task-context", "--product",
+                                 "billing", "How do we handle renewal reminders?"], cwd=self.root,
+                                check=True, text=True, capture_output=True)
+        self.assertNotIn("Keep manual reminders.", str(json.loads(lookup.stdout)["entries"]))
+        capture = {"sources": [{"reference": "[Method](customizations/skills/billing/SKILL.md)",
+                                "date": self.today, "coverage": "read", "checked_on": self.today}], "entries": []}
+        preview = subprocess.run([sys.executable, str(self.root / "tools/pm.py"), "route-context"],
+                                 input=json.dumps(capture), cwd=self.root, text=True, capture_output=True)
+        self.assertNotEqual(preview.returncode, 0)
+        self.assertIn("Cite the underlying evidence", preview.stdout)
 
     def test_revision_preserves_original_and_sourced_resolution_scores_it(self):
         request = self.request()

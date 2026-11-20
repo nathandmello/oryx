@@ -6,7 +6,7 @@ Most cases are fictional. The public onboarding case uses a frozen paraphrase of
 
 ## Set up the comparison
 
-Run the PM Hub skill and the installed BMAD Advanced Elicitation skill in separate test checkouts. Use the BMAD revision printed by the case list. The pinned version includes the cold-reader workflow. [BMAD source](https://github.com/bmad-code-org/BMAD-METHOD/tree/e435a22574fe55722841086e5566420178b98df3/skills/core-tools/bmad-advanced-elicitation)
+Run the oryx skill and the installed BMAD Advanced Elicitation skill in separate test checkouts. Use the BMAD revision printed by the case list. The pinned version includes the cold-reader workflow. [BMAD source](https://github.com/bmad-code-org/BMAD-METHOD/tree/e435a22574fe55722841086e5566420178b98df3/skills/core-tools/bmad-advanced-elicitation)
 
 Use the same client, model, reasoning setting, time limit, source access, and reviewer capacity for both arms. Give neither arm drafting history, the rubric, or the other arm's output. Use a new session for each run. Record the settings and which isolation the logs show.
 
@@ -17,7 +17,7 @@ A matched same-session fallback measures fallback behaviour only. Use working co
 1. List the cases. Render the exact same prompt for both arms of each comparison case.
 2. Invoke the assigned skill by name. Supply the prompt and point it to the frozen artifact block. Capture the first review before any correction or approval.
 3. Run at least two matched trials for every comparison case. Alternate which arm runs first.
-4. Run the PM workflow cases at least once with the PM Hub skill. Use the setup command for each case.
+4. Run the PM workflow cases at least once with the oryx skill. Use the setup command for each case.
 5. Confirm the artifact bytes are unchanged. Keep the outputs and any workflow logs for grading.
 
 ```sh
@@ -82,7 +82,7 @@ Four frozen source packets cover annual GMV, renewal eligibility, storefront rul
 The cases contain source links and paraphrases. Treat the supplied dates and scope as the evidence for each scenario.
 
 Use the capture tests to replay reference routes through `route-context`. They check previews, leads, citations, replays, and rejection of a wrong source.
-Grade the agent's decisions in separate sessions. Give the reviewer the prompt, which includes PM Hub's section rule. Keep reference routes and criteria with the grader.
+Grade the agent's decisions in separate sessions. Give the reviewer the prompt, which includes oryx's section rule. Keep reference routes and criteria with the grader.
 
 ```sh
 python3 -m unittest discover -s tests -p test_pm.py -k test_real_world_context

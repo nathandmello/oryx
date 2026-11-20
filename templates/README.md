@@ -30,7 +30,7 @@ For other working plans, use Scope, Evidence, and Next action in that order. Sta
 
 ## Create a draft
 
-Create an artifact from the system root. Destination paths are relative to `private/`.
+Run `pm.py new` from the oryx root. Destination paths are relative to `studio/`. New drafts include applicable [Studio and product template changes](../playbook/customization.md).
 
 ```sh
 python3 tools/pm.py new problem workspace/problems/example-onboarding.md --title "Example problem"

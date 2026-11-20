@@ -1,5 +1,6 @@
 const { execFileSync, spawn, spawnSync } = require("node:child_process");
 const { once } = require("node:events");
+const fs = require("node:fs");
 const path = require("node:path");
 const { createInterface } = require("node:readline");
 const { test: base, expect } = require("@playwright/test");
@@ -8,7 +9,7 @@ const python = process.env.PM_HUB_PYTHON || "python3";
 const action = ["action", "workspace", "browser", "open"];
 const scope = ["example", "renewal"];
 
-async function launch(args, options = {}) {
+async function launch(args, options = {}, timeout = 20_000) {
   const child = spawn(python, ["-B", ...args], { ...options, stdio: ["ignore", "pipe", "pipe"] });
   const closed = once(child, "close");
   const lines = createInterface({ input: child.stdout });
@@ -22,8 +23,8 @@ async function launch(args, options = {}) {
   try {
     const line = await Promise.race([
       once(lines, "line").then(([value]) => value),
-      closed.then(([code]) => { throw new Error("PM Hub launcher exited (" + code + ") " + stderr); }),
-      once(AbortSignal.timeout(20_000), "abort").then(() => { throw new Error("PM Hub launcher timed out"); }),
+      closed.then(([code]) => { throw new Error("oryx launcher exited (" + code + ") " + stderr); }),
+      once(AbortSignal.timeout(timeout), "abort").then(() => { throw new Error("oryx launcher timed out"); }),
     ]);
     return { line, stop };
   } catch (error) {
@@ -35,10 +36,11 @@ async function launch(args, options = {}) {
 }
 
 const test = base.extend({
-  hub: async ({}, use) => {
+  hub: [async ({}, use) => {
+    // The fixture creates and signs a synthetic portfolio before it starts the server.
     const server = await launch([path.join(__dirname, "fixture.py")], {
       env: { ...process.env, PYTHONDONTWRITEBYTECODE: "1" },
-    });
+    }, 60_000);
     try {
       const data = JSON.parse(server.line);
       const env = { ...process.env, PM_HUB_ALLOWED_SIGNERS: data.signers, PYTHONDONTWRITEBYTECODE: "1" };
@@ -55,7 +57,7 @@ const test = base.extend({
     } finally {
       await server.stop();
     }
-  },
+  }, { timeout: 70_000 }],
 });
 
 const button = (scope, name) => scope.getByRole("button", { name, exact: true });
@@ -75,8 +77,10 @@ test("the shared launcher opens each named screen and stays there on reload", as
   for (const [screen, title] of [["roadmap", "Roadmap"], ["tasks", "Tasks"], ["launch-checklists", "Launch checklists"]]) {
     const launcher = await hub.open(screen);
     try {
-      expect(launcher.line).toMatch(/^PM Hub is open at http:\/\/127\.0\.0\.1:/);
+      expect(launcher.line).toMatch(/^oryx is open at http:\/\/127\.0\.0\.1:/);
       await page.goto(launcher.line.split(" ").at(-1));
+      await expect(page).toHaveTitle("oryx");
+      await expect(page.getByRole("link", { name: "oryx home" })).toContainText("oryx");
       const heading = page.getByRole("heading", { name: title, exact: true });
       await expect(heading).toBeVisible();
       expect(new URL(page.url()).hash).toBe("");
@@ -89,9 +93,23 @@ test("the shared launcher opens each named screen and stays there on reload", as
 });
 
 test("compare and sign a cycle, filter the board, and approve a drag change", async ({ hub, page }) => {
+  test.setTimeout(75_000);
+  const template = path.join(hub.root, "templates", "prioritization.md");
+  const original = fs.readFileSync(template, "utf8");
+  fs.writeFileSync(template, original.replace("## Sources", "## Pilot review\n\n{{Review the pilot.}}\n\n## Sources"));
+  hub.cli(["customize", "apply"], { revision: hub.cli(["customize", "show"]).revision, config: {
+    products: { example: { templates: { prioritization: {
+      "Review owner": { prompt: "Who will review the pilot?", before: "Pilot review" },
+      "2027": { prompt: "Who sponsors the pilot in 2027?", before: "Capacity constraints" },
+    } } } },
+  } });
+  fs.writeFileSync(template, original);
   await page.goto(hub.url);
   await button(page, "New planning cycle").click();
   const cycle = dialog(page, "New planning cycle");
+  await expect(cycle.getByText("Studio placed Review owner before Work state because the saved heading Pilot review is missing.")).toBeVisible();
+  const sectionLabels = await cycle.locator("label").allTextContents();
+  expect(sectionLabels.indexOf("2027") + 1).toBe(sectionLabels.indexOf("Capacity constraints"));
   await fill(cycle, {
     "Cycle ID": "customer-operations",
     "Period end": hub.today,
@@ -99,8 +117,10 @@ test("compare and sign a cycle, filter the board, and approve a drag change", as
     "Effort unit": "engineer-days",
     "Objectives and obligations": "Improve renewal timing and export turnaround.",
     "Capacity constraints": "Four engineer-days remain after maintenance.",
+    "2027": "The renewals lead confirmed next year's capacity.",
     "Alternatives and trade-offs": "Run both pilots within the remaining capacity.",
     "Sources": "Pilot evidence and the signed initiative briefs.",
+    "Review owner": "The pilot PM will review results.",
     "Selection reason": "Test both approaches within this cycle.",
     "Decision source": "Planning meeting",
   });
@@ -117,6 +137,7 @@ test("compare and sign a cycle, filter the board, and approve a drag change", as
   }
   await button(cycle, "Save comparison and review").click();
   const review = dialog(page, "Review roadmap proposal");
+  await expect(review.locator("pre")).toContainText("The pilot PM will review results.");
   await expect(review.getByText("Create customer-operations")).toBeVisible();
   await button(review, "Approve on this computer").click();
   await expect(review.getByText("Approval cancelled. You can review or approve again.")).toBeVisible();
@@ -176,6 +197,64 @@ test("compare and sign a cycle, filter the board, and approve a drag change", as
   await expect(button(page, "Edit priorities")).toBeVisible();
   expect(hub.cli(["roadmap", "--product", "example"]).map(row => [row.title, row.horizon]))
     .toEqual([["Renewal delays", "next"], ["Export turnaround", "later"]]);
+
+  const pages = path.join(hub.root, "studio", "customizations", "views");
+  fs.mkdirSync(pages, { recursive: true });
+  fs.writeFileSync(path.join(pages, "team-review.html"), "<title>Team review</title><!-- pm:roadmap-data -->");
+  const config = hub.cli(["customize", "show"]);
+  hub.cli(["customize", "apply"], { revision: config.revision, config: {
+    fields: { "x-confidence": { type: "choice", label: "Score", choices: ["High", "Low"] },
+      "x-teams": { type: "multiple", label: "Internal dependencies", choices: ["Billing", "Mobile"] } },
+    views: { review: { title: "Review table", layout: "table", group: "areas", page: "team-review",
+      labels: { "x-confidence": "Confidence" }, columns: ["title", "x-confidence"] } },
+    default_view: "review",
+  }, values: [{ product: "example", id: published.find(row => row.title === "Renewal delays").id,
+    field: "x-teams", value: ["Mobile", "Billing"] }] });
+  await button(page, "Refresh").click();
+  await expect(page.getByRole("heading", { name: "Review table" })).toBeVisible();
+  await expect(page.getByRole("columnheader", { name: "Confidence" })).toHaveCount(2);
+  await button(page, "Edit fields for Renewal delays").click();
+  const fields = dialog(page, "Fields for Renewal delays");
+  await expect(field(fields, "Internal dependencies")).toHaveCount(0);
+  await select(fields, "Confidence").selectOption("High");
+  await button(fields, "Save fields").click();
+  await expect(page.getByRole("cell", { name: "High", exact: true })).toBeVisible();
+  expect(hub.cli(["roadmap", "--product", "example"])).toContainEqual({ title: "Renewal delays", "x-confidence": "High" });
+  expect(Object.values(hub.cli(["customize", "show"]).values.example)[0]["x-teams"]).toEqual(["Mobile", "Billing"]);
+  await page.reload();
+  await expect(page.getByRole("cell", { name: "High", exact: true })).toBeVisible();
+  await select(page, "Product area").selectOption("product/example/area/renewals");
+  await button(page, "Present").click();
+  await expect(page.getByText(/engineer-days reserved/)).toHaveCount(0);
+  await expect(select(page, "Product area")).toHaveCount(0);
+  await expect(select(page, "View")).toHaveCount(0);
+  fs.writeFileSync(path.join(pages, "team-review.html"), "<title>Revised review</title><!-- pm:roadmap-data -->");
+  await button(page, "Download custom view").click();
+  await expect(page.getByText(/custom page changed/)).toBeVisible();
+  await button(page, "Exit presentation").click();
+  await button(page, "Refresh").click();
+  await button(page, "Present").click();
+  // A colleague broadens the current export while the PM is presenting.
+  hub.cli(["customize", "apply"], { revision: hub.cli(["customize", "show"]).revision,
+    config: { views: { review: { columns: ["title", "x-confidence", "effort"] } } } });
+  await button(page, "Download custom view").click();
+  await expect(page.getByText(/custom view changed/)).toBeVisible();
+  hub.cli(["customize", "apply"], { revision: hub.cli(["customize", "show"]).revision,
+    config: { views: { review: { columns: ["title", "x-confidence"] } } } });
+  await button(page, "Exit presentation").click();
+  await button(page, "Refresh").click();
+  await button(page, "Present").click();
+  const downloaded = page.waitForEvent("download");
+  await button(page, "Download custom view").click();
+  const file = await downloaded;
+  const exported = fs.readFileSync(await file.path(), "utf8");
+  expect(exported).toContain("<title>Revised review</title>");
+  expect(exported).toContain('"x-confidence": "High"');
+  expect(exported).not.toContain("Export turnaround");
+  expect(exported).not.toContain('"effort"');
+  await button(page, "Exit presentation").click();
+  await button(page, "Edit priorities").click();
+  await expect(lane(page, "next").getByRole("heading", { name: "Renewal delays" })).toBeVisible();
 });
 
 test("a stale task edit keeps the browser draft and preserves the CLI change", async ({ hub, page }) => {
@@ -222,6 +301,15 @@ test("the launch template stays a preview until saved and verification retains e
   await select(page, "Initiative").selectOption("renewal");
   await button(page, "Start from template").click();
   expect(checklist(hub).checkpoints).toEqual([]);
+  hub.cli(["customize", "apply"], { revision: hub.cli(["customize", "show"]).revision,
+    config: { checkpoints: { enablement: { title: "Confirm custom enablement" } } } });
+  await button(page, "Create checklist").click();
+  const preview = dialog(page, "Start a launch checklist");
+  await expect(preview.getByRole("alert")).toContainText("template changed");
+  expect(checklist(hub).checkpoints).toEqual([]);
+  await button(preview, "Close").click();
+  await button(page, "Start from template").click();
+  await expect(dialog(page, "Start a launch checklist").getByText("Confirm custom enablement")).toBeVisible();
   await button(page, "Create checklist").click();
   await button(page, "Edit Verify launch monitoring").click();
   const editor = dialog(page, "Edit Verify launch monitoring");

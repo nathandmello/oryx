@@ -7,9 +7,13 @@ import os
 from pathlib import Path
 import stat
 import subprocess
+import sys
 from tempfile import NamedTemporaryFile
 
 SHARED_GROUP = "PM_HUB_SHARED_GROUP"
+STUDIO = "studio"
+PRIVATE_ROOTS = (STUDIO, "private", "workspace")
+PRIVATE_PATHSPECS = tuple(f":(icase,literal){name}" for name in PRIVATE_ROOTS)
 
 
 def initiative_mode(path, *, draft):
@@ -56,10 +60,36 @@ _repository_handles = ContextVar("pm_hub_repository_handles", default=())
 
 def private_root(root):
     """Choose one physical private checkout, including installations awaiting conversion."""
-    current, previous = root / "private", root / "workspace"
-    if os.path.lexists(current) and os.path.lexists(previous):
-        raise ValueError("Both private/ and workspace/ exist. Identify the private repository before alignment")
-    return previous if os.path.lexists(previous) else current
+    if not root.is_dir():
+        return root / STUDIO
+    found = sorted(path for path in root.iterdir() if path.name.casefold() in PRIVATE_ROOTS)
+    if len(found) > 1:
+        paths = ", ".join(path.name + "/" for path in found)
+        raise ValueError(f"Multiple PM repository roots exist ({paths}). Identify the active repository before alignment")
+    if not found:
+        return root / STUDIO
+    path = found[0]
+    if not os.path.lexists(root / path.name.casefold()):
+        raise ValueError(f"PM repository {path.name}/ needs its lowercase name {path.name.casefold()}/ on this filesystem")
+    return path
+
+
+def rename_exclusive(previous, target):
+    """Atomically move a file or directory only if the destination is absent."""
+    if os.name == "nt":
+        os.rename(previous, target)  # Windows refuses an existing destination.
+        return
+    import ctypes
+    libc = ctypes.CDLL(None, use_errno=True)
+    if sys.platform.startswith("linux") and hasattr(libc, "renameat2"):
+        result = libc.renameat2(-100, os.fsencode(previous), -100, os.fsencode(target), 1)
+    elif sys.platform == "darwin" and hasattr(libc, "renamex_np"):
+        result = libc.renamex_np(os.fsencode(previous), os.fsencode(target), 4)
+    else:
+        raise ValueError("This filesystem needs an exclusive rename. Preserve both paths for review")
+    if result:
+        code = ctypes.get_errno()
+        raise OSError(code, os.strerror(code), str(target))
 
 
 @contextmanager
@@ -70,8 +100,11 @@ def repository_lock(private):
         raise ValueError("Expected a lock inside the private repository")
     shared = os.name == "posix" and os.environ.get(SHARED_GROUP)
     if shared and not lock.is_file():
-        raise ValueError("Provision a group-readable PM Hub writer lock before enabling group sharing")
-    with lock.open("rb" if shared else "a+b") as stream:
+        raise ValueError("Provision a group-readable oryx writer lock before enabling group sharing")
+    # POSIX flock can take an exclusive lock on a read-only descriptor.
+    # The launcher provisions this inode before entering the protected session.
+    readonly = shared or os.name == "posix" and lock.is_file()
+    with lock.open("rb" if readonly else "a+b") as stream:
         if os.name == "nt":
             import msvcrt
             if stream.tell() == 0:
@@ -110,7 +143,7 @@ def snapshot_reader(path):
 @contextmanager
 def writer_lock(private):
     root = private.parent
-    if private.name in {"private", "workspace"} and (root / "playbook/release.json").is_file():
+    if private.name.casefold() in PRIVATE_ROOTS and (root / "playbook/release.json").is_file():
         # The outer inode remains in place when the private checkout changes its name.
         with repository_lock(root):
             if private_root(root) != private:
@@ -136,8 +169,13 @@ def replace_text(target, original, candidate, *, mode=None):
     """Call under writer_lock. Reject stale or redirected paths before publishing."""
     if target.resolve() != target:
         raise ValueError("Use a regular workspace file")
-    current = target.read_text(encoding="utf-8") if target.is_file() else None
-    if current != original and not (original is not None and target.is_file() and target.read_bytes() == original.encode("utf-8")):
+    if isinstance(original, bytes):
+        matches = target.is_file() and target.read_bytes() == original
+    else:
+        current = target.read_text(encoding="utf-8") if target.is_file() else None
+        matches = current == original or (original is not None and target.is_file()
+                                          and target.read_bytes() == original.encode("utf-8"))
+    if not matches:
         raise ValueError(f"{target.name} changed since it was read; retry with the current file")
     target.parent.mkdir(parents=True, exist_ok=True)
     with NamedTemporaryFile(dir=target.parent, delete=False) as stream:
@@ -165,9 +203,9 @@ def inventory(root: Path) -> list[Path]:
     if (root / ".git").exists():
         result = subprocess.run(
             ["git", "-C", str(root), "ls-files", "-z", "--cached", "--others", "--exclude-standard"],
-            capture_output=True, text=True, check=True,
+            capture_output=True, check=True,
         )
-        return sorted({root / p for p in result.stdout.split("\0") if p})
+        return sorted({root / os.fsdecode(name) for name in result.stdout.split(b"\0") if name})
     paths = []
     for directory, dirs, names in os.walk(root, followlinks=False):
         for name in list(dirs):
@@ -175,7 +213,7 @@ def inventory(root: Path) -> list[Path]:
             if path.is_symlink():
                 paths.append(path)
                 dirs.remove(name)
-            elif name in SKIP_DIRS or name == "secrets" or (path.parent == root and path.name in {"workspace", "private"} and (root / "tools/pm.py").is_file()):
+            elif name in SKIP_DIRS or name == "secrets" or (path.parent == root and path.name.casefold() in PRIVATE_ROOTS and (root / "tools/pm.py").is_file()):
                 dirs.remove(name)
         paths.extend(Path(directory) / name for name in names)
     return sorted(paths)

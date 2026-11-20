@@ -1,7 +1,7 @@
 # Search for task context
 
 Codex and Claude use the same local search on each scoped task. Ask the question in your own words.
-The Hub ships an English embedding model with the system checkout. Existing private records need no conversion.
+oryx ships an English embedding model with the system checkout. Existing private records need no conversion.
 
 The resolver first identifies the company, product, area, or initiative. A follow-up can reuse the saved session scope.
 An ambiguous request returns possible subjects. A named record or exact identifier keeps its existing routing priority.
@@ -27,7 +27,7 @@ The standard hook response excludes these diagnostics.
 
 ## Local storage and recovery
 
-The model runs offline using Python. The Hub caches routing fields, eligible note passages, and embeddings in a disposable per-account database.
+The model runs offline using Python. oryx caches routing fields, eligible note passages, and embeddings in a disposable per-account database.
 On POSIX, the database lives in a restricted directory under the system temporary directory.
 On Windows, it lives under the account's local application data. Private workspace backups exclude this cache.
 

@@ -18,7 +18,8 @@ class CandidateTests(unittest.TestCase):
     def test_native_paths_and_routine_changes(self):
         self.assertFalse(candidate.needs_native(["README.md", "playbook/release.json", "playbook/updates.md", "templates/brief.md"]))
         for path in ("tools/snapshots.py", "tools/workspace.py", "tools/git_ops.py", "tools/storage.py",
-                     "tools/release_candidate.py", ".github/workflows/check.yml", "tests/test_layout_upgrade.py"):
+                     "tools/release_candidate.py", ".github/workflows/check.yml", "tests/test_layout_upgrade.py",
+                     "tools/studio_layout.py", "tools/company_source.py", "tests/test_studio_contract.py"):
             with self.subTest(path=path):
                 self.assertTrue(candidate.needs_native(["playbook/release.json", path]))
 
@@ -108,6 +109,23 @@ class PublicationTests(unittest.TestCase):
                    "draft": False, "prerelease": False}
         self.releases.append(release)
         self.responses["releases/tags/" + tag] = release
+
+    def test_release_label_and_existing_version_tag(self):
+        api = Mock(side_effect=self.api)
+        publisher.ensure_tag("v1.2.3", "first", api)
+        annotation = next(call.args[2] for call in api.call_args_list if call.args[:2] == ("git/tags", "POST"))
+        self.assertEqual(annotation["message"], "oryx v1.2.3")
+        with patch.dict(os.environ, GITHUB_REPOSITORY="fixture/product"), patch.object(
+                subprocess, "run", return_value=subprocess.CompletedProcess([], 0)) as gh:
+            publisher.create_release("v1.2.3", "Product update")
+        command = gh.call_args.args[0]
+        self.assertEqual(command[3], "v1.2.3")
+        self.assertEqual(command[command.index("--title") + 1], "oryx v1.2.3")
+
+        self.responses["git/tags/first-tag"]["message"] = "PM Hub v1.2.3"
+        api.reset_mock()
+        publisher.ensure_tag("v1.2.3", "first", api)
+        self.assertTrue(all(len(call.args) == 1 for call in api.call_args_list))
 
     def test_partial_failure_and_delayed_retry_preserve_all_releases_and_latest(self):
         with self.assertRaises(OSError):

@@ -18,7 +18,7 @@ Both modes retain source checks, ownership boundaries, and existing permissions.
 
 ## Reply preferences
 
-Use [Hub commands](commands.md) to find the preference actions.
+Use [oryx commands](commands.md) to find the preference actions.
 
 | In Claude Code | Result |
 | --- | --- |
@@ -26,10 +26,10 @@ Use [Hub commands](commands.md) to find the preference actions.
 | `/pm workspace preferences preview --detail concise --layout bullets` | Try changes on a sample reply. |
 | `/pm workspace preferences set --detail concise --layout bullets` | Save the supplied preferences. |
 | `/pm workspace preferences set --layout prose` | Change the layout. |
-| `/pm workspace preferences reset layout` | Restore the Hub default layout. |
-| `/pm workspace preferences reset all` | Restore all Hub defaults. |
+| `/pm workspace preferences reset layout` | Restore the default reply layout. |
+| `/pm workspace preferences reset all` | Restore all reply preferences. |
 
-In a terminal at the outer Hub, replace `/pm` with `python3 tools/pm.py action`.
+From the checkout root, replace `/pm` with `python3 tools/pm.py action`.
 The shorter terminal form is `python3 tools/pm.py preferences` followed by the action and options.
 
 Select concise or detailed replies. Select bullets or prose where the content fits.
@@ -38,7 +38,7 @@ Each save affects only the supplied fields. A failed save keeps the previous set
 
 The PM's profile stores the choices. With trusted hooks, each new turn uses the latest valid settings in the open checkout.
 
-Hub rules and required artifact content govern all work. For a single task, the PM can override a saved presentation choice.
+Follow oryx rules and preserve required artifact content. For a single task, the PM can override a saved presentation choice.
 An invalid saved block uses defaults and produces a check error. Use `preferences reset all` to restore a valid block with complete markers.
 
 ## Resume

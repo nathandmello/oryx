@@ -57,4 +57,4 @@ Give a verdict for the stated decision. Use **Ready**, **Revise**, or **Reframe*
 Cite the passage or missing claim. Explain what decision it puts at risk. Give the smallest useful correction or evidence request and its owner.
 An unresolved decision, unsupported diagnosis presented as fact, or test of a different claim can block approval regardless of prose quality.
 
-The Hub checks visible answers and basic structure. The reviewer assesses meaning, evidence, and fit for the decision. The PM owns approval.
+oryx checks visible answers and basic structure. The reviewer assesses meaning, evidence, and fit for the decision. The PM owns approval.
