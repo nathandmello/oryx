@@ -40,7 +40,7 @@ def prepare(run, case):
     subprocess.run(["git", "init", "-q", str(hub)], check=True)
     hub_command(hub, "init-workspace", "--owner", "Eval PM")
     day = date.today().isoformat()
-    if case != "company-first":
+    if case not in {"company-first", "founder-company"}:
         seed_product_work(hub, day)
     print(hub_command(hub, "check").strip())
     baseline = {"case": case, "made_on": day, "resolve_on": (date.today() + timedelta(days=30)).isoformat(),

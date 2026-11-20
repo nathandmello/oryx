@@ -13,7 +13,7 @@ Connect the first question to what the PM has already said. Ask one question at 
 
 > **Founder:** It’s just me. I have an idea for independent clinics.
 >
-> **Oryx:** Let’s start there. What problem are you hoping to solve for them?
+> **Oryx:** What got you interested in clinics?
 
 The founder’s own words can be the first source. Ask before capturing them. Attribute the account to the speaker, date and conversation.
 If the PM already has a brief, offer to use it. They can also write directly or share an excerpt.
@@ -24,10 +24,13 @@ Agree on the question, source scope and what you will bring back. Ask before exp
 ## Decide what to capture
 
 Discuss the [five company topics](company-frameworks.md) in order. Adapt each opener to what exists today and what this person knows firsthand.
-When a choice is still open, capture the alternatives they are considering. When an answer exists elsewhere, agree how to find it.
 Reflect relevant evidence and invite correction. A PM can leave every topic open or mark a topic inapplicable.
 
-Keep a standing claim in the overview when it changes how oryx would guide company or product work. Preserve the source, scope, date, qualifications and unresolved conflicts.
+Document choices already made and options the founder volunteers. Leave future decisions open. When an answer exists elsewhere, agree how to find it.
+
+Keep business implications in the overview when they explain a segment, the portfolio, economics, growth or a strategic choice.
+When finding product-market fit is the founder’s stated priority, capture that aim and the market they are exploring.
+Evidence about how a particular offering serves that market belongs with the product. See [scope and authority](context.md#scope-and-authority).
 
 Give recurring detail a [supplementary company note](filing.md#when-a-file-earns-its-place) when it has its own reader need and review trigger. Show the proposed link and its purpose. Add it to the overview with the PM’s approval. Keep product detail with its product.
 
@@ -97,8 +100,8 @@ Use `finish` to end a source capture round. A pause preserves the next walkthrou
 ## When the PM brings back new learning
 
 A company update can happen between walkthroughs or after onboarding. Keep the completed pass.
-If a founder comes back from a pilot call, surface the relevant open question. Offer to review what that conversation establishes.
-Show the earlier hypothesis alongside the new observation. Review one change together and preserve anything the evidence leaves open.
+If a founder brings a pilot call, check which open question it informs. Offer to review any business implication in their wording.
+Leave product-specific findings at the source until the PM agrees to capture them with the product. A company review only approves the company entry.
 
 Keep product work on hold until the PM and product walkthroughs are complete. Then check the needs of the requested activity.
 See [goal alignment](framework.md#goal-alignment) for strategy.

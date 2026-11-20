@@ -120,21 +120,20 @@ class CompanyOnboardingTests(unittest.TestCase):
                                     input=json.dumps(payload), text=True, capture_output=True, check=True)
             return json.loads(result.stdout)
 
-        def preview(reference, day, location, quote, **fields):
-            self.change("plan", purpose="Understand how independent clinics follow up on unpaid invoices.",
+        def approve_source(reference, day, text):
+            self.change("plan", purpose="Review the business case for serving independent clinics.",
                         sources=[reference])
             self.change("approve")
-            return self.change("propose", source_scope=reference, sources=[{
-                "reference": reference, "date": day, "checked_on": day, "coverage": "partial", "text": quote,
-            }], entries=[{
-                "scope": "company", "topic": "markets", "source": 1, "quote": quote, "location": location, **fields,
-            }])
+            return {"reference": reference, "date": day, "checked_on": day, "coverage": "partial", "text": text}
 
         brief = self.work / context_capture.COMPANY_PATH
-        belief = "I think independent clinics lose track of unpaid invoices."
-        question = "How common is missed follow-up among independent clinics?"
-        first = preview("Founder setup conversation", "2025-03-03", "Founder's opening account", belief,
-                        interpretation="Founder hypothesis about unpaid invoice follow-up.", uncertainty=question)
+        belief = "I think independent clinics could be our first paying market."
+        question = "Would other independent clinics pay for the service?"
+        founder = approve_source("Founder setup conversation", "2025-03-03", belief)
+        first = self.change("propose", source_scope=founder["reference"], sources=[founder], entries=[{
+            "scope": "company", "topic": "markets", "source": 1, "quote": belief, "location": "Founder's opening account",
+            "interpretation": "Founder hypothesis about the first paying market.", "uncertainty": question,
+        }])
         self.assertFalse(brief.exists())
         self.change("accept", revision=first["revision"])
         self.change("gap", question=question, why="The founder is choosing whom to serve.",
@@ -159,16 +158,41 @@ class CompanyOnboardingTests(unittest.TestCase):
         self.assertIn("Interpretation: Founder hypothesis", accepted)
         self.assertIn(belief, accepted)
 
-        quote = "At my clinic I check unpaid invoices with a spreadsheet every Friday."
-        follow_up = preview("Clinic operator conversation", "2025-03-06", "One operator's account", quote)
+        commitment = "Our clinic signed a paid pilot for March."
+        usage = "I reviewed unpaid invoices in the prototype on Friday."
+        notes = approve_source("Clinic operator conversation", "2025-03-06", f"{commitment} {usage}")
+        company_entry = {"scope": "company", "topic": "business-model", "source": 1,
+                         "location": "Pilot terms", "quote": commitment}
+        product_entry = {"scope": "product", "product": "billing", "topic": "customers", "source": 1,
+                         "location": "One operator's account", "quote": usage}
+        with self.assertRaisesRegex(ValueError, "company finding"):
+            self.change("propose", source_scope=notes["reference"], sources=[notes], entries=[product_entry])
+        follow_up = self.change("propose", source_scope=notes["reference"], sources=[notes], entries=[company_entry])
         self.assertEqual(brief.read_text(), accepted)
         with self.assertRaisesRegex(ValueError, "exact open question"):
             self.change("resolve", question=question)
         cli("company-onboarding", "accept", payload={"revision": follow_up["revision"]})
         updated = brief.read_text()
-        for label in ("Interpretation: Founder hypothesis", belief, "Founder setup conversation", quote,
-                      "One operator's account", "Clinic operator conversation", "2025-03-06"):
+        for label in ("Interpretation: Founder hypothesis", belief, "Founder setup conversation", commitment,
+                      "Pilot terms", notes["reference"], "2025-03-06"):
             self.assertIn(label, updated)
+        self.assertNotIn(usage, updated)
+        self.assertNotIn("product-market fit", updated.casefold())
+        product_path = context_capture.product_path("billing")
+        product_brief = self.work / product_path
+        payload = {"sources": [notes], "entries": [company_entry, product_entry]}
+        preview = cli("route-context", payload=payload)
+        self.assertEqual([item["destination"] for item in preview["entries"]],
+                         [context_capture.COMPANY_PATH, product_path])
+        self.assertFalse(product_brief.exists())
+        # The founder separately approves the product wording and destination shown in this preview.
+        cli("route-context", "--write", product_path, payload=payload)
+        saved_product = product_brief.read_text()
+        self.assertIn(usage, saved_product)
+        self.assertIn(notes["reference"], saved_product)
+        self.assertNotIn(commitment, saved_product)
+        self.assertNotIn("product-market fit", saved_product.casefold())
+        self.assertEqual(brief.read_text(), updated)
         company = cli("company-onboarding", "status")
         self.assertEqual([gap["question"] for gap in company["gaps"]], [question])
         current = cli("onboarding", "status")

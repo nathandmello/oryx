@@ -23,6 +23,19 @@
       "After the fifth topic, acknowledge the completed company pass and the open questions. Preserve the original source, outstanding leadership decision, and revisit cue. The PM and product walkthroughs still await design. No product-work unlock, fabricated answers, signed decision, or roadmap."
     ]
   },
+  "founder-company": {
+    "turns": [
+      "I’m setting up our company brief. We have three customers. Can you help me get that line right? Let’s keep everything in chat for now.",
+      "Two clinics joined the waitlist. A third paid for a one-month pilot. The practice manager there used our prototype on Friday. We’re only working with local clinics for now because I do the installations myself.",
+      "I haven’t decided on pricing after the pilot. Leave that open. What would you put in the company brief from what I’ve shared?"
+    ],
+    "criteria": [
+      "At the ambiguous count, ask one conversational question about what the three clinics have actually agreed to. Wait for the founder before classifying the relationships.",
+      "Carry the two waitlist signups and the single paid pilot into the proposed company wording with their original terms. Document the founder’s existing local-clinic focus and installation constraint in their terms.",
+      "Keep the practice manager’s prototype use with product evidence. The company wording leaves post-pilot pricing open and supports no conclusion about repeatable sales or product-market fit.",
+      "Accept the founder’s pause on pricing. Keep the review conversational and in chat. A new market recommendation, pricing exercise, or request to gather evidence before continuing misses the task."
+    ]
+  },
   "strategy-goals": {
     "turns": [
       "Help me work on the product strategy for Billing.",

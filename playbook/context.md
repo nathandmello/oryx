@@ -8,6 +8,11 @@ Keep standing company facts and commitments in `studio/context/company/overview.
 
 Link product context to its company. Area and initiative briefs inherit their product. Record each decision and exception under its owner.
 
+For a single-product startup, the chosen market and business model belong to the company.
+Customer problems, usage and product-market fit evidence belong with the specific product and segment.
+For a mixed source, review each claim under its owner. Link the evidence when a separate company implication matters.
+Ask the PM when ownership or the implication is unclear.
+
 Keep inherited commitments in force. Cite the decision owner’s approval for any exception. Follow [evidence reviews](evidence-reviews.md) for conflicts and changed assumptions.
 
 Link existing goals, research, and delivery details. Apply [the filing rules](filing.md) before creating a note.
@@ -84,7 +89,7 @@ Apply the [section rules](filing.md#when-a-section-earns-its-place). Retain cont
   "entries": [
     {"scope": "pm", "topic": "preferences", "question": "How does the PM prefer to review a roadmap?"},
     {"scope": "company", "topic": "constraints", "source": 1, "location": "Section 3", "quote": "We will not create or own LLMs."},
-    {"scope": "company", "heading": "UK merchant adoption before rollout", "lead": "Consult when comparing UK merchant adoption before and after rollout.", "source": 2, "location": "Paragraph 1", "quote": "On 31 May, we had 2,000 active UK merchants."},
+    {"scope": "company", "heading": "UK merchant adoption before rollout", "lead": "Consult when comparing UK merchant adoption across the portfolio before and after rollout.", "source": 2, "location": "Paragraph 1", "quote": "On 31 May, we had 2,000 active UK merchants across all our products."},
     {"scope": "product", "product": "checkout", "topic": "vocabulary", "source": 1, "location": "Section 3", "quote": "A workspace is the boundary for shared access.", "term": {"name": "workspace", "owner": "Product", "avoid": "account"}},
     {"scope": "initiative", "product": "checkout", "initiative": "renewals", "topic": "decisions", "source": 1, "location": "Section 3", "quote": "We use existing sessions because renewal needs no new login.", "decision": {"question": "How do users authenticate?", "scope": "Renewal pilot", "person": "Fixture PM", "date": "2026-01-01", "next_step": "Brief the pilot team."}}
   ]

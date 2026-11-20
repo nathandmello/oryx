@@ -46,9 +46,9 @@ Update older oryx clients before syncing briefs with section leads.
 ## UK merchant adoption before rollout
 
 <!-- pm: context-lead -->
-Consult when comparing UK merchant adoption before and after rollout.
+Consult when comparing UK merchant adoption across the portfolio before and after rollout.
 
-- Fact: The 15 June rollout announcement reported 2,000 active UK merchants as of 31 May. [S1]
+- Fact: The 15 June rollout announcement reported 2,000 active UK merchants across all products as of 31 May. [S1]
 ```
 
 ## When a file earns its place

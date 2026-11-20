@@ -33,7 +33,8 @@ When a release flags older records, follow [the context cleanup procedure](../..
 ## Route
 
 - Choose the purpose first. Put reusable context under its entity in `context/`. Put plans, experiments, and other work in `workspace/`. Use the remit to explain why the item matters.
-- Keep `context/company/overview.md` focused on standing company facts and commitments. Link to ongoing developments and detailed records.
+- Keep the company overview focused on the market, business model, portfolio and company choices. Link to detailed records.
+- File product-market fit evidence with the offering and segment. Confirm any separate company implication before recording it.
 - Keep product information with its product. Set `product_area` for area-specific product or initiative claims, questions, and answers.
 - Route standing area guidance to its maintained area brief. Start inline until the [area filing test](../../../playbook/filing.md#product-area-context) passes.
 - Route supplied PM background and preferences into the PM profile with `scope: pm`. Confirm proposed ownership changes with the PM.

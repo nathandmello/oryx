@@ -48,7 +48,9 @@ def status(private):
                 "next_action": "Inspect the saved progress with the PM and agree on a repair.", "problem": str(exc)}
     state["company_updates"] = (
         "When the PM brings new company learning, offer to review it using pm.py company-onboarding status. "
-        "Agree on the source and wording. Distinguish a hypothesis from an observation. "
+        "Confirm the current business facts, choices and wording with the PM. Distinguish a hypothesis from an observation. "
+        "Leave choosing a direction for strategy work. "
+        "Keep usage and product-market fit evidence with the specific product and segment. "
         "Updating company context can leave the current walkthrough topic open. Product work still waits for onboarding."
     )
     phase = company_onboarding.active_phase(capture)
