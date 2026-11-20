@@ -731,6 +731,7 @@ def scope_contains(record_scope, scope):
 def turn_context(private, prompt, *, cwd=None, saved=None, explicit=None, work_record=None, include_history=False, explain=False):
     """Resolve the current task separately from the turn's resumable work pointer."""
     previous = saved or {}
+    mode_override, prompt = conversation.mode_request(prompt)
     prior_scope = previous.get("scope", {})
     if prior_scope:
         try:
@@ -738,6 +739,16 @@ def turn_context(private, prompt, *, cwd=None, saved=None, explicit=None, work_r
         except (TypeError, ValueError):
             prior_scope = {}
     can_continue = previous.get("can_continue", True)
+    accepted_offer = (previous.get("offered_expedite") is True and mode_override is None
+                      and conversation.AFFIRM_PACE.fullmatch(prompt) is not None)
+    if accepted_offer:
+        mode_override, prompt = "expedite", ""
+        if can_continue and prior_scope:
+            explicit = explicit or prior_scope
+    if mode_override == "expedite" and not prompt and not can_continue:
+        # Keep the accepted pace while the PM identifies the new task's product.
+        prior_scope = {}
+        can_continue = True
     named = WORK_RECORD.search(CUSTOMIZATION_PATH.sub(" ", prompt)) if work_record is None else None
     selected_owner = work_record or (named[1] if named else None)
     selected_new_owner = selected_owner is not None and selected_owner != previous.get("record")
@@ -758,7 +769,7 @@ def turn_context(private, prompt, *, cwd=None, saved=None, explicit=None, work_r
     else:
         active = prior_scope
         can_continue = (can_continue and not result["choices"] and not switched
-                        and (follows or conversation.continues_work(prompt)))
+                        and (follows or conversation.continues_work(prompt) or (mode_override is not None and not prompt)))
         same_work = can_continue
 
     if work_record is None and not switched:
@@ -779,14 +790,19 @@ def turn_context(private, prompt, *, cwd=None, saved=None, explicit=None, work_r
         can_continue = True
 
     retains_mode = same_work and not selected_new_owner and not switched
-    mode_override = conversation.requested_mode(prompt)
     if mode_override is None and retains_mode:
         mode_override = previous.get("mode")
+    if (mode_override is None and previous.get("mode") == "expedite" and previous.get("can_continue")
+            and not prior_scope and not previous.get("record") and scope and not switched):
+        # The PM may choose the pace before identifying the product for this work.
+        mode_override = "expedite"
     work_mode = previous.get("work_mode") if retains_mode else None
     if checkpoint:
         work_mode = checkpoint["work_state"]["Mode"]
     mode = mode_override or work_mode or "thought-partner"
     turn = {"mode": mode}
+    if accepted_offer:
+        turn["accepted_expedite_offer"] = True
     try:
         turn["reply_preferences"] = preferences.effective(preferences.load(private))
     except (OSError, ValueError):
@@ -803,7 +819,7 @@ def turn_context(private, prompt, *, cwd=None, saved=None, explicit=None, work_r
     if not checkpoint and can_continue and active and not scope and not neutral:
         turn["scope_to_confirm"] = active
     if not neutral and scope:
-        offer = conversation.context_offer(prompt, result, deferrals, mode == "quiet")
+        offer = conversation.context_offer(prompt, result, deferrals, mode in {"quiet", "expedite"})
         if offer is not None:
             turn["suggestion"] = offer
     result["conversation"] = turn
@@ -817,9 +833,11 @@ def turn_context(private, prompt, *, cwd=None, saved=None, explicit=None, work_r
                     ], "warnings": result["warnings"]}
 
 
-def remember_scope(private, session, state):
+def remember_scope(private, session, state, *, expected=None):
     path = session_state(private, session)
     if path:
         with storage.writer_lock(private):
+            if expected is not None and previous_scope(private, session) != expected:
+                return
             original = path.read_text(encoding="utf-8") if path.is_file() else None
             storage.replace_text(path, original, json.dumps(state), mode=0o600)

@@ -171,6 +171,102 @@ class ConversationTests(unittest.TestCase):
                 switched, _ = self.prompt(client, client, "Switch to Shipping")
                 self.assertEqual(switched["conversation"]["mode"], "thought-partner")
 
+    def test_expedite_is_an_explicit_pace_for_current_work(self):
+        gap = {"question": "Who approves renewals?", "why": "Clarify ownership.",
+               "next_action": "Ask Finance.", "resume_when": "operating review"}
+        self.cli("company-onboarding", "gap", payload={"revision": 0, **gap})
+        before = self.checkpoint.read_bytes()
+        for client in ("Codex", "Claude"):
+            with self.subTest(client=client):
+                _, guidance = self.prompt(client, client, "Use expedite mode.")
+                self.assertIn("Expedite mode is active", guidance)
+                prompt = "Billing roadmap for our operating review. Can we claim a 20% impact?"
+                scoped, guidance = self.prompt(client, client, prompt)
+                self.assertEqual(scoped["conversation"]["mode"], "expedite")
+                self.assertNotIn("suggestion", scoped["conversation"])
+                self.assertIn(hook.NUMBERS_GUIDANCE, guidance)
+                self.assertNotIn(gap["question"], guidance)
+                self.assertIn("Complete each required craft step", guidance)
+                self.prompt(client, client, "Thanks!")
+                follow, _ = self.prompt(client, client, "Can you make it shorter?")
+                self.assertEqual(follow["conversation"]["mode"], "expedite")
+                switched, _ = self.prompt(client, client, "Switch to Shipping")
+                self.assertEqual(switched["conversation"]["mode"], "thought-partner")
+                scoped, _ = self.prompt(client, client, "Switch to expedited mode for Shipping.")
+                self.assertEqual(scoped["conversation"]["mode"], "expedite")
+                scoped, _ = self.prompt(client, client, "Quiet mode for Shipping.")
+                self.assertEqual(scoped["conversation"]["mode"], "quiet")
+                self.prompt(client, client, "Yes, use expedite mode.")
+                self.prompt(client, client, "Exit expedite mode.")
+                scoped, _ = self.prompt(client, client, "Make this shorter.")
+                self.assertEqual(scoped["conversation"]["mode"], "thought-partner")
+                self.prompt(client, client, "Let’s use expedite mode for Shipping.")
+                scoped, _ = self.prompt(client, client, "Resume coaching for Shipping.")
+                self.assertEqual(scoped["conversation"]["mode"], "thought-partner")
+                scoped, _ = self.prompt(client, client + "-fresh", prompt)
+                self.assertEqual(scoped["conversation"]["mode"], "thought-partner")
+        self.assertEqual(before, self.checkpoint.read_bytes())
+
+    def test_hooks_off_expedite_and_mentions_that_do_not_change_pace(self):
+        for prompt in ("Expedite mode for my Q4 roadmap.", "Please enter expedited mode."):
+            result = self.cli("task-context", "--product", "billing", prompt)
+            self.assertEqual(result["conversation"]["mode"], "expedite")
+        for prompt in ("Build a roadmap for Q4. It's due by morning.",
+                       'The customer wrote: "Use expedite mode."',
+                       "Expedite mode was discussed at planning.",
+                       "Should we use expedite mode?", "Don't use expedite mode.", "Yes."):
+            result = self.cli("task-context", "--product", "billing", prompt)
+            self.assertEqual(result["conversation"]["mode"], "thought-partner")
+
+    def test_only_a_current_offer_accepts_a_short_yes(self):
+        offer = "I can check the inputs while you make the calls.\n\n" + conversation.EXPEDITE_OFFER
+        for client in ("Codex", "Claude"):
+            with self.subTest(client=client):
+                session = client + "-offer"
+                self.prompt(client, session, "I need the Billing roadmap and revenue figures by morning.")
+                # The numeric review blocks the first Stop. Only the final reply counts.
+                first = self.turn(client, "Stop", session, last_assistant_message=offer)
+                self.assertEqual(first["decision"], "block")
+                self.turn(client, "Stop", session, stop_hook_active=True, last_assistant_message=offer)
+                _, other = self.prompt(client, session + "-other", "Yes, please.")
+                self.assertNotIn("Expedite mode is active", other)
+                answer, guidance = self.prompt(client, session, "Yes, please.")
+                self.assertEqual(answer["scope"]["product"], "billing")
+                self.assertTrue(answer["conversation"]["accepted_expedite_offer"])
+                self.assertEqual(answer["conversation"]["mode"], "expedite")
+                self.assertIn(hook.NUMBERS_GUIDANCE, guidance)
+                follow, _ = self.prompt(client, session, "Can you make it shorter?")
+                self.assertEqual(follow["conversation"]["mode"], "expedite")
+
+                session = client + "-unscoped"
+                self.prompt(client, session, "Can you help me build a roadmap by morning?")
+                self.turn(client, "Stop", session, last_assistant_message=offer)
+                self.prompt(client, session, "Sure!")
+                scoped, _ = self.prompt(client, session, "It's for Billing.")
+                self.assertEqual(scoped["conversation"]["mode"], "expedite")
+
+                for reply in ("No, thanks.", "Yes, switch to Shipping.", "Something else first."):
+                    session = client + reply
+                    self.prompt(client, session, "The Billing plan is due by morning.")
+                    self.turn(client, "Stop", session, last_assistant_message=offer)
+                    _, immediate = self.prompt(client, session, reply)
+                    self.assertNotIn("Expedite mode is active", immediate)
+                    _, late = self.prompt(client, session, "Yes.")
+                    self.assertNotIn("Expedite mode is active", late)
+
+    def test_an_old_stop_or_quoted_offer_cannot_activate_expedite(self):
+        question = conversation.EXPEDITE_OFFER
+        for message in (f"> {question}", f'"{question}"', "Which team?\n\n" + question,
+                        "Sample language:\n\n" + question, "~~~\nExample.\n\n" + question,
+                        question + "\nThe above was an example.", None):
+            self.assertFalse(conversation.offered_expedite(message))
+        session = "stale-stop"
+        self.turn("Codex", "UserPromptSubmit", session, turn_id="one", prompt="Billing needs a plan by morning.")
+        self.turn("Codex", "UserPromptSubmit", session, turn_id="two", prompt="Switch to Shipping.")
+        self.turn("Codex", "Stop", session, turn_id="one", last_assistant_message=question)
+        _, guidance = self.prompt("Codex", session, "Yes, please.")
+        self.assertNotIn("Expedite mode is active", guidance)
+
     def test_checkpoint_preview_apply_and_hooks_off_resume(self):
         before = self.checkpoint.read_bytes()
         changes = {

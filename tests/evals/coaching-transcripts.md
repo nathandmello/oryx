@@ -18,6 +18,7 @@ The driver records system and private file digests before the first turn. Evalua
 | Case | Decision under test |
 | --- | --- |
 | `company-first` | Review one slide, preserve its uncertainty, and retrieve the open question in a later roadmap conversation. |
+| `expedite-roadmap` | Help shape a Q4 roadmap under deadline, check the trade-off, and return the PM’s exact line. |
 | `rushed-plan` | Challenge a rushed request, wait through weak answers, retain scope and switch products. |
 | `quiet-lookup` | Answer a direct request and follow-up in quiet mode. |
 | `informed-draft` | Move from sufficient evidence to the requested draft with minimal repetition. |
@@ -35,6 +36,8 @@ The driver records system and private file digests before the first turn. Evalua
 6. Finish a forecast run on its setup date. Its relative dates use the fixture clock.
 
 For `company-first`, the PM supplies the slide in turn three. Switch to a fresh session before the final roadmap turn. Check the company overview, saved gap, and trace of the read-only reply. Grade conversational quality and unsupported strategic claims from the transcript.
+
+For `expedite-roadmap`, audit every turn for writes. Grade the deadline response, evidence use and final wording from the transcript.
 
 ```sh
 python3 -B tests/evals/coaching_transcripts.py audit /tmp/billing-trial 1

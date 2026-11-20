@@ -6,6 +6,9 @@ A customer asks for better reporting. You remember passing on it last quarter. W
 
 I chose the oryx for its resilience and endurance in harsh environments. I’m building this to help PMs keep product craft alive as AI changes how we work. Knowing which question to ask, whose experience to trust, and when to change your mind still matters.
 
+You own the product decisions and the words you share. Oryx can gather the evidence, work through trade-offs with you, and help write what you mean.
+When time is tight, ask for expedite mode. Oryx takes on more legwork and keeps each evidence check and decision with its owner.
+
 [Quick start](#quick-start) · [Make it yours](#make-it-yours) · [Browse the workflows](playbook/commands.md)
 
 ## What a day with oryx looks like

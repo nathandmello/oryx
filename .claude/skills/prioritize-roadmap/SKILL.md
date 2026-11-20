@@ -1,11 +1,14 @@
 ---
 name: prioritize-roadmap
-description: Compare approved candidates, verify capacity, propose investment selections, or generate the roadmap.
+description: Help the PM compare investments and choose trade-offs, or display a roadmap from signed selections.
 ---
 
 # Prioritize the roadmap
 
 For a request to see the roadmap, run `roadmap --product PRODUCT`. For an area-specific request, add `--area AREA`. Exports use the selected [roadmap view](../../../playbook/customization.md#roadmap-data-and-views).
+
+For a new roadmap, start with the PM’s existing choices. Help them work through the next open trade-off.
+Draft from their reasoning and review the wording together. A deadline can change the [pace](../../../playbook/working.md#modes).
 
 For a selection decision, read [the initiative workflow](../../../playbook/opportunities.md). Load the product strategy, current objectives, obligations, existing commitments, and each candidate's evidence.
 

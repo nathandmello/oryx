@@ -10,6 +10,7 @@ from os.path import abspath
 from pathlib import Path
 import re
 import sys
+from uuid import uuid4
 
 import conversation
 import pm
@@ -42,7 +43,17 @@ CONVERSATION_GUIDANCE = (
     "When a fact, intent, permission, or decision is uncertain, name the uncertainty and ask one focused question "
     "before relying on it. Preserve unresolved questions when the PM defers. "
     "Present the plan before gathering context. Obtain agreement on sources and destinations, including any expansion. "
-    "Review generated content interactively, one material point at a time. Keep source access, acceptance of wording, "
+    "Help the PM build product work together. Start from their thinking, surface the next open choice, "
+    "and draft from the choices they make. A request to build a deliverable does not delegate those choices. "
+    "Review generated content interactively, one material point at a time. The PM accepts the exact final wording. "
+    "Under time pressure, offer expedite mode if timely and the PM has not chosen a pace or deferred the offer. "
+    "If offering, briefly explain the pace and end with a separate paragraph containing this one question: "
+    f"{conversation.EXPEDITE_OFFER} A clear yes to that offer opts in for this task. "
+    "Follow the PM's choice in their own words. Expedite means less coaching "
+    "and more approved legwork. It authorizes no initiative expedite or delivery commitment. "
+    "Preserve all craft steps, source checks and review. Never invent numbers, "
+    "impact, customer feedback or insights. Keep missing evidence open. Apply explicit scoped Studio rules. "
+    "Keep source access, acceptance of wording, "
     "and explicit confirmation of a specific product decision distinct. Offer feedback and alternatives. "
     "The PM owns the choice. Preserve source, date, scope, attribution and uncertainty when reusing claims. "
     "For company setup, relevant new evidence, or an agreed follow-up, check pm.py company-onboarding status. "
@@ -111,17 +122,29 @@ def prompt_context(private, cwd, payload):
         saved = task_context.previous_scope(private, session)
         current, state = task_context.turn_context(private, prompt, cwd=cwd, saved=saved)
         numeric |= bool(current.get("metrics")) or any(metric_checks.is_claim(row["text"]) for row in current["entries"])
+        if current["conversation"].get("accepted_expedite_offer"):
+            numeric |= bool(saved.get("numeric"))
+            for field in ("binding", "warnings"):
+                state[field].extend(item for item in saved.get(field, []) if item not in state[field])
+        # Clients without turn IDs can still pair sequential prompt and Stop events.
+        state.update(numeric=numeric, awaiting_stop=uuid4().hex, client_turn_id=payload.get("turn_id"),
+                     overlapping=bool(saved.get("awaiting_stop")))
         try:
-            task_context.remember_scope(private, session, {**state, "numeric": numeric})
+            task_context.remember_scope(private, session, state)
         except (OSError, ValueError):
             guidance.append("The session checkpoint cache was unavailable. Resolve the current scope before acting.")
     if numeric:
         guidance.append(NUMBERS_GUIDANCE)
     turn = current.get("conversation", {})
+    mode = turn.get("mode") if current else conversation.mode_request(prompt)[0]
     if current.get("status") == "ambiguous" or turn.get("unresolved_switch"):
         guidance.append("Context scope is uncertain. Confirm the subject if it affects the requested work.")
-    if turn.get("mode") == "quiet":
+    if mode == "quiet":
         guidance.append("Quiet mode is active. Follow the requested action and retain source and approval checks.")
+    elif mode == "expedite":
+        guidance.append("Expedite mode is active for this work. Keep coaching brief. Gather the agreed evidence, "
+                        "check it and suggest wording for the PM to review. Complete each required craft step. "
+                        "Surface missing evidence, material risks and choices that need the PM.")
     elif private.is_dir():
         followup = company_followup(private, prompt, current.get("scope", {}).get("company"))
         if followup:
@@ -143,8 +166,7 @@ def prompt_context(private, cwd, payload):
                                    "additionalContext": "\n".join(guidance)}}
 
 
-def review_context(private, payload):
-    state = task_context.previous_scope(private, payload.get("session_id"))
+def review_context(state, payload):
     binding, warnings, numeric = state.get("binding", []), state.get("warnings", []), state.get("numeric")
     message = payload.get("last_assistant_message")
     numeric = bool(numeric) or isinstance(message, str) and metric_checks.is_claim(message)
@@ -158,6 +180,24 @@ def review_context(private, payload):
     if numeric:
         reason.append(NUMBERS_GUIDANCE)
     return {"decision": "block", "reason": "\n".join(reason)} if reason else {}
+
+
+def finish_turn(private, payload, state):
+    if not state.get("awaiting_stop"):
+        return
+    client_turn = state.get("client_turn_id")
+    stop_turn = payload.get("turn_id")
+    if client_turn and stop_turn and client_turn != stop_turn:
+        return
+    matched = (client_turn and client_turn == stop_turn) or not state.get("overlapping")
+    offered = bool(matched and conversation.offered_expedite(payload.get("last_assistant_message")))
+    updated = {**state, "offered_expedite": offered}
+    del updated["awaiting_stop"]
+    try:
+        task_context.remember_scope(private, payload.get("session_id"), updated, expected=state)
+    except (OSError, ValueError):
+        # A missing cache is safe. The next explicit pace request still works.
+        pass
 
 
 def edit_guard(root, cwd, payload):
@@ -337,6 +377,7 @@ def main():
         else:
             report = None
             private = pm.workspace.optional_repo(root)
+            state = task_context.previous_scope(private, payload.get("session_id")) if private and event == "Stop" else {}
             if private is not None and event in {"SessionStart", "Stop"}:
                 report = pm.alignment(root, prepare=event == "SessionStart")
             checks = pm.check(root)
@@ -344,8 +385,11 @@ def main():
                 prefix = f"{private.name if private else pm.storage.STUDIO}/{preferences.CHECK_PREFIX}"
                 checks = [error for error in checks if not error.startswith(prefix)]
             result = response(event, checks, retry)
-            if event == "Stop" and not retry and not result and private is not None:
-                result = review_context(private, payload)
+            if event == "Stop" and private is not None:
+                if not retry and not result:
+                    result = review_context(state, payload)
+                if result.get("decision") != "block":
+                    finish_turn(private, payload, state)
             if event == "SessionStart":
                 if private is not None:
                     setup = pm.studio_setup(private)

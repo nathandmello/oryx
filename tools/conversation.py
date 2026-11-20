@@ -27,7 +27,15 @@ ACKNOWLEDGMENT = re.compile(
     r"great|sounds good|will do|that's helpful)(?:[.! ,]+(?:thank(?:s| you)|great|got it))*[.!, ]*", re.I
 )
 QUIET = re.compile(r"^(?:please\s+)?(?:quiet(?: mode)?|shut up|just capture)(?:\b|$)", re.I)
-THOUGHT_PARTNER = re.compile(r"^(?:please\s+)?(?:exit quiet mode|resume coaching|thought-partner mode)\b", re.I)
+EXPEDITE = re.compile(
+    r"^(?:yes[, ]+)?(?:please\s+)?(?:let['’]s\s+)?(?:(?:use|enter|switch to|turn on)\s+)?expedit(?:e|ed) mode"
+    r"(?=$|[.,:!](?:\s|$)|\s+for\b)", re.I
+)
+EXPEDITE_OFFER = "Would you like to use expedite mode?"
+AFFIRM_PACE = re.compile(r"(?:yes|yep|yeah|sure|okay|ok)(?:,? please)?[.!]*", re.I)
+THOUGHT_PARTNER = re.compile(
+    r"^(?:please\s+)?(?:exit (?:quiet|expedit(?:e|ed)) mode|resume coaching|thought-partner mode)\b", re.I
+)
 DIRECT = re.compile(
     r"^(?:please\s+)?(?:(?:can|could|would) you\s+(?:please\s+)?)?"
     r"(?:summari[sz]e|show|list|look up|find|copy|capture|format|fix|translate|spell|read|"
@@ -59,12 +67,28 @@ def acknowledgement(prompt):
     return bool(ACKNOWLEDGMENT.fullmatch(prompt.strip()))
 
 
-def requested_mode(prompt):
-    if QUIET.match(prompt.strip()):
-        return "quiet"
-    if THOUGHT_PARTNER.match(prompt.strip()):
-        return "thought-partner"
-    return None
+def offered_expedite(message):
+    """Recognize the dedicated final question, outside quotations and examples."""
+    if not isinstance(message, str) or message.count("?") != 1:
+        return False
+    lines = message.rstrip().splitlines()
+    if not lines or lines[-1] != EXPEDITE_OFFER:
+        return False
+    prefix = "\n".join(lines[:-1]).rstrip()
+    return not prefix or (
+        not lines[-2].strip() and prefix.endswith((".", "!"))
+        and prefix.count("```") % 2 == 0 and prefix.count("~~~") % 2 == 0
+    )
+
+
+def mode_request(prompt):
+    """Separate a direct pace instruction from the PM's task or scope switch."""
+    prompt = prompt.strip()
+    for mode, pattern in (("quiet", QUIET), ("expedite", EXPEDITE), ("thought-partner", THOUGHT_PARTNER)):
+        match = pattern.match(prompt)
+        if match:
+            return mode, prompt[match.end():].lstrip(".,:!").lstrip()
+    return None, prompt
 
 
 def continues_work(prompt):

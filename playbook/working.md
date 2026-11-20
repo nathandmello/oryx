@@ -1,20 +1,20 @@
 # Work across sessions
 
-Support partial progress and explicit wait points across sessions.
-
 ## Modes
 
-Thought-partner mode is the default. Help frame the problem, compare alternatives, and challenge material gaps. Ask questions that change a decision.
+Thought-partner mode is the default. Help the PM compare alternatives and make the next choice.
 
-Quiet mode starts when the PM says "quiet", "just capture", "shut up", or an equivalent instruction. Stop unsolicited critique, suggestions, and questions.
+Under deadline pressure, offer expedite mode. Wait for the PM to opt in.
 
-Complete only the requested work. If no task remains, acknowledge briefly and wait. State a blocking limitation in one short sentence.
+Shorten coaching. Do more approved research, calculations, and writing between choices. Keep every required craft step.
+Show the source for numbers, impact, feedback, and insights. Leave missing evidence open and explain what it blocks.
 
-Keep the mode for the current work until the PM changes it. Save it in the work record for later sessions.
+The PM reviews the wording and makes each decision. “Use expedite mode” and “Resume coaching” switch pace for this task.
+Expedite ends with this session. Save standing preferences as [Studio rules](overrides.md).
+Moving an initiative straight to delivery requires its own [signed decision](initiative-approvals.md).
 
-A direct request overrides a saved mode. A requested red-team review permits that review; it does not change the mode for later work.
-
-Both modes retain source checks, ownership boundaries, and existing permissions. Report known [evidence risks](evidence-reviews.md) that affect the requested work, including in quiet mode.
+In quiet mode (“quiet” or “just capture”), complete the request and suppress unsolicited coaching. A requested critique applies once.
+Report blocking gaps and [evidence risks](evidence-reviews.md) in every mode. Preserve permissions and approvals.
 
 ## Reply preferences
 
