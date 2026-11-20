@@ -2,7 +2,7 @@
 
 A personal product management workspace with a shared system and a separate private data repository.
 
-Read the [constitution](AGENTS.md) for purpose, ownership, writing rules, and agent conduct.
+PM Hub created by Nathan D’Mello. See the [proprietary license](LICENSE.md) and [constitution](AGENTS.md).
 
 ## Start
 
@@ -32,7 +32,7 @@ For [meeting capture](.agents/skills/summarize-meeting/SKILL.md), give the initi
 
 ## Placement
 
-Keep only `README.md`, `AGENTS.md`, `CLAUDE.md`, and `.gitignore` as root files. The checker enforces these homes:
+The root permits `LICENSE.md`, `README.md`, `AGENTS.md`, `CLAUDE.md`, and `.gitignore`.
 
 | Home | Purpose | Repository |
 | --- | --- | --- |
