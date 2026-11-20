@@ -6,7 +6,7 @@ Create only the artifact needed for the current work. Templates guide thought; t
 
 | Template | Purpose | Home |
 | --- | --- | --- |
-| [Company context](company-context.md) | Organisation, business model, direction, operations, and constraints | `context/company/overview.md` |
+| [Company context](company-context.md) | Customer value, economics, portfolio, growth, competitive advantage, and strategic trade-offs | `context/company/overview.md` |
 | [Product context](product-context.md) | Product purpose, users, vocabulary, constraints, and accepted decisions | `context/products/<product>/overview.md` |
 | [Product area context](product-area-context.md) | Standing area boundaries, users, rules, goals, and decisions | `context/products/<product>/areas/<area>/overview.md` |
 | [Initiative context](initiative-context.md) | Outcome, affected workflow, dependencies, and decisions for recurring initiative work | `context/products/<product>/initiatives/<initiative>/overview.md` |

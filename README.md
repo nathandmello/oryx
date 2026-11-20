@@ -39,9 +39,11 @@ Install Git, Python 3.9 or later, and either Codex CLI or Claude Code. On Linux 
    | Codex CLI | `python3 tools/pm.py agent codex` |
    | Claude Code | `python3 tools/pm.py agent claude` |
 
-4. Trust the project hooks in your client. Start with one product and a question you’re working on.
+4. Trust the project hooks in your client. Ask oryx to help you set up your company context.
 
-> I own checkout. Support says shoppers leave when they see shipping costs. Help me work out what to verify before we change pricing.
+Start with what you know. Share an existing overview, explain the business in your own words, or agree on sources to explore.
+Review one finding at a time. Keep a partial brief and pick up where you left off.
+To start or resume explicitly, use `/pm context company capture`. [Company context](playbook/company-context.md)
 
 ## Make it yours
 

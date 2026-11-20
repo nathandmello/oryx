@@ -81,7 +81,12 @@ class ProductAreaTests(unittest.TestCase):
         rows.extend([question, dict(question, question="Product area refunds — Which fees?")])
         name = "context/products/shop/overview.md"
         def write(entries, dest=name):
-            run = self.capture({"sources": [source], "entries": entries}, "--write", dest)
+            payload = {"sources": [source], "entries": entries}
+            if any("decision" in entry for entry in entries):
+                preview = self.capture(payload)
+                self.assertEqual(preview.returncode, 0, preview.stdout)
+                payload = test_pm.confirmed_decisions(payload, json.loads(preview.stdout))
+            run = self.capture(payload, "--write", dest)
             self.assertEqual(run.returncode, 0, run.stdout)
             return json.loads(run.stdout)["written"]
 
@@ -130,6 +135,14 @@ class ProductAreaTests(unittest.TestCase):
         empty = {"responsibilities": [], "follow": []}
         whole = self.responsibility("product/shop")
         assigned = dict(empty, responsibilities=[whole])
+        self.assertEqual(json.loads(self.cli("align", "--status"))["company_onboarding"]["phase"], "welcome")
+        self.assertNotIn(context_capture.REMIT_PROMPT, self.startup())
+        company = "context/company/overview.md"
+        source = {"reference": "Fixture deck", "coverage": "read", "date": "undated", "checked_on": "2025-01-01"}
+        entry = {"scope": "company", "topic": "constraints", "source": 1, "location": "Slide 1",
+                 "quote": "We support local cooperatives."}
+        saved = self.capture({"sources": [source], "entries": [entry]}, "--write", company)
+        self.assertEqual(saved.returncode, 0, saved.stdout)
         for remit, want in (
             (None, context_capture.REMIT_PROMPT), (empty, context_capture.REMIT_PROMPT),
             (dict(empty, follow=["area/pricing"]), context_capture.DRAFT_REMIT_PROMPT),
@@ -151,7 +164,9 @@ class ProductAreaTests(unittest.TestCase):
             self.assertEqual(pm.check(self.root), [])
         self.work.rename(self.root.parent / "previous-private")
         self.assertNotIn(context_capture.REMIT_PROMPT, self.startup())
-        self.assertIn(context_capture.REMIT_PROMPT, self.cli("init-workspace"))
+        init = self.cli("init-workspace")
+        self.assertIn("guided company setup", init)
+        self.assertNotIn(context_capture.REMIT_PROMPT, init)
         self.assertFalse((self.work / context_capture.REMIT_PATH).exists())
 
     def test_damaged_remit_is_reported_and_capture_preserves_it(self):
@@ -159,7 +174,7 @@ class ProductAreaTests(unittest.TestCase):
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text("# PM context\n\n## PM remit\n\nStatus: broken\n")
         original = path.read_bytes()
-        self.assertIn("repairing", self.startup())
+        self.assertNotIn(context_capture.REMIT_PROMPT, self.startup())
         question = {"scope": "product", "product": "shop", "product_area": "returns", "topic": "constraints",
                     "question": "What returns window applies?"}
         result = self.capture({"sources": [], "entries": [question]}, "--write", "context/products/shop/overview.md")

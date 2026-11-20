@@ -43,6 +43,13 @@ CUSTOMIZATION_PATH = re.compile(
     r"|<(?:(?:/[^<>\n]*/)?(?:studio|private|workspace)/)?customizations/[^<>\n]+>"
     r"|(?:(?<![\w.-])(?:studio|private|workspace)/|(?<![\w./-]))customizations/[\w./%+-]+", re.I)
 COMPANY_QUERY = re.compile(r"\bcompany(?:-wide| context| overview| policy)\b", re.I)
+# In a company-only Studio, a standalone question about the business model has
+# an identifiable subject. A named organisation or comparison needs clarification.
+COMPANY_BUSINESS_QUESTION = re.compile(
+    r"(?:how|where|when|why|who|what) (?:does|did|can|will) the (?:company|business) "
+    r"(?:earn|make|generate|moneti[sz]e|charge|sell|serve|deliver|create|grow|compete|operate|distribute|fund)"
+    r"\b[^.!?]*[?]?", re.I)
+OTHER_BUSINESS = re.compile(r"\b(?:versus|vs|compar\w*|other|another|competitor[s]?|rival[s]?)\b", re.I)
 IDENTIFIER = re.compile(r"\b[a-z][\w-]*\.[a-z][\w.-]*[a-z0-9]\b", re.I)
 DATE = re.compile(r"\b(?:as of|on)\s+(\d{4}-\d{2}-\d{2}|"
                   r"(?:January|February|March|April|May|June|July|August|September|October|November|December)"
@@ -257,6 +264,8 @@ def choose_scope(private, documents, prompt, cwd, previous, explicit):
         return inferred_scope(documents, named[0], terms), []
     if named:
         return {}, named
+    if re.search(r"\bour (?:company|business)\b", prompt, re.I):
+        return {"company": True}, []
     if previous and not switched and FOLLOW_UP.match(prompt.strip()):
         if previous.get("company") or previous.get("product") in overview:
             return previous, []
@@ -273,6 +282,10 @@ def choose_scope(private, documents, prompt, cwd, previous, explicit):
             strong.append(product)
         elif related >= 2 or terms & words(doc["title"]):
             suggestions.append(product)
+    if (not overview and layout.COMPANY in documents and COMPANY_BUSINESS_QUESTION.fullmatch(prompt.strip())
+            and not OTHER_BUSINESS.search(prompt)
+            and not re.search(r"\b[A-Z]\w*", prompt.strip().partition(" ")[2])):
+        return {"company": True}, []
     if len(strong) == 1:
         return inferred_scope(documents, strong[0], terms), []
     return {}, sorted(strong or suggestions)
@@ -346,6 +359,35 @@ def linked_entries(doc, areas, through):
                     continue
             yield {"record": doc["record"], "section": section, "text": content, "sources": sources,
                    "binding": binding}
+
+
+def question_key(row, label):
+    for line in row["text"].splitlines():
+        if line.startswith(label):
+            return row["record"], row["section"], line[len(label):].strip()
+    return None
+
+
+def evidence_status(row):
+    """Keep authority and unresolved qualifications explicit in the agent's task context."""
+    text = row["text"]
+    if row.get("risk_reviews"):
+        return "under review"
+    if "\n  Open question at capture:" in text:
+        return "unresolved"
+    if row["section"] == "Decisions already closed":
+        return "recorded decision"
+    if text.startswith("- Unknown:"):
+        return "open question"
+    if text.startswith("- Interpretation:"):
+        return "interpretation"
+    if text.startswith("- Assumption:"):
+        return "assumption to verify"
+    if text.startswith("- Reported metric:"):
+        return "reported metric"
+    if not row["sources"]:
+        return "unverified record"
+    return "sourced rule" if row["binding"] else "source statement"
 
 
 def live_document(private, name, loaded, stamps, through):
@@ -558,8 +600,25 @@ def resolve_current(private, prompt, cwd, previous, explicit, explain, include_h
     for (record, *_), count in decisions.items():
         if count > 1:
             result["warnings"].append(f"Resolve repeated active decisions in {record} before relying on their outcome.")
+    # Keep a historical qualification and its later, dated answer together even
+    # when only the qualified passage matched the query in a supporting note.
+    answers = {}
+    for row in rows:
+        if row["record"] not in admitted or not row.get("sources"):
+            continue
+        key = question_key(row, "  Answers: ")
+        if key and all(s["Source date"] not in {"unknown", "undated"} or s["Checked on"] <= through.isoformat()
+                       for s in row["sources"]):
+            answers.setdefault(key, []).append({"text": row["text"], "sources": row["sources"],
+                                               "evidence_status": evidence_status(row)})
     budget = 6500 - len("[]")
     for row in entries:
+        row = dict(row, evidence_status=evidence_status(row))
+        key = question_key(row, "  Open question at capture: ")
+        if key and key in answers:
+            row["subsequent_answers"] = answers[key]
+            if row["evidence_status"] == "unresolved":
+                row["evidence_status"] = "qualified source with subsequent evidence"
         size = len(json.dumps(row, ensure_ascii=False)) + (2 if result["entries"] else 0)
         if size > budget:
             if row["binding"]:

@@ -34,6 +34,7 @@ import layout_upgrade
 import opportunities
 import pm_profile
 import company_source
+import company_onboarding
 import customizations
 import studio_layout
 import agent_session
@@ -56,7 +57,7 @@ REQUIRED = (
     "tools/decision_authority.py", "tools/decision_review.py", "tools/decision_forecasts.py", "playbook/decision-review.md", "playbook/decision-forecasts.md",
     customizations.DEFAULTS, "tools/customizations.py", overrides.DEFAULTS_FILE, "tools/overrides.py", "tools/agent_session.py", "tools/preferences.py", ".agents/skills/pm/SKILL.md", ".claude/skills/pm/SKILL.md",
     "tools/studio_layout.py", "tools/company_source.py", "playbook/customization.md", "playbook/overrides.md",
-    "tools/conversation.py", conversation.GUIDE,
+    "tools/conversation.py", conversation.GUIDE, "tools/company_onboarding.py",
     "tools/hub_commands.py", "playbook/commands.md", hub_commands.CATALOG,
     ".agents/skills/extend-hub/SKILL.md", ".claude/skills/extend-hub/SKILL.md",
     ".agents/skills/ingest-context/SKILL.md", ".claude/skills/ingest-context/SKILL.md",
@@ -362,6 +363,12 @@ def check_workspace(root: Path, system_texts: dict[str, str]) -> list[str]:
         parts = path.relative_to(private).parts
         if (len(parts) == 3 and parts[:2] == ("workspace", "forecasts") and path.suffix == ".json"):
             continue  # The forecast checker validates every receipt in this directory.
+        if rel == company_onboarding.FILE:
+            try:
+                company_onboarding.read(private)
+            except (ValueError, OSError) as exc:
+                errors.append(f"{label}: {exc}")
+            continue
         if parts[0] == "customizations" or rel in {metric_registry.PRIVATE, *studio_layout.LEGACY.values()}:
             continue
         if parts[0] in {"context", "products", "workspace"} and any(part.startswith(".") for part in parts[1:]):
@@ -712,6 +719,21 @@ def run_initiative_work(root, command, operation, product, initiative, *, write=
     return initiative_work.execute(root, command, operation, product, initiative, **edits)
 
 
+def studio_setup(private):
+    """Give both clients the same company-first startup and manual alignment hints."""
+    try:
+        status = company_onboarding.status(private)
+    except (OSError, ValueError):
+        return {"company_onboarding": {"phase": "unavailable",
+                                      "next_action": "Run pm.py company-onboarding status to inspect the saved progress."}}
+    setup = {"company_onboarding": {"phase": status["phase"], "next_action": status["next_action"]}}
+    if status["phase"] in {"existing", "paused"}:
+        prompt = context_capture.remit_prompt(private)
+        if prompt:
+            setup["remit_prompt"] = prompt
+    return setup
+
+
 def alignment_notice(root, result=None):
     try:
         if not workspace.private_root(root).exists():
@@ -802,6 +824,8 @@ def build_parser():
                     help="Choose the first screen (default: roadmap)")
     ui.add_argument("--key", help="Absolute path to the PM signing key or its agent-backed public key")
     ui.add_argument("--no-open", action="store_true", help="Print the local URL without launching a browser")
+    onboarding = commands.add_parser("company-onboarding", help="Review or resume company context in Studio")
+    onboarding.add_argument("operation", choices=company_onboarding.OPERATIONS)
     route = commands.add_parser("route-context", help="Route supplied context evidence from JSON on stdin")
     route.add_argument("--write", metavar="PATH", help="Apply entries to one authorised context record")
     area = commands.add_parser("area-context", help="Locate a product area's context and its source records")
@@ -892,15 +916,13 @@ def main() -> int:
                 raise ValueError("Use --status alone for a read-only preview")
             report = alignment(ROOT, not args.status, args.record, args.outcome, args.digest, args.note, args.backup)
             if args.record is None and not args.backup:
-                prompt = context_capture.remit_prompt(workspace.private_root(ROOT))
-                if prompt:
-                    report["remit_prompt"] = prompt
+                report.update(studio_setup(workspace.private_root(ROOT)))
             print(json.dumps(report, indent=2, ensure_ascii=False))
             return 0
         if args.command == "init-workspace":
             workspace.initialise(ROOT, args.owner, args.delivery_system)
             print("Initialised studio/ as a separate Git repository. No remote, commit, or push was created.")
-            print(context_capture.REMIT_PROMPT)
+            print("Start a protected session with pm.py agent codex or pm.py agent claude for guided company setup.")
             return 0
         if args.command == "git":
             if args.operation == "push":
@@ -1026,6 +1048,15 @@ def main() -> int:
             context_capture.write_remit(private, json.load(os.sys.stdin))
             print(f"Saved studio/{context_capture.REMIT_PATH}.")
             return 0
+        if args.command == "company-onboarding":
+            if args.operation == "status":
+                result = company_onboarding.status(workspace.repo(ROOT, "workspace"))
+            else:
+                settings = prepare_private_write(ROOT)
+                result = company_onboarding.change(ROOT, args.operation, storage.json_input(sys.stdin.read()),
+                                                   settings["owner"], capture_errors)
+            print(json.dumps(result, indent=2, ensure_ascii=False))
+            return 0
         if args.command == "route-context":
             if args.write is not None:
                 settings = prepare_private_write(ROOT)
@@ -1048,8 +1079,10 @@ def main() -> int:
             if args.write is not None:
                 if any(ARTIFACT.search(Path(part).stem) for part in Path(args.write).parts):
                     raise ValueError("Engineering artifacts belong in the delivery system")
-                if context_capture.apply(ROOT, args.write, plan, settings["owner"], capture_errors):
-                    plan["written"] = args.write
+                with storage.writer_lock(private):
+                    company_onboarding.check_capture(private, args.write, plan)
+                    if context_capture.apply(ROOT, args.write, plan, settings["owner"], capture_errors):
+                        plan["written"] = args.write
             print(json.dumps(plan, indent=2, ensure_ascii=False))
             return 0
         if args.command == "sync-skills":

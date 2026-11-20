@@ -1,5 +1,7 @@
 # Writing technical instructions and PM prose
 
+Use these rules for written deliverables. For conversation with a PM, follow the [conversation guide](conversation.md).
+
 ## Technical instructions
 
 Use ASD-STE100 Simplified Technical English (STE), Issue 9, dated 15 January 2025. Consult Part 1 for the writing rules and Part 2 for the dictionary. [Publisher's full standard](https://www.asd-ste100.org/assets/files/ASD-STE100_ISSUE9.pdf)

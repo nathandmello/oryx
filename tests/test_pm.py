@@ -22,6 +22,19 @@ import upgrades
 import workspace
 
 
+def confirmed_decisions(payload, preview):
+    """Simulate a PM explicitly authorising each exact fixture decision after preview."""
+    reviewed = []
+    for entry, proposal in zip(payload["entries"], preview["entries"]):
+        if "decision" in entry:
+            approval = {"revision": proposal["decision_revision"], "pm": "Fixture PM",
+                        "reference": "Fixture decision review, PM response",
+                        "date": date.today().isoformat(), "reply": "Record this decision."}
+            entry = dict(entry, record_decision=approval)
+        reviewed.append(entry)
+    return dict(payload, entries=reviewed)
+
+
 def legacy_product(root, private, name):
     path = private / name
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -812,8 +825,9 @@ class HubTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         text = company.read_text()
         self.assertIn(answer, text)
-        self.assertNotIn(question, text)
-        self.assertIn(other, text)
+        self.assertNotIn(f"- Unknown: {question}", text)
+        self.assertIn(f"  Answers: {question}", text)
+        self.assertIn(f"- Unknown: {other}", text)
         self.assertIn("Page 2", text)
         self.assertEqual(pm.check(self.root), [])
 
@@ -1025,6 +1039,9 @@ class HubTests(unittest.TestCase):
             ],
         }
         payload["entries"] = [dict(entry, source=1, location="Page 1") for entry in payload["entries"]]
+        preview = self.context_capture(payload)
+        self.assertEqual(preview.returncode, 0, preview.stdout)
+        payload = confirmed_decisions(payload, json.loads(preview.stdout))
         for path in paths:
             before = set(pm.inventory(self.work))
             result = self.context_capture(payload, "--write", path)
@@ -1053,6 +1070,91 @@ class HubTests(unittest.TestCase):
         result = self.context_capture(payload, "--write", paths[2])
         self.assertEqual(result.returncode, 1)
         self.assertEqual(initiative.read_text(), original)
+
+    def test_business_model_question_in_company_only_studio(self):
+        quote = "Subscriptions fund the service."
+        packet = {"sources": [{"reference": "Finance briefing", "date": "2025-05-01", "coverage": "read",
+                               "checked_on": "2025-05-01", "text": quote}],
+                  "entries": [{"scope": "company", "topic": "business-model", "quote": quote, "source": 1,
+                               "location": "Page 1"}]}
+        self.assertEqual(self.context_capture(packet, "--write", "context/company/overview.md").returncode, 0)
+        def lookup(prompt):
+            run = subprocess.run([sys.executable, "-B", str(self.root / "tools/pm.py"), "task-context", prompt],
+                                 cwd=self.root, text=True, capture_output=True, check=True)
+            return json.loads(run.stdout)
+        result = lookup("How does the company earn its subscription revenue?")
+        self.assertTrue(result["scope"]["company"])
+        self.assertIn(quote, result["entries"][0]["text"])
+        for prompt in ("How does the company named Acme earn revenue?",
+                       "How does the company earn revenue compared with acme?",
+                       "For Acme, how does the company earn its revenue?"):
+            self.assertFalse(lookup(prompt)["entries"])
+
+    def test_recording_decisions_requires_separate_specific_confirmation(self):
+        name = "context/company/overview.md"
+        day = date.today().isoformat()
+        earlier = (date.today() - timedelta(days=7)).isoformat()
+        source = {"reference": "Company strategy deck, slide 4", "date": earlier, "checked_on": earlier,
+                  "coverage": "read", "text": "Enterprise is an opportunity."}
+        evidence = {"scope": "company", "topic": "direction", "source": 1, "location": "Slide 4",
+                    "quote": source["text"], "uncertainty": "Has leadership committed to enterprise?"}
+        req = {"sources": [source], "entries": [evidence]}
+        self.assertEqual(self.context_capture(req, "--write", name).returncode, 0)
+        output = subprocess.run([sys.executable, "-B", str(self.root / "tools/pm.py"), "task-context",
+                                 "Did our company choose enterprise as its priority for the roadmap?"],
+                                cwd=self.root, text=True, capture_output=True, check=True)
+        result = json.loads(output.stdout)
+        self.assertTrue(result["scope"]["company"])
+        row = next(row for row in result["entries"] if evidence["quote"] in row["text"])
+        self.assertFalse(row["binding"])
+        self.assertEqual(row["evidence_status"], "unresolved")
+        self.assertEqual(row["sources"][0]["Source"], source["reference"])
+        self.assertIn(evidence["uncertainty"], row["text"])
+        self.assertIn("Slide 4", row["text"])
+
+        finding = "Leadership is still evaluating enterprise."
+        answer = {"scope": "company", "topic": "direction", "source": 1, "location": "Item 2",
+                  "quote": finding, "answers": evidence["uncertainty"]}
+        packet = {"sources": [dict(source, reference="Portfolio review", text=finding, date=day, checked_on=day)],
+                  "entries": [answer]}
+        self.assertEqual(self.context_capture(packet, "--write", name).returncode, 0)
+        def recall(as_of=""):
+            data = pm.task_context.resolve(self.work, f"Did our company commit to enterprise? {as_of}")
+            return next(row for row in data["entries"] if evidence["quote"] in row["text"])
+        current = recall()
+        self.assertEqual(current["evidence_status"], "qualified source with subsequent evidence")
+        self.assertIn(finding, current["subsequent_answers"][0]["text"])
+        self.assertEqual(current["subsequent_answers"][0]["sources"][0]["Source"], "Portfolio review")
+        self.assertEqual(recall(f"as of {earlier}")["evidence_status"], "unresolved")
+
+        # Later, leadership actually chooses to run a pilot. Accepting an accurate summary
+        # of their memo and authorising a decision record are separate PM actions.
+        before = (self.work / name).read_bytes()
+        choice = "Run an enterprise pilot with three accounts."
+        entry = {"scope": "company", "topic": "decisions", "source": 1, "location": "Decision 2",
+                 "quote": choice, "decision": {"person": "VP Product", "date": day,
+                 "question": "Where will we pilot?", "scope": "Next quarter", "next_step": "Recruit pilot accounts."}}
+        req = {"sources": [dict(source, reference="Leadership operating review", text=choice, date=day, checked_on=day)],
+               "entries": [entry]}
+        preview = self.context_capture(req)
+        self.assertEqual(preview.returncode, 0, preview.stdout)
+        approved = confirmed_decisions(req, json.loads(preview.stdout))
+        def write(record):
+            return self.context_capture(dict(req, entries=[record]), "--write", name)
+        self.assertNotEqual(write(entry).returncode, 0)
+        receipt = approved["entries"][0]["record_decision"]
+        self.assertNotEqual(write(dict(entry, record_decision=dict(receipt, reply="Yes, the memo says that."))).returncode, 0)
+        self.assertNotEqual(write(dict(approved["entries"][0], decision=dict(entry["decision"], scope="All segments"))).returncode, 0)
+        self.assertEqual((self.work / name).read_bytes(), before)
+
+        result = write(approved["entries"][0])
+        self.assertEqual(result.returncode, 0, result.stdout)
+        stored = (self.work / name).read_text()
+        self.assertIn("Confirmed for recording by Fixture PM", stored)
+        self.assertIn("VP Product, " + day, stored)
+        self.assertIn(choice, stored)
+        retry = write(approved["entries"][0])
+        self.assertIsNone(json.loads(retry.stdout)["written"])
 
     def test_invalid_pm_remit_keeps_the_previous_profile(self):
         blank = {"responsibilities": [], "follow": []}

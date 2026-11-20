@@ -128,6 +128,24 @@ class StructureUpdateTests(unittest.TestCase):
         self.assertIn("approve a conversion", result.stdout)
         self.assertEqual(company.read_text(), text)
 
+    def test_company_capture_preserves_an_earlier_portfolio_section_position(self):
+        path = "context/company/overview.md"
+        company = records.create(self.root, "company-context", path)
+        text = company.read_text()
+        blocks = {name: (start, end) for name, start, _, end in records.section_blocks(text)}
+        start, end = blocks["Product portfolio"]
+        section = f"## Product portfolio\n\n{records.CONTEXT_LEAD}\nConsult when comparing offerings.\n\n"
+        section += "- Unknown: Which products work together?\n\n"
+        text = (text[:start] + text[end:]).replace("## Context controls", section + "## Context controls")
+        company.write_text(text)
+        payload = {"sources": [], "entries": [{"scope": "company", "topic": "portfolio",
+                                                "question": "Who uses both offerings?"}]}
+        result = self.context_capture(payload, "--write", path)
+        self.assertEqual(result.returncode, 0, result.stdout)
+        revised = company.read_text()
+        self.assertLess(revised.index("## Review and approvals"), revised.index("## Product portfolio"))
+        self.assertIn("Who uses both offerings?", records.section(revised, "Product portfolio"))
+
     def test_empty_format_two_audit_still_offers_update_handoff_after_cli_alignment(self):
         self.old_workspace()
         result = json.loads(self.check_cli(self.root, "align"))

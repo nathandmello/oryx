@@ -18,8 +18,12 @@ def capture(hub, scope, reference, quote, day, **fields):
     entry = dict(source=1, location="Section 1", quote=quote, scope=scope, **fields)
     destination = f"context/products/{entry['product']}/overview.md"
     source = {"reference": reference, "date": day, "checked_on": day, "coverage": "read", "text": quote}
-    hub_command(hub, "route-context", "--write", destination,
-                data=json.dumps({"sources": [source], "entries": [entry]}))
+    payload = {"sources": [source], "entries": [entry]}
+    if "decision" in entry:
+        review = json.loads(hub_command(hub, "route-context", data=json.dumps(payload)))["entries"][0]
+        entry["record_decision"] = {"revision": review["decision_revision"], "pm": "Eval PM", "date": day,
+                                    "reference": "Simulated PM confirmation", "reply": "Record this decision."}
+    hub_command(hub, "route-context", "--write", destination, data=json.dumps(payload))
 
 
 def prepare(run, case):

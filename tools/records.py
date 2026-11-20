@@ -35,7 +35,8 @@ SHARED_TOPICS = {
 CONTEXT_TOPICS = {
     "company": {
         "organisation": "Organisation and scope", "markets": "Customers and markets",
-        "business-model": "Business model", "direction": "Direction and goals",
+        "business-model": "Business model", "portfolio": "Product portfolio",
+        "growth": "Growth and competitive advantage", "direction": "Direction and goals",
         "operations": "How the business operates", "constraints": "Constraints and open questions",
         **SHARED_TOPICS,
     },
@@ -67,6 +68,8 @@ CONTEXT_LEADS = {
     "Organisation and scope": "Consult when identifying the company, business unit, or product responsible for a decision.",
     "Customers and markets": "Consult when identifying buyers, users, partners, or markets for a product decision.",
     "Business model": "Consult when assessing how an opportunity affects customer value, revenue, or costs.",
+    "Product portfolio": "Consult when tracing how offerings work together to deliver value to a customer.",
+    "Growth and competitive advantage": "Consult when assessing what drives growth or explains why customers choose the company.",
     "Direction and goals": "Consult when checking whether proposed work supports company priorities.",
     "How the business operates": "Consult when finding decision owners, operating dependencies, or the teams involved in PM work.",
     "Constraints and open questions": "Consult before making commitments that depend on company limits or unresolved questions.",
@@ -200,6 +203,11 @@ def section(text, name):
 
 def heading_order(kind, template):
     order = [name for name, *_ in section_blocks(template)]
+    if kind == "company-context":
+        # Earlier company briefs could place these sourced sections anywhere.
+        # Keep their placement when an existing brief receives new evidence.
+        flexible = {CONTEXT_TOPICS["company"][topic] for topic in ("portfolio", "growth")}
+        order = [name for name in order if name not in flexible]
     if kind in ("context-note", "product-area-context") and "Context controls" in order:
         order.insert(order.index("Context controls"), "Filing")
     if kind in CONTEXT_KINDS and "Context controls" in order:

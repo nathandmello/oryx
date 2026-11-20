@@ -2,6 +2,14 @@
 
 Source: Nathan's framework, supplied in this conversation on 2026-11-18. This file preserves its method for future work.
 
+## Product context and remit
+
+Start from the company brief the PM reviewed. Ask which product or area they want to bring into oryx next.
+Trace one customer outcome to that product's contribution. Use the team's terms and identify what evidence supports the link.
+
+Ask which decisions the PM owns. A job title or an organisation chart alone cannot establish decision rights.
+Offer to capture the confirmed remit in the [PM profile](context.md#pm-remit).
+
 ## Strategy
 
 Strategy connects business needs to chosen problems and a high-level solution hypothesis. Explain why the choice matters and how it can help.
@@ -43,7 +51,9 @@ Connect organisation goals, product goals, customer outcomes, initiative goals, 
 
 In an alignment session, separate proposed solutions, customer outcomes, and organisational objectives. Trace proposed solutions back to their problem and intended outcome.
 
-When goals are unclear, ask why the organisation funds the team. Record a provisional interpretation and its owner; preserve the gap.
+If a company deck describes a market as an opportunity, ask whether leadership has chosen to pursue it.
+Carry the original wording and open question into strategy and planning until the PM can establish the choice.
+Ask the PM which outcome the product can influence. Preserve the source of official targets and the PM's rationale for proposed ones.
 
 ## Problems and evidence
 

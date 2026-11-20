@@ -43,6 +43,7 @@ STARTERS = {
 # Match by path so a guide copied elsewhere remains eligible for a filing review.
 HISTORICAL_GUIDES = {
     "README.md": {
+        "85afa69ef665d3b8cebf5416ca928c0df0b91dcaa020c0b2b3cfadbf089e98ba",  # 0.11 Studio guide
         "f2326333bbf25a7175eb81cf622cfd676fda2869426da50655d6f26acc07a903",  # 0.3–0.10
         "bbad6c9eb0f9c96cf2d80ffd321a68dee8f610800cccb491eec1f0c56c02471b",  # Studio before the rename
     },

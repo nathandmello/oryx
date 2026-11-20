@@ -26,6 +26,7 @@ Run the guided action. Apply its applicable workspace instructions when followin
 Verify the required scope and source before writing. Observe the guide's existing permission and decision gates.
 
 For ordinary requests about product choices, use the [conversation guide](../../../playbook/conversation.md).
+When helping shape a goal or strategy, use [goal alignment](../../../playbook/framework.md#goal-alignment) with the PM's company context.
 
 ## Workspace rules
 

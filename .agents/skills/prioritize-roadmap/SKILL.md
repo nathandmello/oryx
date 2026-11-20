@@ -10,6 +10,9 @@ For a request to see the roadmap, run `roadmap --product PRODUCT`. For an area-s
 For a selection decision, read [the initiative workflow](../../../playbook/opportunities.md). Load the product strategy, current objectives, obligations, existing commitments, and each candidate's evidence.
 
 Before selection, use the [conversation guide](../../../playbook/conversation.md) to establish outcomes and what would lose capacity.
+When an option ranks highly, ask which existing commitment would move if the team took it on.
+Use the PM's comparison method. Show how a changed estimate affects the order. The PM selects the trade-off.
+If company context calls a market an opportunity, carry that wording forward until its strategic priority is confirmed.
 
 ## Compare investments
 

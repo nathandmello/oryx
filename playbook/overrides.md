@@ -30,7 +30,7 @@ Name the activity and any limits the PM gave. Reuse the identifier for a revisio
 Use `--target weekly-review-order` on a second ID for a narrower exception to that behavior.
 
 Use the most specific matching Studio rule, then company guidance, then core. Keep unrelated steps from each source.
-The current request can make an exception for one task. Keep other skill steps, permissions, and decision ownership.
+The current request can make an exception for one task. Keep other skill steps, evidence requirements, source permissions, and PM decision ownership.
 
 ```sh
 python3 tools/pm.py override set weekly-review-order --scope "Weekly reviews" --behavior "Put pending decisions first."

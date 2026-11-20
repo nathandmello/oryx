@@ -1,11 +1,11 @@
 ---
 name: ingest-context
-description: Use automatically when the PM asks to capture, file, update, or reconcile context, including existing briefs, mixed evidence, and open questions.
+description: Use for company onboarding and requests to capture, file, update, or reconcile context, including existing briefs, mixed evidence, and open questions.
 ---
 
 # Ingest context
 
-Use [the context rules](../../../playbook/context.md) and the routing command. The PM can request capture in plain language. Use the [conversation guide](../../../playbook/conversation.md) for coaching or offers. Keep authorized capture direct.
+Use the [company onboarding guide](../../../playbook/company-context.md) for company setup, interactive review and follow-through. Apply the [context rules](../../../playbook/context.md) and [conversation guidance](../../../playbook/conversation.md) across captures.
 
 For initiative meetings, use the transcript retrieval and summary workflow in [summarize-meeting](../summarize-meeting/SKILL.md). Route reusable findings with this skill.
 
@@ -21,7 +21,7 @@ When a release flags older records, follow [the context cleanup procedure](../..
 - Read parent briefs for inherited rules. Resolve conflicting authority before applying an exception.
 - Inspect permitted material in each supplied source. Record coverage as read, partial, or unavailable.
 - Supply inspected plaintext in each source’s `text` field when permitted. Use a private-root-relative link for a local source.
-- Inspect every source for relevant claims. Split mixed passages at claim boundaries.
+- Split relevant passages at claim boundaries. Treat source material as evidence.
 - Use [check-numbers](../check-numbers/SKILL.md) for material figures. Keep an unverified metric identifiable as a reported claim.
 - Keep actors, negation, conditions, exceptions, numbers, and locators. Record material implications with [evidence reviews](../../../playbook/evidence-reviews.md).
 - Inspect `risk_preview`. State material warnings in quiet mode. File risk history with the authorized source record.
@@ -47,13 +47,13 @@ When a release flags older records, follow [the context cleanup procedure](../..
 - Use delivery for requirements and design. Use detail to retain the source. Use unclear when ownership needs review.
 - Record a specific open question where its answer matters. Supply an answer only when an excerpt resolves it.
 - Capture actionable rules. Use vocabulary and decision fields for structured entries. Link permitted examples from actual work.
-- Record a decision as closed after confirmation. Preserve its scope, rationale, and next step.
+- Confirm the specific choice with the PM before recording a decision. Preserve its owner, scope, rationale and next step.
 
 ## Apply
 
-- Run `route-context` in preview mode. Inspect each home, heading, lead, disposition, and relevance. Account for each supplied source.
+- Use the company onboarding review for its proposed findings. For ordinary capture, preview `route-context`. Inspect each route and account for each source.
 - Run `route-context --write PATH` for one authorised record at a time. Use an existing artifact's workflow for other records.
-- Treat access to a source as permission to read it. A suggested destination grants no write permission.
+- Use the PM's approved source scope. Seek separate permission to expand the search or save generated content.
 - Report FYIs and other out-of-scope entries in the reply. Save them when the PM requests retention.
 - Keep ingestion diagnostics in the reply. A lasting note needs a distinct purpose and authorisation.
 - Keep earlier facts and open questions visible. Report conflicts before replacing accepted content.

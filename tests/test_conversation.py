@@ -56,6 +56,68 @@ class ConversationTests(unittest.TestCase):
         line = guidance.splitlines()[-1]
         return (json.loads(line) if line.startswith("{") else {}), guidance
 
+    def test_registered_clients_use_company_first_welcome_and_per_turn_rules(self):
+        overview = self.work / "context/company/overview.md"
+        original = overview.read_bytes()
+        for client in ("Codex", "Claude"):
+            with self.subTest(client=client):
+                overview.unlink()
+                start = self.turn(client, "SessionStart", client)["hookSpecificOutput"]["additionalContext"]
+                self.assertIn("Company onboarding phase at session start: welcome.", start)
+                self.assertIn("Skip unsolicited setup in quiet mode", start)
+                self.assertNotIn("Which products or product areas do you own", start)
+                for request in ("Help me set up oryx", "Quiet mode", "Show my roadmap"):
+                    _, guidance = self.prompt(client, client, request)
+                    self.assertIn("ask one focused question", guidance)
+                    self.assertIn("explicit confirmation of a specific product decision", guidance)
+                    self.assertIn("follow the pm's current request", guidance.lower())
+                    if request == "Quiet mode":
+                        self.assertIn("Quiet mode is active", guidance)
+                marker = b"## Organisation and scope\n"
+                populated = original.replace(marker, marker + b"\nThe founders worked in billing.\n")
+                self.assertNotEqual(populated, original)
+                overview.write_bytes(populated)
+                start = self.turn(client, "SessionStart", client)["hookSpecificOutput"]["additionalContext"]
+                self.assertIn("Company onboarding phase at session start: existing.", start)
+                self.assertEqual(overview.read_bytes(), populated)
+
+    def test_company_gap_returns_on_the_agreed_cue_across_client_sessions(self):
+        gap = {"question": "What share of revenue comes from renewals?", "why": "Understand the economics.",
+               "next_action": "Check the reported renewal share.", "resume_when": "Finance shares the next operating review."}
+        self.cli("company-onboarding", "gap", payload={"revision": 0, **gap})
+        self.cli("company-onboarding", "finish", payload={"revision": 1})
+        before = (self.work / "workspace/onboarding/company.json").read_bytes()
+        for client in ("Codex", "Claude"):
+            for prompt in ("Show the billing roadmap.", "Wait until the operating review.", "Quiet mode. Read the operating review."):
+                _, guidance = self.prompt(client, client + prompt, prompt)
+                self.assertNotIn(gap["question"], guidance)
+            _, guidance = self.prompt(client, client, "Here's Finance's latest operating review.")
+            self.assertIn(gap["question"], guidance)
+            self.assertIn(gap["next_action"], guidance)
+            self.assertIn("Check whether the cue occurred", guidance)
+        self.assertEqual((self.work / "workspace/onboarding/company.json").read_bytes(), before)
+
+    def test_active_source_plan_resumes_and_routes_native_company_edits_to_review(self):
+        source = "Fictional strategy deck"
+        self.cli("company-onboarding", "plan", payload={"revision": 0, "purpose": "Understand the company.", "sources": [source]})
+        overview = "studio/context/company/overview.md"
+        for client in ("Codex", "Claude"):
+            _, guidance = self.prompt(client, client, "Let's resume company setup.")
+            self.assertIn("phase plan", guidance)
+            self.assertNotIn(source, guidance)
+            def guard(path):
+                if client == "Codex":
+                    return self.turn(client, "PreToolUse", client, tool_name="apply_patch", tool_input={
+                        "input": f"*** Begin Patch\n*** Update File: {path}\n@@\n+x\n*** End Patch"})
+                return self.turn(client, "PreToolUse", client, tool_name="Edit", tool_input={"file_path": path, "new_string": "x"})
+            for path in (overview, "studio/context/company/supplement.md", "studio/workspace/onboarding/company.json"):
+                output = guard(path)["hookSpecificOutput"]
+                self.assertEqual(output["permissionDecision"], "deny")
+                self.assertIn("company-onboarding", output["permissionDecisionReason"])
+            self.assertEqual(guard("studio/context/products/billing/overview.md"), {})
+        self.cli("company-onboarding", "finish", payload={"revision": 1})
+        self.assertIsNone(hook.edit_reason(self.root, self.work, self.root / overview, "text"))
+
     def test_native_scope_resumes_after_acknowledgment_or_answer(self):
         for client in ("Codex", "Claude"):
             for message in ("Thanks!", "Churn was our strongest concern."):

@@ -17,6 +17,7 @@ RELEASES = (
     "1ecf2b97e2929d5a7cda9bf896eacb72bf9763c8",  # Later 0.3 guides
     "34483926be5d29b3163e53cdf17124abe51a2d02",  # 0.4.0
     "a3f09f76eb158e5f9637f4afb056be22f361d043",  # 0.10.0
+    "0068527ea599c5eb3d10466e242d255d77bb51e6",  # 0.11.0
 )
 
 
@@ -42,7 +43,7 @@ class SeedGuideTests(unittest.TestCase):
         current = {name: (self.work / name).read_text() for name in GUIDES}
         versions = {"current": current, **{release: self.release_guides(release) for release in RELEASES}}
         # The pre-rename Studio already used the protected launcher and customization home.
-        earlier = dict(versions[RELEASES[-1]])
+        earlier = dict(versions[RELEASES[-2]])
         earlier["README.md"] = earlier["README.md"].replace("# Private PM repository", "# PM Studio").replace(
             "Open the containing Hub in Codex or Claude.", "Start a [protected PM session](../playbook/overrides.md)."
         ).replace("Keep your background", "Use [Studio customizations](../playbook/overrides.md) to change "

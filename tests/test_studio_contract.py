@@ -155,6 +155,10 @@ class StudioContractTests(unittest.TestCase):
             "scope": "Weekly reviews", "behavior": "Start with the company summary."}}}
         policy = self.root.parent / "Company workflow.json"
         policy.write_text(json.dumps(company))
+        onboarding = action("context company show")
+        self.assertEqual(onboarding["revision"], 0)
+        self.assertIsNone(onboarding["pending"])
+        self.assertFalse((self.work / "workspace/onboarding/company.json").exists())
         self.assertIsNone(action("workspace company show"))
         self.assertTrue(action("workspace company apply", str(policy))["changed"])
         self.command("override", "set", "weekly-review-order", "--scope", "Weekly reviews", "--behavior", rule)

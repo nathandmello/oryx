@@ -51,6 +51,16 @@
       "summary": "Carry out the PM's named workspace workflow with the supplied inputs.",
       "guide": "playbook/overrides.md"
     },
+    "context company capture": {
+      "summary": "Start or resume a guided company overview with the PM.",
+      "guide": "playbook/company-context.md"
+    },
+    "context company show": {
+      "summary": "Show the current review, approved source scope, and open company questions.",
+      "effect": "read",
+      "cli": ["company-onboarding", "status"],
+      "example": []
+    },
     "context area show": {
       "summary": "Locate a product area's standing context and sources.",
       "effect": "read",

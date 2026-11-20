@@ -1,6 +1,6 @@
 # Company, PM, product, product area, and initiative context
 
-Use [the starters](../templates/README.md) for recurring reference. Keep facts, rules, examples, and material unknowns.
+Use [the starters](../templates/README.md) for recurring reference.
 
 ## Scope and authority
 
@@ -35,7 +35,7 @@ For company work, emphasise binding policies, exclusions, and shared terminology
 The PM profile is `studio/context/pm/context.md`. Manage [reply preferences](working.md#reply-preferences) with oryx commands.
 Keep captured preferences as context.
 
-Ask once about missing or unfinished responsibilities when questions are welcome. Accept deferral. For a fresh profile, use `python3 tools/pm.py new pm-context context/pm/context.md`.
+Ask once when remit becomes relevant and questions are welcome. Accept deferral. For a fresh profile, use `python3 tools/pm.py new pm-context context/pm/context.md`.
 
 Ownership in `## PM remit` guides routing. The PM can edit it directly. For example:
 
@@ -94,15 +94,15 @@ Apply the [section rules](filing.md#when-a-section-earns-its-place). Retain cont
 
 | Scope | Topics |
 | --- | --- |
-| Company | `organisation`, `markets`, `business-model`, `direction`, `operations`, `constraints` |
+| Company | `organisation`, `markets`, `business-model`, `portfolio`, `growth`, `direction`, `operations`, `constraints` |
 | Product | `offer`, `vision`, `purpose`, `customers`, `contribution`, `ownership`, `constraints`, `goals` |
 | Initiative | `outcome`, `workflow`, `constraints` |
 | PM | `background`, `preferences`, `stakeholders`, `context` |
 | Shared | `vocabulary`, `decisions`, `examples`, `data-boundaries`, `reviews` |
 
-PM entries use their four topics. Use `context` for other PM facts. Capture writes sourced entries and questions to the profile. Update confirmed ownership separately.
+Use `context` for other PM facts. Update confirmed ownership separately.
 
-For product or initiative context, add `product_area` when the evidence identifies an area of its product. Use `scope: area` and `subject: area/<slug>` for an unqualified responsibility. Ask before assigning an existing unqualified area to a product. For another reference topic, use `reference` with `subject: topic/<slug>`.
+Supply `product_area` for an evidenced product or initiative area. Use `scope: area` and `subject: area/<slug>` for unqualified responsibilities. Confirm the parent before assigning one. Other reference topics use `reference` with `subject: topic/<slug>`.
 
 Deferred scopes are `delivery`, `detail`, and `unclear`.
 
@@ -110,21 +110,28 @@ File new initiative guidance in `context/products/<product>/initiatives/<initiat
 
 Base local Markdown source links on the private repository root. Each inspection date retains its source ID.
 
-List each source with coverage `read`, `partial`, or `unavailable`. Omit `checked_on` for unavailable sources. Source numbers start at one.
+Number sources from one. Mark coverage `read`, `partial`, or `unavailable`. Omit `checked_on` for unavailable sources.
 
 Supply permitted inspected `text` for pasted material or extracts.
 
-The router checks literal excerpts and common commitment sentences against available text. Route an irrelevant commitment as deferred. Report excerpt-only checks explicitly.
+The router checks excerpts and commitments against available text. Defer irrelevant commitments. Report excerpt-only checks.
 
-Use exact single-line quotes and locators. Provide `rule` for an actionable instruction or `interpretation` for a sourced implication. Cite evidence for factual claims.
+Preserve the source wording and locator. Use `interpretation` for an inference. Attach an open `uncertainty` to qualify a sourced claim.
+For interviews, cite the speaker, discussion, date, and their words. Keep conflicting accounts attributed in their owning brief.
 
 Check material quantities using [the numerical evidence procedure](numbers.md). Keep unverified figures as reported claims.
 
 For an authorised replacement, add `supersedes` with the earlier local `source` ID and exact `entry` text or decision question. Cite dated replacement evidence in the same scope.
 
-Use `question` for an unknown. Cite new evidence with `answers` to resolve the exact question. Keep vocabulary and decision rows in their dedicated tables.
+Use `question` for an unknown. Cite new evidence with `answers` to resolve the exact question.
 
-Omit the topic to keep an update at its source. Use `affects` for confirmed effects. For existing records, supply the path and reason. A new supporting record also needs its parent, basis, and review trigger.
+Preview a decision first. Show the PM the choice, original decision owner, scope, evidence, and next step.
+Offer “Record this decision” for that preview. Attach `record_decision` only when the PM selects or writes that response.
+
+Copy `decision_revision` into `revision`. Supply the recording `pm`, confirmation `date`, discussion `reference`, and exact `reply`.
+A changed choice or source needs fresh confirmation.
+
+Omit the topic to retain an update at source. Use `affects` for confirmed effects. Record paths require reasons. New notes need parent, basis, and review trigger.
 
 ## Review and maintain
 
@@ -136,23 +143,13 @@ Try the brief in a fresh task. Review fidelity, source authority, and approvals.
 
 ## Review existing context
 
-Follow [the upgrade workflow](updates.md). Review older briefs, including those without companions.
+Follow [the upgrade workflow](updates.md). Include untracked records and briefs without companions. Check incoming links.
+Identify each record’s purpose and authority. Compare claims with their sources, preserving actors, exclusions, conditions, dates, and commitments.
 
-List briefs, loose notes, sources, and incoming links. Include untracked notes.
+Keep conflicts open. Ask for missing authority. Preview proposed changes and preserve unique evidence.
+Back up affected records, apply authorised repairs, and verify links and citations. Confirm before deletion.
 
-Establish each record’s purpose and authority from its contents.
-
-Compare material claims with the available originals clause by clause. Restore actors, exclusions, conditions, dates, and positive commitments within their documented scope.
-
-If evidence is inaccessible or conflicts, record the specific question and affected claim. Keep decisions open until the evidence supports them.
-
-Show what to retain, merge, reroute, or retire, with reasons and affected links. Keep substantive events and unique evidence where they belong.
-
-Back up affected files. Apply authorised repairs, including links and citations. Use a verified filing plan for reversible folds. Ask before permanent removal.
-
-Rerun the oryx check and compare the repaired claims with their sources. Record the review scope and open questions in the existing checkpoint.
-
-Report remaining gaps and unavailable evidence.
+Rerun the oryx check. Record reviewed scope, remaining gaps, and inaccessible evidence in the checkpoint.
 
 ## Basis
 

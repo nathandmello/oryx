@@ -1,6 +1,6 @@
 # Work across sessions
 
-PM work can span weeks. Each session advances the current question or step. Skills must support partial progress and explicit wait points.
+Support partial progress and explicit wait points across sessions.
 
 ## Modes
 
@@ -50,7 +50,9 @@ Run `pm.py task-context "TASK"` if hooks are unavailable. Use `--product`, `--ar
 Add `--work-record workspace/problems/export.md` to read the checkpoint and effective mode. Use the resolved reply preferences.
 Use [the numerical evidence procedure](numbers.md) before relying on material figures from any source.
 
-At startup, ask once about any `remit_prompt` from `pm.py align` when questions are welcome. Respect quiet mode and deferrals. Capture agreed responsibilities in the [PM profile](context.md#pm-remit).
+Start an empty Studio with [company setup](company-context.md). Use `pm.py company-onboarding status` to resume progress.
+Follow the current request and respect quiet mode. Raise an agreed follow-up when its cue occurs.
+Ask about remit when ownership matters. Capture confirmed responsibilities in the [PM profile](context.md#pm-remit).
 
 For area work, use `pm.py area-context PRODUCT AREA` to locate the product overview, area brief, and inline evidence.
 

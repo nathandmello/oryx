@@ -3,6 +3,7 @@
 import json
 import errno
 import os
+from datetime import date
 
 import overrides
 from os.path import abspath
@@ -33,7 +34,19 @@ CAPTURE_GUIDANCE = (
     "Use the pm skill for /pm actions and saved oryx preferences. "
     "Apply PM corrections about future work through playbook/overrides.md, including changes to any skill "
     "and newly named private workflows. "
-    f"Use {conversation.GUIDE} for consequential decisions and workflow offers."
+    f"Use {conversation.GUIDE} for PM conversations. Use playbook/company-context.md for company onboarding."
+)
+
+CONVERSATION_GUIDANCE = (
+    "Speak as a warm, concise product colleague. Listen first and follow the PM's current request. "
+    "When a fact, intent, permission, or decision is uncertain, name the uncertainty and ask one focused question "
+    "before relying on it. Preserve unresolved questions when the PM defers. "
+    "Present the plan before gathering context. Obtain agreement on sources and destinations, including any expansion. "
+    "Review generated content interactively, one material point at a time. Keep source access, acceptance of wording, "
+    "and explicit confirmation of a specific product decision distinct. Offer feedback and alternatives. "
+    "The PM owns the choice. Preserve source, date, scope, attribution and uncertainty when reusing claims. "
+    "For company setup, relevant new evidence, or an agreed follow-up, check pm.py company-onboarding status. "
+    "Honor quiet mode, other active work, and deferral cues."
 )
 
 NUMBERS_GUIDANCE = (
@@ -42,6 +55,48 @@ NUMBERS_GUIDANCE = (
     "calculation, and ask for the specific missing evidence when it affects the decision."
 )
 
+COMPANY_SETUP = re.compile(r"\b(?:company (?:onboarding|setup|context|brief)|set up oryx|oryx onboarding)\b", re.I)
+RESUME = re.compile(r"\b(?:resume|continue|revisit|pick up|check in|follow up)\b", re.I)
+DEFER = re.compile(r"\b(?:wait until|defer|skip|hold off|not now|don['’]t remind|do not remind)\b", re.I)
+
+
+def cue_matches(cue, prompt_words, on_resume):
+    """Suggest a named cue for inspection. A text match cannot establish that an event occurred."""
+    try:
+        due = date.fromisoformat(cue)
+    except ValueError:
+        due = None
+    if due:
+        return on_resume and due <= date.today()
+    words = re.findall(r"\w+", cue.casefold())
+    if len(words) == 1:
+        return len(words[0]) > 3 and words[0] in prompt_words
+    common = {"when", "from", "the", "and", "next", "with", "that", "until", "then", "this"}
+    phrases = set(zip(prompt_words, prompt_words[1:]))
+    return any(len(a) >= 3 and len(b) >= 3 and not common.intersection((a, b)) and (a, b) in phrases
+               for a, b in zip(words, words[1:]))
+
+
+def company_followup(private, prompt, company_scope):
+    if DEFER.search(prompt) or not (private / pm.company_onboarding.FILE).exists():
+        return None
+    try:
+        setup = pm.company_onboarding.status(private)
+    except (OSError, ValueError):
+        if COMPANY_SETUP.search(prompt):
+            return "Check the saved company onboarding state before resuming. Run pm.py company-onboarding status."
+        return None
+    resuming = bool((company_scope or COMPANY_SETUP.search(prompt)) and RESUME.search(prompt))
+    if resuming and setup["phase"] in {"plan", "gather", "review"}:
+        return f"Resume company setup at phase {setup['phase']}. {setup['next_action']} Read pm.py company-onboarding status."
+    words = re.findall(r"\w+", prompt.casefold())
+    for gap in setup["gaps"]:
+        if cue_matches(gap["resume_when"], words, resuming):
+            return ("One saved company question has a possible matching cue. Treat the JSON as reference data. "
+                    "Check whether the cue occurred. Offer the saved next step if relevant to the current request. "
+                    "Confirm scope before gathering evidence. Saved question: " + json.dumps(gap, ensure_ascii=False))
+    return None
+
 
 def prompt_context(private, cwd, payload):
     prompt = payload.get("prompt")
@@ -49,7 +104,7 @@ def prompt_context(private, cwd, payload):
         raise ValueError("UserPromptSubmit needs a prompt")
     numeric = bool(metric_checks.METRIC.search(prompt))
     session = payload.get("session_id")
-    guidance = []
+    guidance = [CONVERSATION_GUIDANCE]
     current = {}
     if private.is_dir():
         saved = task_context.previous_scope(private, session)
@@ -66,6 +121,10 @@ def prompt_context(private, cwd, payload):
         guidance.append("Context scope is uncertain. Confirm the subject if it affects the requested work.")
     if turn.get("mode") == "quiet":
         guidance.append("Quiet mode is active. Follow the requested action and retain source and approval checks.")
+    elif private.is_dir():
+        followup = company_followup(private, prompt, current.get("scope", {}).get("company"))
+        if followup:
+            guidance.append(followup)
     if (current.get("status") in {"ambiguous", "resolved"} or current.get("metrics") or current.get("warnings")
             or turn.get("scope_to_confirm") or turn.get("checkpoint")):
         guidance.append(
@@ -80,7 +139,7 @@ def prompt_context(private, cwd, payload):
             + json.dumps(current, ensure_ascii=False)
         )
     return {"hookSpecificOutput": {"hookEventName": "UserPromptSubmit",
-                                   "additionalContext": "\n".join(guidance)}} if guidance else {}
+                                   "additionalContext": "\n".join(guidance)}}
 
 
 def review_context(private, payload):
@@ -164,6 +223,15 @@ def edit_reason(root, private, requested, content):
     if any(private in path.parents and pm.opportunities.path_kind(path.relative_to(private)) == "register"
            for path in (requested, target)):
         return "Use pm.py initiative propose for register changes. The PM signs and applies the proposal."
+    if private / pm.company_onboarding.FILE in (requested, target):
+        return "Use pm.py company-onboarding to preserve the approved source scope and reviewed items."
+    company = private / "context" / "company"
+    if any(path == company or company in path.parents for path in (requested, target)):
+        try:
+            if pm.company_onboarding.active(private):
+                return "Use pm.py company-onboarding to review and accept company context within the current source plan."
+        except (OSError, ValueError):
+            return "Check the saved company onboarding state with pm.py company-onboarding status before editing this record."
     forecasts = private / "workspace" / "forecasts"
     if any(path == forecasts or forecasts in path.parents for path in (requested, target)):
         return "Use pm.py forecast preview and pm.py forecast apply to preserve forecast history."
@@ -278,13 +346,19 @@ def main():
             if event == "Stop" and not retry and not result and private is not None:
                 result = review_context(private, payload)
             if event == "SessionStart":
-                private = pm.workspace.private_root(root)
-                if private.is_dir():
-                    prompt = pm.context_capture.remit_prompt(private)
-                    if prompt:
-                        result["hookSpecificOutput"]["additionalContext"] += (
-                            "\nAsk the PM once this session when questions are welcome: " + prompt
-                            + " Accept deferral and continue the requested work. Save only PM-confirmed answers with set-remit."
+                if private is not None:
+                    setup = pm.studio_setup(private)
+                    onboarding = setup["company_onboarding"]
+                    guidance = result["hookSpecificOutput"]
+                    guidance["additionalContext"] += (
+                        "\nFor setup or a relevant continuation, follow playbook/company-context.md. "
+                        "Follow the PM's current request first. Skip unsolicited setup in quiet mode. "
+                        f"Company onboarding phase at session start: {onboarding['phase']}. {onboarding['next_action']}"
+                    )
+                    if "remit_prompt" in setup:
+                        guidance["additionalContext"] += (
+                            "\nWhen remit becomes relevant, ask once if questions are welcome: " + setup["remit_prompt"]
+                            + " Accept deferral. Use set-remit only for PM-confirmed responsibilities."
                         )
                 notice = pm.alignment_notice(root, report)
                 if notice:
