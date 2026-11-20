@@ -149,6 +149,35 @@ class FeedbackRoutingTests(unittest.TestCase):
         self.assertEqual(self.recorded(), [])
         self.assertEqual(self.run_cli("list")["pending"][0]["issue"], 15)
 
+    def test_offline_reports_keep_each_approved_issue_through_partial_sync(self):
+        self.run_cli("reporting", "on")
+        send = [*self.send, "--approved"]
+        self.run_cli(*send, replies=[None])
+        self.assertEqual([row["issue"] for row in self.run_cli("list")["pending"]], [None])
+        for number in (21, 42, 21):
+            self.run_cli(*send, "--issue", str(number), replies=[None])
+        self.assertEqual([row["issue"] for row in self.run_cli("list")["pending"]], [21, 42])
+
+        issues = [{"number": number, "state": "open", "title": f"Report {number}",
+                   "body": "", "html_url": ISSUES + str(number)} for number in (21, 42)]
+        for number in (21, 42):
+            url = f"{ISSUES}{number}#issuecomment-{number}"
+            replies = [METADATA, [issues], [[]], url]
+            if number == 21:
+                replies.append(None)  # The connection drops again before the second report.
+            result = self.run_cli("sync", replies=replies)
+            self.assertEqual(result["urls"], [url])
+            posts = [args for args in self.recorded() if "POST" in args]
+            self.assertEqual([args[3] for args in posts], [f"{API}/issues/{number}/comments"])
+            if number == 21:
+                self.assertIn("authentication", result["report_pending"])
+                self.assertEqual([row["issue"] for row in self.run_cli("list")["pending"]], [42])
+        self.assertEqual(self.run_cli("list")["pending"], [])
+        for number in (21, 42):
+            self.assertEqual(self.run_cli(*send, "--issue", str(number)),
+                             {"url": f"{ISSUES}{number}#issuecomment-{number}"})
+            self.assertEqual(self.recorded(), [])
+
     def test_auto_report_recovers_closed_issue_on_later_page_after_a_lost_response(self):
         known = ["set", "weekly-review-order", "--scope", "Weekly reviews", "--behavior", "Put pending decisions first."]
         self.run_cli(*known)

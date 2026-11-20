@@ -426,8 +426,10 @@ def run(root, args):
             if args.id not in state["rules"]:
                 item["source"] = customizations.report_source(root, args.id)
         if item:
+            # An unassigned report can acquire an issue. Two assigned issues each need delivery.
             same = next((entry for entry in state["pending"]
-                         if all(entry[key] == item[key] for key in ("id", "title", "body"))), None)
+                         if (entry["issue"] == item["issue"] or None in (entry["issue"], item["issue"]))
+                         and all(entry[key] == item[key] for key in ("id", "title", "body"))), None)
             if same is None:
                 state["pending"].append(item)
             elif item["reviewed"]:
