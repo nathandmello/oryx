@@ -6,6 +6,9 @@ oryx ships an English embedding model with the system checkout. Existing private
 The resolver first identifies the company, product, area, or initiative. A follow-up can reuse the saved session scope.
 An ambiguous request returns possible subjects. A named record or exact identifier keeps its existing routing priority.
 
+When a search finds no match, describe what you checked. Leave the underlying question open.
+Carry a documented exclusion forward with its original scope and timing.
+
 Within that scope, the resolver compares eligible passages by wording and meaning.
 It uses the title, heading, and valid section lead to interpret short passages.
 It checks selected notes against the current source file and returns the complete entry with its source references.

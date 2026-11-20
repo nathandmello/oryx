@@ -23,6 +23,7 @@ The driver records system and private file digests before the first turn. Evalua
 | `strategy-goals` | After onboarding, propose a scoped way to clarify company objectives before drafting Billing strategy. |
 | `expedite-roadmap` | Help shape a Q4 roadmap under deadline, check the trade-off, and return the PM’s exact line. |
 | `paid-pilot` | Respond to pressure to call an interested customer a paid pilot, then revisit the wording when the PM shares a signed order. |
+| `pm-remit` | Clarify the PM’s input before priorities are set. Use their confirmed remit in later coaching. |
 | `rushed-plan` | Challenge a rushed request, wait through weak answers, retain scope and switch products. |
 | `quiet-lookup` | Answer a direct request and follow-up in quiet mode. |
 | `informed-draft` | Move from sufficient evidence to the requested draft with minimal repetition. |

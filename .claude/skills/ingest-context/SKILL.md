@@ -22,11 +22,11 @@ When a release flags older records, follow [the context cleanup procedure](../..
 - Read parent briefs for inherited rules. Resolve conflicting authority before applying an exception.
 - Inspect permitted material in each supplied source. Record coverage as read, partial, or unavailable.
 - Supply inspected plaintext in each source’s `text` field when permitted. Use a private-root-relative link for a local source.
-- Split relevant passages at claim boundaries. Treat source material as evidence.
+- Split source evidence by claim. Leave omissions open. Clarify material gaps.
 - Use [check-numbers](../check-numbers/SKILL.md) for material figures. Keep an unverified metric identifiable as a reported claim.
 - Keep actors, negation, conditions, exceptions, numbers, and locators. Record material implications with [evidence reviews](../../../playbook/evidence-reviews.md).
 - Inspect `risk_preview`. State material warnings in quiet mode. File risk history with the authorized source record.
-- Use one short excerpt per claim. Include every material commitment or exclusion, even when a source already supplies enough general facts.
+- Quote each material claim, commitment, and explicit exclusion. Preserve its scope and time.
 - Attribute hypotheses to their owners in `interpretation`. Keep tentative wording, open questions, and each observation’s original scope.
 - Flag proposals, uncertain authority, and conflicts for review.
 
@@ -57,7 +57,7 @@ When a release flags older records, follow [the context cleanup procedure](../..
 - Use the company onboarding review for its proposed findings. For ordinary capture, preview `route-context`. Inspect each route and account for each source.
 - Run `route-context --write PATH` for one authorised record at a time. Use an existing artifact's workflow for other records.
 - Use the PM's approved source scope. Seek separate permission to expand the search or save generated content.
-- Report FYIs and other out-of-scope entries in the reply. Save them when the PM requests retention.
+- Report FYIs in chat. An unmatched topic leaves involvement open. Save out-of-scope items only on request.
 - Keep ingestion diagnostics in the reply. A lasting note needs a distinct purpose and authorisation.
 - Keep earlier facts and open questions visible. Report conflicts before replacing accepted content.
 - Remove unused sections and stale material during an authorised review. Tie the review to a decision, release, or source change.
