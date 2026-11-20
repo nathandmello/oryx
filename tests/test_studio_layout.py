@@ -1,5 +1,6 @@
 """Exercise Studio upgrades using populated, isolated repositories."""
 
+import errno
 import json
 import os
 from pathlib import Path
@@ -161,12 +162,21 @@ class StudioLayoutTests(unittest.TestCase):
         self.assertEqual(git("write-tree"), staged)
         self.assertTrue((self.work / ".hub-overrides.json").is_file())
 
-    @unittest.skipUnless(os.name == "posix", "POSIX supports opaque byte names")
+    @unittest.skipUnless(os.name == "posix", "Exercise POSIX asset filenames")
     def test_opaque_view_asset_names_survive_alignment_and_inventory(self):
         self.install_legacy()
-        names = [os.fsdecode(b"colour-\xff.css"), "two\rlines.css"]
+        assets = self.work / "workspace/.views/assets"
+        names = ["palette-色.css", "two\rlines.css"]
         for name in names:
-            (self.work / "workspace/.views/assets" / name).write_bytes(b"raw\xffasset")
+            (assets / name).write_bytes(b"raw\xffasset")
+        opaque_name = os.fsdecode(b"colour-\xff.css")
+        try:
+            (assets / opaque_name).write_bytes(b"raw\xffasset")
+        except OSError as exc:
+            if exc.errno != errno.EILSEQ:  # Some filesystems require UTF-8 filenames.
+                raise
+        else:
+            names.append(opaque_name)
         result = pm.alignment(self.root, True)
         self.assertTrue(result["studio_moves"])
         visible = set(storage.inventory(self.work))
