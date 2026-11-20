@@ -20,7 +20,8 @@ import task_context
 CANDOR_GUIDANCE = (
     "Answer directly. Skip reflexive praise or agreement. Respect preferences and decisions. "
     "Agree plainly when warranted. If a claim exceeds the evidence, explain the gap. "
-    "Revise your assessment when new facts or a better argument warrant it."
+    "Revise your assessment when new facts or a better argument warrant it. "
+    "Treat omissions as unknown. Preserve explicit exclusions within their stated scope when recording or reusing context."
 )
 
 

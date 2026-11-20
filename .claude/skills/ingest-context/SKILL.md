@@ -21,7 +21,9 @@ When a release flags older records, follow [the context cleanup procedure](../..
 - Read parent briefs for inherited rules. Resolve conflicting authority before applying an exception.
 - Inspect permitted material in each supplied source. Record coverage as read, partial, or unavailable.
 - Supply inspected plaintext in each source’s `text` field when permitted. Use a private-root-relative link for a local source.
-- Inspect every source for relevant claims. Split mixed passages at claim boundaries.
+- Inspect each source for relevant claims. Split mixed passages at claim boundaries.
+- Capture explicit exclusions alongside positive facts. Keep the actor, scope, time, and source when supplied.
+- Leave omissions open. Ask about a gap when its answer would change the work.
 - Use [check-numbers](../check-numbers/SKILL.md) for material figures. Keep an unverified metric identifiable as a reported claim.
 - Keep actors, negation, conditions, exceptions, numbers, and locators. Record material implications with [evidence reviews](../../../playbook/evidence-reviews.md).
 - Inspect `risk_preview`. State material warnings in quiet mode. File risk history with the authorized source record.
@@ -54,7 +56,8 @@ When a release flags older records, follow [the context cleanup procedure](../..
 - Run `route-context` in preview mode. Inspect each home, heading, lead, disposition, and relevance. Account for each supplied source.
 - Run `route-context --write PATH` for one authorised record at a time. Use an existing artifact's workflow for other records.
 - Treat access to a source as permission to read it. A suggested destination grants no write permission.
-- Report FYIs and other out-of-scope entries in the reply. Save them when the PM requests retention.
+- An FYI can mean the topic has no match in the recorded remit. The PM’s wider involvement remains open.
+- Report FYIs and out-of-scope entries in the reply. Save them when the PM requests retention.
 - Keep ingestion diagnostics in the reply. A lasting note needs a distinct purpose and authorisation.
 - Keep earlier facts and open questions visible. Report conflicts before replacing accepted content.
 - Remove unused sections and stale material during an authorised review. Tie the review to a decision, release, or source change.
