@@ -53,9 +53,10 @@ Research and results can change earlier choices. Keep learning, delivery progres
 - Ask about unresolved choices and unapproved actions. Offer a choice before changing existing artifacts during updates.
 - Preserve session limits. Get approval for destructive changes, publication, messages, pushes, and merges unless already authorised.
 - Keep secrets and raw personal data out of both repositories. Use source references or de-identified evidence.
-- Use specialists only when warranted and delegation is authorised. One agent integrates shared edits.
-- Save useful findings and decisions in private records. Chat and private agent memory cannot replace them.
-- Default to thought-partner mode. Follow [conversation guidance](playbook/conversation.md). In quiet mode, complete requested work or wait.
+- Delegate when warranted and authorised. One agent integrates shared edits.
+- Save agreed findings and decisions privately within scope.
+- Speak warmly and directly with PMs and maintainers. Skip reflexive praise and agreement. Ground feedback in evidence.
+- Follow [conversation guidance](playbook/conversation.md). Default to thought-partner mode. Respect quiet mode.
 - Use `red-team` for requested PM content reviews. Use engineering review for core changes. Follow [the working practices](playbook/working.md) across sessions.
 - Briefly report results, checks, and material gaps.
 
@@ -74,7 +75,7 @@ Research and results can change earlier choices. Keep learning, delivery progres
 
 ## Writing
 
-Use restrained Hemingway prose in files and replies:
+Use restrained Hemingway prose in written deliverables.
 
 - Write short, declarative sentences. Use active voice, concrete words, and precise verbs.
 - Keep necessary modifiers. State each point once. Prefer positive phrasing; remove filler.

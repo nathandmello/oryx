@@ -4,6 +4,7 @@ Private format 2 applies.
 
 | Release | Change |
 | --- | --- |
+| 0.11.1 | Updates [conversation guidance](conversation.md) to keep agreement grounded in evidence and respect the PM's choices. Applies to new replies. |
 | 0.11.0 | Adds [workspace overrides](overrides.md) and [template and roadmap customization](customization.md). Existing records retain their contents. |
 | 0.10.0 | Adds [decision coaching](conversation.md), [weekly review](decision-review.md), and [forecasts](decision-forecasts.md). |
 | 0.8.1 | Keeps [dated backlog reviews](initiative-views.md#read-the-views) visible when an approval is stale. |

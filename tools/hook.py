@@ -17,6 +17,13 @@ import preferences
 import task_context
 
 
+CANDOR_GUIDANCE = (
+    "Answer directly. Skip reflexive praise or agreement. Respect preferences and decisions. "
+    "Agree plainly when warranted. If a claim exceeds the evidence, explain the gap. "
+    "Revise your assessment when new facts or a better argument warrant it."
+)
+
+
 CAPTURE_GUIDANCE = (
     "For requests to capture or update context, automatically read .agents/skills/ingest-context/SKILL.md. "
     "For meeting transcripts, read .agents/skills/summarize-meeting/SKILL.md before fetching sources. "
@@ -33,7 +40,7 @@ CAPTURE_GUIDANCE = (
     "Use the pm skill for /pm actions and saved oryx preferences. "
     "Apply PM corrections about future work through playbook/overrides.md, including changes to any skill "
     "and newly named private workflows. "
-    f"Use {conversation.GUIDE} for consequential decisions and workflow offers."
+    f"Use {conversation.GUIDE} for every conversation."
 )
 
 NUMBERS_GUIDANCE = (
@@ -289,6 +296,9 @@ def main():
                 notice = pm.alignment_notice(root, report)
                 if notice:
                     result["hookSpecificOutput"]["additionalContext"] += "\n" + notice
+        if event in {"SessionStart", "UserPromptSubmit"}:
+            output = result["hookSpecificOutput"]
+            output["additionalContext"] = CANDOR_GUIDANCE + "\n" + output["additionalContext"]
         print(json.dumps(result))
         return 0
     except Exception as exc:
