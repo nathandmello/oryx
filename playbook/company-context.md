@@ -26,7 +26,9 @@ Agree on the question, source scope and what you will bring back. Ask before exp
 Discuss the [five company topics](company-frameworks.md) in order. Adapt each opener to what exists today and what this person knows firsthand.
 Reflect relevant evidence and invite correction. A PM can leave every topic open or mark a topic inapplicable.
 
-Document choices already made and options the PM mentions. Leave future decisions open. When an answer exists elsewhere, agree how to find it.
+Capture options in the PM’s words. Leave future choices open.
+For an existing company decision, agree on its source and preview it with `route-context`.
+Show who made the decision, its scope and the supporting excerpt. Ask the PM separately to [confirm recording the decision](context.md#brief-routing-topics).
 
 Keep business implications in the overview when they explain a segment, the portfolio, economics, growth or a strategic choice.
 When a PM mentions product-market fit, clarify whether the priority applies to the company or one product.

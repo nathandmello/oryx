@@ -22,6 +22,32 @@ class OnboardingHookTests(unittest.TestCase):
         self.cwd = self.root
         self.frameworks = define_fixture_frameworks(self.root)
 
+    def test_standing_corrections_and_preferences_apply_during_onboarding(self):
+        start = self.cli("onboarding", "status")
+        rule = "Ask before offering a recap."
+        self.cli("override", "set", "recaps", "--scope", "During onboarding", "--behavior", rule)
+        self.assertIn("recaps", self.cli("override", "list")["rules"])
+        self.assertEqual(self.cli("override", "show", "recaps")["effective"],
+                         [{"scope": "During onboarding", "behavior": rule}])
+        self.cli("action", "workspace", "preferences", "set", "--detail", "concise")
+        self.assertEqual(self.cli("preferences", "show")["detail"], "concise")
+
+        for client in ("Codex", "Claude"):
+            route, guidance = self.prompt(client, client, "Show the roadmap.")
+            self.assertEqual(route["status"], "onboarding_required")
+            self.assertEqual(route["onboarding"]["walkthroughs"], start["walkthroughs"])
+            self.assertIn(rule, guidance)
+            self.assertIn("Keep optional explanation brief.", guidance)
+
+        self.cli("action", "portfolio", "roadmap", "show", error="onboarding_required")
+        self.cli("override", "sync", error="onboarding_required")
+        self.cli("override", "remove", "recaps")
+        self.cli("action", "workspace", "preferences", "reset", "detail")
+        _, guidance = self.prompt("Codex", "Codex", "Continue setup.")
+        self.assertNotIn(rule, guidance)
+        self.assertNotIn("Keep optional explanation brief.", guidance)
+        self.assertEqual(self.cli("onboarding", "status")["walkthroughs"], start["walkthroughs"])
+
     def test_each_stage_routes_every_request_then_offers_the_original_task_once(self):
         clients = ("Codex", "Claude")
         for client in clients:

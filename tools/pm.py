@@ -895,7 +895,7 @@ def build_parser():
 # The browser gates its own reads and writes. Numeric checks support intake evidence.
 SETUP_TOOLS = {
     "agent", "align", "check", "check-metric", "company-onboarding", "eval-red-team", "git",
-    "init-workspace", "onboarding", "set-remit", "sync-skills", "ui",
+    "init-workspace", "onboarding", "preferences", "set-remit", "sync-skills", "ui",
 }
 
 
@@ -946,6 +946,8 @@ def setup_capture(payload):
 
 
 def check_command_setup(args):
+    if args.command == "override" and args.operation in {"list", "show", "set", "remove"}:
+        return None
     if args.command == "set-remit":
         require_pm_stage()
         return None
@@ -966,7 +968,7 @@ def check_command_setup(args):
     if args.command == "task-context":
         return state
     if args.command == "route-context" and (args.write is None or onboarding.setup_destination(args.write)):
-        if args.write and (Path(args.write).parts[:2] == ("context", "company") or
+        if args.write and (Path(args.write).parts[:2] == ("context", "company") and args.write != layout.COMPANY or
                            company_onboarding.pm_destination(args.write) and state["stage"] != "product"):
             raise onboarding.SetupRequired(state)
         return state  # The handler also verifies the supplied entries before routing them.
@@ -1200,11 +1202,16 @@ def main() -> int:
             return 0
         if args.command == "route-context":
             payload = storage.json_input(os.sys.stdin.read())
-            if setup and not setup_capture(payload):
+            private = workspace.optional_repo(ROOT) or ROOT / storage.STUDIO
+            setup_decision = bool(setup and company_onboarding.setup_decision(payload))
+            if setup_decision:
+                if setup["stage"] == "repair" or args.write not in (None, layout.COMPANY):
+                    raise onboarding.SetupRequired(setup)
+                company_onboarding.check_decision_source(private, payload["sources"])
+            elif setup and (args.write == layout.COMPANY or not setup_capture(payload)):
                 raise onboarding.SetupRequired(setup)
             if args.write is not None:
                 settings = prepare_private_write(ROOT)
-            private = workspace.optional_repo(ROOT) or ROOT / storage.STUDIO
             entries = payload.get("entries") if isinstance(payload, dict) else None
             pm_entries = isinstance(entries, list) and any(
                 isinstance(entry, dict) and entry.get("scope") in ("pm", "stakeholder") for entry in entries
@@ -1215,7 +1222,9 @@ def main() -> int:
                 if company_onboarding.active(private, kind="pm"):
                     raise ValueError("Use pm-onboarding to preview findings within the approved PM source plan")
             remit, error = context_capture.inspect_remit(private)
-            plan = context_capture.route(payload, private, remit)
+            plan = context_capture.route(payload, private, remit, single_excerpt=setup_decision)
+            if setup_decision and plan["source_checks"][0]["verification"] != "reviewed excerpt matched inspected text":
+                raise ValueError("Supply inspected source text or a readable local source for this company decision")
             definitions = {}
             for entry in plan["entries"]:
                 text = entry.get("quote", "")
@@ -1233,6 +1242,8 @@ def main() -> int:
                 if any(ARTIFACT.search(Path(part).stem) for part in Path(args.write).parts):
                     raise ValueError("Engineering artifacts belong in the delivery system")
                 with storage.writer_lock(private):
+                    if setup_decision:
+                        company_onboarding.check_decision_source(private, payload["sources"])
                     if company_onboarding.pm_destination(args.write) and company_onboarding.active(private, kind="pm"):
                         raise ValueError("Review and accept PM or stakeholder context with pm-onboarding")
                     company_onboarding.check_capture(private, args.write, plan)

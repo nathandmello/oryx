@@ -80,17 +80,19 @@ NUMBERS_GUIDANCE = (
 
 
 def onboarding_guidance(setup):
-    pace = ("Keep coaching brief and omit unsolicited offers. Help with a company update when asked. "
-            if setup.get("conversation_mode") in {"quiet", "expedite"} else "")
+    instructions = ("Use the pm skill to handle requests about standing rules and reply preferences "
+                    "during setup. Resume the current walkthrough topic after a settings change. ")
+    if setup.get("conversation_mode") in {"quiet", "expedite"}:
+        instructions += "Keep coaching brief and omit unsolicited offers. Help with a company update when asked. "
     if not setup["stage_available"]:
-        return (pace + "Keep the original request in this conversation. Explain the current setup status briefly. "
+        return (instructions + "Keep the original request in this conversation. Explain the current setup status briefly. "
                 "Continue an agreed context update when the PM requests it. Use its saved capture phase and next action. "
                 "Otherwise follow the next action in the walkthrough status. "
                 "Leave unavailable stages and damaged checkpoints intact.\n"
                 + json.dumps(onboarding.required(setup), ensure_ascii=False))
     guide = "playbook/pm-context.md" if setup["stage"] == "pm" else "playbook/company-context.md"
     return (
-        pace + "Required Studio onboarding is active for this request. A guided pass through each framework comes before "
+        instructions + "Required Studio onboarding is active for this request. A guided pass through each framework comes before "
         "product work, including read-only lookups, slash commands, quiet mode and expedited work. "
         "Keep the original request in this conversation. Acknowledge it briefly and guide setup yourself. "
         "Listen first, reuse what the PM has said and ask at most one short question about the current step. "

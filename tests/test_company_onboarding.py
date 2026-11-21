@@ -12,10 +12,12 @@ import company_onboarding as onboarding
 import context_capture
 import pm
 import storage
+from onboarding_fixtures import review_current_topic
 
 
 class CompanyOnboardingTests(unittest.TestCase):
     setUp = test_pm.HubTests.setUp
+    context_capture = test_pm.HubTests.context_capture
 
     def change(self, operation, **kwargs):
         kwargs.setdefault("revision", onboarding.status(self.work)["revision"])
@@ -93,6 +95,80 @@ class CompanyOnboardingTests(unittest.TestCase):
         item["entries"][0]["quote"] = "The company has committed to enterprise."
         with self.assertRaisesRegex(ValueError, "differs"):
             self.change("propose", **item)
+
+    def test_closed_company_decision_during_setup_requires_scoped_evidence_and_recording_consent(self):
+        name = context_capture.COMPANY_PATH
+        quote = "We chose independent clinics for our first pilot."
+        source = dict(reference="Board deck", date="2025-01-01", checked_on="2025-01-01",
+                      coverage="partial", text=quote + " We will revisit the segment in June.")
+        choice = dict(person="Executive team", date=source["date"], question="Where will we pilot?",
+                      scope="First pilot", next_step="Invite independent clinics.")
+        entry = dict(scope="company", topic="decisions", source=1, location="Slide 3", quote=quote, decision=choice)
+        packet = dict(sources=[source], entries=[entry])
+
+        def rejected(payload, message, *args):
+            result = self.context_capture(payload, *args)
+            self.assertNotEqual(result.returncode, 0, result.stdout)
+            self.assertIn(message, result.stdout)
+
+        self.plan()
+        rejected(packet, "Approve the company source plan")
+        self.change("approve")
+        rejected(dict(packet, sources=[dict(source, reference="Another deck")]), "outside")
+        rejected(dict(packet, sources=[{k: v for k, v in source.items() if k != "text"}]), "inspected source")
+        rejected(dict(packet, entries=[dict(entry, quote="We chose independent clinics")]), "qualifications")
+        # The general evidence path and a mixed batch cannot use the decision exception.
+        finding = self.draft()["entries"][0]
+        rejected(dict(packet, entries=[finding]), "onboarding_required", "--write", name)
+        rejected(dict(packet, entries=[entry, finding]), "onboarding_required")
+        product = context_capture.product_path("clinic")
+        rejected(dict(packet, entries=[dict(entry, scope="product", product="clinic")]),
+                 "onboarding_required", "--write", product)
+        rejected(packet, "onboarding_required", "--write", product)
+        with self.assertRaisesRegex(ValueError, "confirm it separately"):
+            self.change("propose", source_scope="Board deck", **packet)
+        self.change("propose", **self.draft())
+        rejected(packet, "pending company finding")
+        self.change("accept")
+        brief = self.work / name
+        before = brief.read_bytes()
+        preview = self.context_capture(packet)
+        self.assertEqual(preview.returncode, 0, preview.stdout)
+        approved = test_pm.confirmed_decisions(packet, json.loads(preview.stdout))
+        receipt = approved["entries"][0]["record_decision"]
+        rejected(packet, "record_decision", "--write", name)
+        rejected(dict(packet, entries=[dict(entry, record_decision=dict(receipt, reply="Yes."))]),
+                 "Record this decision", "--write", name)
+        rejected(dict(approved, entries=[dict(approved["entries"][0], location="Slide 4")]),
+                 "changed", "--write", name)
+        self.assertEqual(before, brief.read_bytes())
+        company_stage = pm.onboarding.status(self.work)
+        saved = self.context_capture(approved, "--write", name)
+        self.assertEqual(saved.returncode, 0, saved.stdout)
+        self.assertIn(quote, brief.read_text())
+        self.assertIn("Confirmed for recording by Fixture PM", brief.read_text())
+        self.assertEqual(company_stage, pm.onboarding.status(self.work))
+        self.change("finish")
+        rejected(approved, "Approve the company source plan", "--write", name)
+
+        # The same company review remains available while the product walkthrough is pending.
+        while pm.onboarding.status(self.work)["stage"] in {"company", "pm"}:
+            review_current_topic(self.work)
+        self.plan()
+        self.change("approve")
+        hold = pm.onboarding.status(self.work)
+        self.assertEqual(hold["stage"], "product")
+        follow_up = dict(packet, entries=[dict(entry, quote="We will revisit the segment in June.",
+                                               decision=dict(choice, question="When will we reassess the segment?"))])
+        preview = self.context_capture(follow_up)
+        self.assertEqual(preview.returncode, 0, preview.stdout)
+        confirmed = test_pm.confirmed_decisions(follow_up, json.loads(preview.stdout))
+        saved = self.context_capture(confirmed, "--write", name)
+        self.assertEqual(saved.returncode, 0, saved.stdout)
+        self.assertEqual(json.loads(saved.stdout)["written"], name)
+        self.assertIn(follow_up["entries"][0]["quote"], brief.read_text())
+        self.assertEqual(hold, pm.onboarding.status(self.work))
+        self.assertFalse((self.work / product).exists())
 
     def test_resume_and_defer_do_not_write_or_lose_existing_drafts(self):
         self.plan()

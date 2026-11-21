@@ -215,6 +215,30 @@ def active(private, kind="company"):
     return read(private, kind)[1]["plan"] is not None
 
 
+def setup_decision(payload):
+    """Identify the single company choice eligible for separate recording consent during setup."""
+    if not isinstance(payload, dict) or set(payload) != {"sources", "entries"}:
+        return False
+    sources, entries = payload["sources"], payload["entries"]
+    if not isinstance(sources, list) or len(sources) != 1 or not isinstance(entries, list) or len(entries) != 1:
+        return False
+    entry = entries[0]
+    return (isinstance(entry, dict) and entry.get("scope") == "company" and entry.get("topic") == "decisions"
+            and "decision" in entry and entry.keys() <= {
+                "scope", "topic", "source", "location", "quote", "decision", "record_decision"})
+
+
+def check_decision_source(private, sources):
+    _, state = read(private)
+    if not state["approved"]:
+        raise ValueError("Approve the company source plan before reviewing a company decision")
+    if state["pending"]:
+        raise ValueError("Accept or defer the pending company finding before reviewing a decision")
+    reference = capture.source_rows(sources)[0]["reference"]
+    if not any(within_scope(scope, reference) for scope in state["plan"]["sources"]):
+        raise ValueError("Decision source is outside the approved company plan")
+
+
 def check_capture(private, destination, plan):
     """Keep ordinary writes from skipping an active company review."""
     if not destination.startswith("context/company/") or not active(private):
@@ -306,7 +330,7 @@ def prepare(private, state, data, *, restoring=False, kind="company"):
     if kind == "pm" and entry.keys() & {"rule", "term", "record_decision", "risk", "supersedes"}:
         raise ValueError("PM setup captures descriptive context. Use the owning workflow for actions and policy changes")
     if "decision" in entry or entry.get("topic") == "decisions":
-        raise ValueError("Wording approval cannot record a product decision. Use its separate decision workflow.")
+        raise ValueError("Wording approval cannot record a decision. Preview and confirm it separately with route-context.")
     # A document can supply several separately reviewed claims. Check this quote
     # against supplied material without retaining the source document in the checkpoint.
     if kind == "pm":
