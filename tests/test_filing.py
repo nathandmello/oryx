@@ -9,6 +9,7 @@ from unittest.mock import patch
 import zipfile
 
 import test_pm
+from onboarding_fixtures import reviewed_setup
 import conversion
 import pm
 import records
@@ -17,7 +18,7 @@ import upgrades
 
 
 class FilingTests(unittest.TestCase):
-    setUp = test_pm.HubTests.setUp
+    setUp = reviewed_setup
 
     def cli(self, *args, data=None):
         return subprocess.run([sys.executable, str(self.root / "tools/pm.py"), *args], cwd=self.root,

@@ -27,7 +27,15 @@ ACKNOWLEDGMENT = re.compile(
     r"great|sounds good|will do|that's helpful)(?:[.! ,]+(?:thank(?:s| you)|great|got it))*[.!, ]*", re.I
 )
 QUIET = re.compile(r"^(?:please\s+)?(?:quiet(?: mode)?|shut up|just capture)(?:\b|$)", re.I)
-THOUGHT_PARTNER = re.compile(r"^(?:please\s+)?(?:exit quiet mode|resume coaching|thought-partner mode)\b", re.I)
+EXPEDITE = re.compile(
+    r"^(?:yes[, ]+)?(?:please\s+)?(?:let['’]s\s+)?(?:(?:use|enter|switch to|turn on)\s+)?expedit(?:e|ed) mode"
+    r"(?=$|[.,:!](?:\s|$)|\s+for\b)", re.I
+)
+EXPEDITE_OFFER = "Would you like to use expedite mode?"
+AFFIRM_PACE = re.compile(r"(?:yes|yep|yeah|sure|okay|ok)(?:,? please)?[.!]*", re.I)
+THOUGHT_PARTNER = re.compile(
+    r"^(?:please\s+)?(?:exit (?:quiet|expedit(?:e|ed)) mode|resume coaching|thought-partner mode)\b", re.I
+)
 DIRECT = re.compile(
     r"^(?:please\s+)?(?:(?:can|could|would) you\s+(?:please\s+)?)?"
     r"(?:summari[sz]e|show|list|look up|find|copy|capture|format|fix|translate|spell|read|"
@@ -59,12 +67,28 @@ def acknowledgement(prompt):
     return bool(ACKNOWLEDGMENT.fullmatch(prompt.strip()))
 
 
-def requested_mode(prompt):
-    if QUIET.match(prompt.strip()):
-        return "quiet"
-    if THOUGHT_PARTNER.match(prompt.strip()):
-        return "thought-partner"
-    return None
+def offered_expedite(message):
+    """Recognize the dedicated final question, outside quotations and examples."""
+    if not isinstance(message, str) or message.count("?") != 1:
+        return False
+    lines = message.rstrip().splitlines()
+    if not lines or lines[-1] != EXPEDITE_OFFER:
+        return False
+    prefix = "\n".join(lines[:-1]).rstrip()
+    return not prefix or (
+        not lines[-2].strip() and prefix.endswith((".", "!"))
+        and prefix.count("```") % 2 == 0 and prefix.count("~~~") % 2 == 0
+    )
+
+
+def mode_request(prompt):
+    """Separate a direct pace instruction from the PM's task or scope switch."""
+    prompt = prompt.strip()
+    for mode, pattern in (("quiet", QUIET), ("expedite", EXPEDITE), ("thought-partner", THOUGHT_PARTNER)):
+        match = pattern.match(prompt)
+        if match:
+            return mode, prompt[match.end():].lstrip(".,:!").lstrip()
+    return None, prompt
 
 
 def continues_work(prompt):
@@ -74,13 +98,54 @@ def continues_work(prompt):
             or bool(prompt and "?" not in prompt and not DIRECT.match(prompt)))
 
 
+def strategy_activity(prompt, product=None):
+    """Recognise a request to shape strategy, including its published slash command."""
+    prompt = prompt.strip()
+    if re.match(r"^/pm\s+strategy\s+brief\s+draft(?:\s|$)", prompt, re.I):
+        return True
+    product_label = re.escape(product or "").replace(r"\-", "[- ]")
+    scope = rf"(?:{product_label}(?:['’]s)?\s+)?" if product else ""
+    subject = r"(?:(?:a|an|the|my|our|this|new)\s+)*" + scope + r"(?:product\s+)?strategy\b"
+    if re.match(r"^(?:please\s+)?(?:help (?:me|us) with|i(?:['’]m| am) working on)\s+" + subject, prompt, re.I):
+        return True
+    return bool(re.match(
+        r"^(?:(?:please|let['’]s|i (?:want|need|would like) to|(?:can|could|would) (?:you|we)|"
+        r"help me|help us)\s+)*(?:draft|write|build|develop|shape|create|define|formulate|revise|"
+        r"update|work on|revisit)\s+" + subject, prompt, re.I))
+
+
+def strategy_prerequisite(result):
+    """Point to potential evidence. Only the PM and source establish the applicable objective."""
+    candidates = [row for row in result["entries"]
+                  if row["record"] == layout.COMPANY and row["sources"]
+                  and row["section"] in {"Direction and goals", "Decisions already closed"}
+                  and row["evidence_status"] in {"recorded decision", "source statement", "sourced rule"}
+                  and all(source.get("coverage") != "unavailable" for source in row["sources"])]
+    return {
+        "activity": "product-strategy", "prerequisite": "Current company objective this product should support",
+        "status": "check_source_and_scope" if candidates else "clarify_if_unknown",
+        "evidence_sections": list(dict.fromkeys(row["section"] for row in candidates)),
+        "next_action": (
+            "Check the scoped company evidence, its owner and period, linked goals, and anything the PM already confirmed. "
+            "Use the objective if it is clear and applies to this product. Otherwise pause the strategy draft, "
+            "explain the gap and offer to help clarify the objective. Leave proposed opportunities open."
+        ),
+        "question_if_unclear": "Which company outcome should this product strategy help deliver?",
+    }
+
+
 def fingerprint(text):
     return sha256(text.encode("utf-8")).hexdigest()
 
 
 def scope_key(scope):
     if not isinstance(scope, dict):
-        raise ValueError("Choose a known company, product, area, or initiative scope")
+        raise ValueError("Choose a known company, stakeholder, product, area, or initiative scope")
+    if scope.get("stakeholders") is True:
+        if len(scope) == 1:
+            return ("stakeholders",)
+        if scope.get("product"):
+            return ("stakeholders", *scope_key({k: v for k, v in scope.items() if k != "stakeholders"}))
     if (scope.get("company") is True and set(scope) <= {"company", "product", "area", "initiative"}
             and all(scope.get(key) is None for key in ("product", "area", "initiative"))):
         return ("company",)
@@ -89,7 +154,7 @@ def scope_key(scope):
             and all(value is None or isinstance(value, str) and layout.SLUG.fullmatch(value)
                     for value in scope.values())):
         return tuple(scope.get(key) for key in ("product", "area", "initiative"))
-    raise ValueError("Choose a known company, product, area, or initiative scope")
+    raise ValueError("Choose a known company, stakeholder, product, area, or initiative scope")
 
 
 def offer_key(value):

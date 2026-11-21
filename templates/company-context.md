@@ -1,7 +1,7 @@
 <!-- pm: company-context -->
 # {{title}}
 
-Use [the context rules](../playbook/context.md). Keep a broad overview and the company rules that guide decisions.
+Use the [company context guide](../playbook/company-context.md). Start with the evidence available today.
 
 ## Data boundaries
 
@@ -9,15 +9,23 @@ Use [the context rules](../playbook/context.md). Keep a broad overview and the c
 
 ## Organisation and scope
 
-{{Parent organisation, business units, brands, product portfolio, and relevant relationships. Define this brief's scope.}}
+{{Identify the company and the scope of this brief. Include business units, brands or markets when the distinction matters.}}
 
 ## Customers and markets
 
-{{Buyers, users, distribution partners, markets, and customer segments.}}
+{{Who are our customers, and what value do we create for each? Identify who uses, pays for, or benefits from each offering.}}
 
 ## Business model
 
-{{Customer value, revenue sources, main cost drivers, channels, and key partners.}}
+{{How do we make money, and what drives our economics? Describe material revenue streams, costs, channels and partners.}}
+
+## Product portfolio
+
+{{How do our products work together to create value? Describe a customer journey or dependency across offerings. Link the relevant product records.}}
+
+## Growth and competitive advantage
+
+{{What makes the business grow? What explains why customers choose us? Cite evidence for each mechanism and its scope.}}
 
 ## Direction and goals
 
@@ -29,7 +37,7 @@ Use [the context rules](../playbook/context.md). Keep a broad overview and the c
 
 ## Constraints and open questions
 
-{{Capture binding company limits and exclusions, their authority, and any conditions. State unresolved gaps and their effect.}}
+{{Which opportunities, risks and trade-offs matter most, and to whom? Keep reported priorities, binding constraints and open questions distinct.}}
 
 ## Vocabulary
 

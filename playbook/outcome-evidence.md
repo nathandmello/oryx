@@ -82,6 +82,10 @@ Correct a replacement by its active ID. Use the same metric, guardrail and obser
 
 ## Sign the outcome
 
+Compare the observed change with the original expectation. Check the cohort, time window, and any competing explanation.
+A rise after launch can support a measured outcome while its cause remains open.
+Show the implications of expanding, adjusting, or gathering evidence. The PM decides what to do.
+
 Review each target independently. Use `unmeasured` when it has no usable readings. Use `pending` and a dated follow-up when more evidence is expected. A registry reading from an older unstructured report needs checked evidence before a new conclusion can cite it.
 
 Inspect `evidence_review` in the proposal. Verify unconfirmed reporting windows against the original sources. A guardrail can breach while activation meets its target. Give the PM's reason or next action in `guardrail_dispositions`, keyed by each breached or unavailable guardrail. If the available guardrail reading predates the latest target observation, the review shows the coverage gap. Cite material changed readings even when scheduling another follow-up.

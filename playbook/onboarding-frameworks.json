@@ -1,0 +1,17 @@
+{
+  "company": [
+    {"id": "customers", "question": "Who are you trying to help?"},
+    {"id": "economics", "question": "How are you thinking about revenue?"},
+    {"id": "portfolio", "question": "What are you building or offering so far?"},
+    {"id": "growth", "question": "What have you learned so far about reaching customers?"},
+    {"id": "tradeoffs", "question": "What choice about the business is on your mind right now?"}
+  ],
+  "pm": [
+    {"id": "role", "question": "What’s your role here?"},
+    {"id": "responsibilities", "question": "What are you responsible for day to day?"},
+    {"id": "expectations", "question": "What does your team count on you to deliver?"},
+    {"id": "aspirations", "question": "Is there a part of product work you’d like more of?"},
+    {"id": "stakeholders", "question": "Who do you work with most closely?"}
+  ],
+  "product": null
+}

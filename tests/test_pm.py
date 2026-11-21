@@ -20,6 +20,20 @@ import records
 import red_team_eval
 import upgrades
 import workspace
+from onboarding_fixtures import reviewed_studio
+
+
+def confirmed_decisions(payload, preview):
+    """Simulate a PM explicitly authorising each exact fixture decision after preview."""
+    reviewed = []
+    for entry, proposal in zip(payload["entries"], preview["entries"]):
+        if "decision" in entry:
+            approval = {"revision": proposal["decision_revision"], "pm": "Fixture PM",
+                        "reference": "Fixture decision review, PM response",
+                        "date": date.today().isoformat(), "reply": "Record this decision."}
+            entry = dict(entry, record_decision=approval)
+        reviewed.append(entry)
+    return dict(payload, entries=reviewed)
 
 
 def legacy_product(root, private, name):
@@ -196,6 +210,7 @@ class HubTests(unittest.TestCase):
         self.assertEqual(self.run_hook("invalid json").returncode, 2)
 
     def test_hooks_load_ingestion_and_redirect_new_native_context_files(self):
+        reviewed_studio(self.root, self.work)
         cwd = self.work / "context"
         startup = self.run_hook(json.dumps({"hook_event_name": "SessionStart", "cwd": str(cwd)}))
         self.assertEqual(startup.returncode, 0, startup.stderr)
@@ -228,6 +243,7 @@ class HubTests(unittest.TestCase):
                     self.assertEqual(output, {})
 
     def test_hooks_route_registered_files_and_preserve_plain_work(self):
+        reviewed_studio(self.root, self.work)
         register = self.work / "workspace/backlogs/alpha/initiatives.json"
         register.parent.mkdir(parents=True)
         register.write_text("{}")
@@ -268,7 +284,8 @@ class HubTests(unittest.TestCase):
 
     def test_each_template_creates_a_valid_unfinished_draft(self):
         import filing
-        paths = {"company-context": "context/company/overview.md", "product-context": "context/products/example/overview.md",
+        paths = {"company-context": "context/company/overview.md", "stakeholder-context": "context/stakeholders/overview.md",
+                 "product-context": "context/products/example/overview.md",
                  "initiative-context": "context/initiatives/pilot/overview.md", "context-note": "context/company/rates.md",
                  "product-area-context": "context/products/example/areas/refunds/overview.md",
                  "goal": "workspace/goals/example.md", "problem": "workspace/problems/example.md",
@@ -453,6 +470,7 @@ class HubTests(unittest.TestCase):
                     self.assertEqual(errors, [])
 
     def test_context_capture_flags_ambiguous_and_legacy_section_bodies_in_preview(self):
+        reviewed_studio(self.root, self.work)
         target = self.context_record()
         original = target.read_text()
         destination = target.relative_to(self.work).as_posix()
@@ -578,6 +596,7 @@ class HubTests(unittest.TestCase):
         )
 
     def test_capture_routes_mixed_sources_and_writes_only_the_requested_brief(self):
+        reviewed_studio(self.root, self.work)
         stamp = date.today().isoformat()
         exclusion = "We will not enter the data centre business or create or own LLMs."
         rental = "We will rent capacity as required and use existing models."
@@ -633,6 +652,7 @@ class HubTests(unittest.TestCase):
         self.assertEqual(pm.check(self.root), [])
 
     def test_capture_previews_and_reuses_a_custom_section(self):
+        reviewed_studio(self.root, self.work)
         target = self.context_record()
         original = target.read_bytes()
         heading = "UK rollout baseline"
@@ -692,6 +712,7 @@ class HubTests(unittest.TestCase):
         self.assertEqual(pm.check(self.root), [])
 
     def evaluate_real_world_context_capture(self, case_id):
+        reviewed_studio(self.root, self.work)
         manifest = pm.ROOT / red_team_eval.SUITES["context-sections"]
         case = red_team_eval.load_manifest(manifest)["cases"][case_id]
         capture = case["capture"]
@@ -785,6 +806,7 @@ class HubTests(unittest.TestCase):
         self.evaluate_real_world_context_capture("stripe-billing-period-versions")
 
     def test_capture_keeps_open_questions_and_resolves_only_the_addressed_question(self):
+        reviewed_studio(self.root, self.work)
         company = self.context_record()
         prior = company.read_text()
         question = "Who approves capacity purchases?"
@@ -812,12 +834,14 @@ class HubTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         text = company.read_text()
         self.assertIn(answer, text)
-        self.assertNotIn(question, text)
-        self.assertIn(other, text)
+        self.assertNotIn(f"- Unknown: {question}", text)
+        self.assertIn(f"  Answers: {question}", text)
+        self.assertIn(f"- Unknown: {other}", text)
         self.assertIn("Page 2", text)
         self.assertEqual(pm.check(self.root), [])
 
     def test_capture_rejects_companion_files_and_unavailable_citations(self):
+        reviewed_studio(self.root, self.work)
         payload = {"sources": [], "entries": [
             {"scope": "company", "topic": "operations", "question": "Who owns procurement?"}
         ]}
@@ -842,6 +866,7 @@ class HubTests(unittest.TestCase):
         )
 
     def test_pm_remit_changes_relevance_without_moving_records(self):
+        reviewed_studio(self.root, self.work)
         records.create(self.root, "goal", "workspace/goals/checkout.md")
         records.create(self.root, "company-context", "context/company/overview.md")
         remit = {
@@ -892,6 +917,7 @@ class HubTests(unittest.TestCase):
         self.assertEqual(pm.check(self.root), [])
 
     def test_context_capture_reuses_records_and_creates_only_an_authorised_note(self):
+        reviewed_studio(self.root, self.work)
         goal = records.create(self.root, "goal", "workspace/goals/renewal.md")
         original = goal.read_text()
         source = {"reference": "Fixture supplier memo", "date": "undated", "coverage": "read",
@@ -944,6 +970,7 @@ class HubTests(unittest.TestCase):
         self.assertEqual(pm.check(self.root), [])
 
     def test_capture_records_a_product_implication_with_its_source(self):
+        reviewed_studio(self.root, self.work)
         cite = {"reference": "Fixture Billing retirement announcement", "date": "undated",
                 "coverage": "read", "checked_on": date.today().isoformat()}
         quote = "Billing will retire the legacy API in June."
@@ -964,6 +991,7 @@ class HubTests(unittest.TestCase):
         self.assertEqual(pm.check(self.root), [])
 
     def test_lean_context_keeps_optional_sections_out_and_accepts_event_review(self):
+        reviewed_studio(self.root, self.work)
         company = self.context_record()
         text = company.read_text()
         names = set(re.findall(r"^## (.+)$", text, re.M))
@@ -986,6 +1014,7 @@ class HubTests(unittest.TestCase):
         self.assertTrue(any("complete context needs" in error for error in pm.check(self.root)))
 
     def test_capture_keeps_legacy_product_routes_without_adding_duplicate_sections(self):
+        reviewed_studio(self.root, self.work)
         target = records.create(self.root, "product-context", "context/products/example/overview.md")
         target.write_text(target.read_text().replace("## The product", "## Current offer"))
         stamp = date.today().isoformat()
@@ -1003,6 +1032,7 @@ class HubTests(unittest.TestCase):
         self.assertEqual(pm.check(self.root), [])
 
     def test_capture_routes_structured_context_across_company_product_and_initiative(self):
+        reviewed_studio(self.root, self.work)
         stamp = date.today().isoformat()
         paths = ("context/company/overview.md", "context/products/example/overview.md",
                  "context/products/example/initiatives/renewals/overview.md")
@@ -1025,6 +1055,9 @@ class HubTests(unittest.TestCase):
             ],
         }
         payload["entries"] = [dict(entry, source=1, location="Page 1") for entry in payload["entries"]]
+        preview = self.context_capture(payload)
+        self.assertEqual(preview.returncode, 0, preview.stdout)
+        payload = confirmed_decisions(payload, json.loads(preview.stdout))
         for path in paths:
             before = set(pm.inventory(self.work))
             result = self.context_capture(payload, "--write", path)
@@ -1054,7 +1087,95 @@ class HubTests(unittest.TestCase):
         self.assertEqual(result.returncode, 1)
         self.assertEqual(initiative.read_text(), original)
 
+    def test_business_model_question_in_company_only_studio(self):
+        reviewed_studio(self.root, self.work)
+        quote = "Subscriptions fund the service."
+        packet = {"sources": [{"reference": "Finance briefing", "date": "2025-05-01", "coverage": "read",
+                               "checked_on": "2025-05-01", "text": quote}],
+                  "entries": [{"scope": "company", "topic": "business-model", "quote": quote, "source": 1,
+                               "location": "Page 1"}]}
+        self.assertEqual(self.context_capture(packet, "--write", "context/company/overview.md").returncode, 0)
+        def lookup(prompt):
+            run = subprocess.run([sys.executable, "-B", str(self.root / "tools/pm.py"), "task-context", prompt],
+                                 cwd=self.root, text=True, capture_output=True, check=True)
+            return json.loads(run.stdout)
+        result = lookup("How does the company earn its subscription revenue?")
+        self.assertTrue(result["scope"]["company"])
+        self.assertIn(quote, result["entries"][0]["text"])
+        for prompt in ("How does the company named Acme earn revenue?",
+                       "How does the company earn revenue compared with acme?",
+                       "For Acme, how does the company earn its revenue?"):
+            self.assertFalse(lookup(prompt)["entries"])
+
+    def test_recording_decisions_requires_separate_specific_confirmation(self):
+        reviewed_studio(self.root, self.work)
+        name = "context/company/overview.md"
+        day = date.today().isoformat()
+        earlier = (date.today() - timedelta(days=7)).isoformat()
+        source = {"reference": "Company strategy deck, slide 4", "date": earlier, "checked_on": earlier,
+                  "coverage": "read", "text": "Enterprise is an opportunity."}
+        evidence = {"scope": "company", "topic": "direction", "source": 1, "location": "Slide 4",
+                    "quote": source["text"], "uncertainty": "Has leadership committed to enterprise?"}
+        req = {"sources": [source], "entries": [evidence]}
+        self.assertEqual(self.context_capture(req, "--write", name).returncode, 0)
+        output = subprocess.run([sys.executable, "-B", str(self.root / "tools/pm.py"), "task-context",
+                                 "Did our company choose enterprise as its priority for the roadmap?"],
+                                cwd=self.root, text=True, capture_output=True, check=True)
+        result = json.loads(output.stdout)
+        self.assertTrue(result["scope"]["company"])
+        row = next(row for row in result["entries"] if evidence["quote"] in row["text"])
+        self.assertFalse(row["binding"])
+        self.assertEqual(row["evidence_status"], "unresolved")
+        self.assertEqual(row["sources"][0]["Source"], source["reference"])
+        self.assertIn(evidence["uncertainty"], row["text"])
+        self.assertIn("Slide 4", row["text"])
+
+        finding = "Leadership is still evaluating enterprise."
+        answer = {"scope": "company", "topic": "direction", "source": 1, "location": "Item 2",
+                  "quote": finding, "answers": evidence["uncertainty"]}
+        packet = {"sources": [dict(source, reference="Portfolio review", text=finding, date=day, checked_on=day)],
+                  "entries": [answer]}
+        self.assertEqual(self.context_capture(packet, "--write", name).returncode, 0)
+        def recall(as_of=""):
+            data = pm.task_context.resolve(self.work, f"Did our company commit to enterprise? {as_of}")
+            return next(row for row in data["entries"] if evidence["quote"] in row["text"])
+        current = recall()
+        self.assertEqual(current["evidence_status"], "qualified source with subsequent evidence")
+        self.assertIn(finding, current["subsequent_answers"][0]["text"])
+        self.assertEqual(current["subsequent_answers"][0]["sources"][0]["Source"], "Portfolio review")
+        self.assertEqual(recall(f"as of {earlier}")["evidence_status"], "unresolved")
+
+        # Later, leadership actually chooses to run a pilot. Accepting an accurate summary
+        # of their memo and authorising a decision record are separate PM actions.
+        before = (self.work / name).read_bytes()
+        choice = "Run an enterprise pilot with three accounts."
+        entry = {"scope": "company", "topic": "decisions", "source": 1, "location": "Decision 2",
+                 "quote": choice, "decision": {"person": "VP Product", "date": day,
+                 "question": "Where will we pilot?", "scope": "Next quarter", "next_step": "Recruit pilot accounts."}}
+        req = {"sources": [dict(source, reference="Leadership operating review", text=choice, date=day, checked_on=day)],
+               "entries": [entry]}
+        preview = self.context_capture(req)
+        self.assertEqual(preview.returncode, 0, preview.stdout)
+        approved = confirmed_decisions(req, json.loads(preview.stdout))
+        def write(record):
+            return self.context_capture(dict(req, entries=[record]), "--write", name)
+        self.assertNotEqual(write(entry).returncode, 0)
+        receipt = approved["entries"][0]["record_decision"]
+        self.assertNotEqual(write(dict(entry, record_decision=dict(receipt, reply="Yes, the memo says that."))).returncode, 0)
+        self.assertNotEqual(write(dict(approved["entries"][0], decision=dict(entry["decision"], scope="All segments"))).returncode, 0)
+        self.assertEqual((self.work / name).read_bytes(), before)
+
+        result = write(approved["entries"][0])
+        self.assertEqual(result.returncode, 0, result.stdout)
+        stored = (self.work / name).read_text()
+        self.assertIn("Confirmed for recording by Fixture PM", stored)
+        self.assertIn("VP Product, " + day, stored)
+        self.assertIn(choice, stored)
+        retry = write(approved["entries"][0])
+        self.assertIsNone(json.loads(retry.stdout)["written"])
+
     def test_invalid_pm_remit_keeps_the_previous_profile(self):
+        reviewed_studio(self.root, self.work)
         blank = {"responsibilities": [], "follow": []}
         result = self.save_remit(blank)
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)

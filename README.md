@@ -1,10 +1,13 @@
 # oryx
 
-**A personal workspace for product managers who use Codex or Claude Code.**
+**A personal workspace for PMs and founders who manage their own products with Codex or Claude Code.**
 
 A customer asks for better reporting. You remember passing on it last quarter. What changed? With oryx, you can put today's interview beside the original decision and see whether the case is any stronger. Your evidence and decisions live in a private Git repository on your machine. Either client can pick up the thread next time.
 
 I chose the oryx for its resilience and endurance in harsh environments. I’m building this to help PMs keep product craft alive as AI changes how we work. Knowing which question to ask, whose experience to trust, and when to change your mind still matters.
+
+You own the product decisions and the words you share. Oryx can gather the evidence, work through trade-offs with you, and help write what you mean.
+When time is tight, ask for expedite mode. Oryx takes on more legwork and keeps each evidence check and decision with its owner.
 
 [Quick start](#quick-start) · [Make it yours](#make-it-yours) · [Browse the workflows](playbook/commands.md)
 
@@ -26,10 +29,10 @@ The local browser app lets you present the roadmap, review priorities, and work 
 Install Git, Python 3.9 or later, and either Codex CLI or Claude Code. On Linux or WSL2, protected sessions need bubblewrap with working user namespaces. On macOS, they use `sandbox-exec`.
 
 1. Clone this repository using GitHub’s **Code** button and open a terminal in the checkout.
-2. Create your private workspace. Replace the examples with your name and the system your engineers use.
+2. Create your private workspace with your name. If you use a delivery tool, you can add `--delivery-system "Tool name"`.
 
    ```sh
-   python3 tools/pm.py init-workspace --owner "Your name" --delivery-system "Linear"
+   python3 tools/pm.py init-workspace --owner "Your name"
    ```
 
 3. Start a protected session with your preferred client.
@@ -39,9 +42,16 @@ Install Git, Python 3.9 or later, and either Codex CLI or Claude Code. On Linux 
    | Codex CLI | `python3 tools/pm.py agent codex` |
    | Claude Code | `python3 tools/pm.py agent claude` |
 
-4. Trust the project hooks in your client. Start with one product and a question you’re working on.
+4. Trust the project hooks in your client. Tell oryx what you want to work on.
 
-> I own checkout. Support says shoppers leave when they see shipping costs. Help me work out what to verify before we change pricing.
+Your first request starts a walkthrough with oryx. You can share a source or explain the business in your own words.
+Together you review customers, economics, the product portfolio, growth, and strategic trade-offs. You can leave questions open or say a topic does not apply.
+If you’re a founder starting with an idea, your own account is enough to begin. Bring back what you learn and review what it changes.
+
+Next, oryx asks about your role, day-to-day responsibilities, expectations and aspirations. You can review one point at a time or leave it open.
+You can also map who you work with and how decisions happen. Oryx keeps the stakeholder map separate from your profile. [PM walkthrough](playbook/pm-context.md)
+
+Product work stays on hold pending the product walkthrough. You can keep your company, profile and stakeholder context current in the meantime.
 
 ## Make it yours
 
@@ -53,7 +63,7 @@ Install Git, Python 3.9 or later, and either Codex CLI or Claude Code. On Linux 
 
 | Location | What lives there |
 | --- | --- |
-| `studio/context/` | Company and product context, source material, and meeting notes |
+| `studio/context/` | Company, PM, stakeholder and product context, sources, and meeting notes |
 | `studio/workspace/` | Discovery briefs, experiments, planning comparisons, and launch work |
 | `studio/customizations/` | Your standing rules, templates, fields, and views |
 | `studio/README.md` · `studio/settings.json` | Your session handoff and local configuration |

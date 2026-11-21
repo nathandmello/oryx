@@ -14,6 +14,7 @@ import pm
 import pm_profile
 import preferences
 import workspace
+from onboarding_fixtures import reviewed_studio
 
 
 class PreferenceTests(unittest.TestCase):
@@ -28,6 +29,7 @@ class PreferenceTests(unittest.TestCase):
                 shutil.copyfile(source, target)
         subprocess.run(["git", "init", "-q", str(self.root)], check=True)
         self.private = workspace.initialise(self.root, owner="Fixture PM")
+        reviewed_studio(self.root, self.private)
         self.path = self.private / pm_profile.PATH
 
     def cli(self, *args, error=None):

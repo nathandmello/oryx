@@ -19,6 +19,7 @@ from unittest.mock import patch
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "tools"))
 import pm
 import records
+from onboarding_fixtures import reviewed_studio
 
 
 class InitiativeTests(unittest.TestCase):
@@ -48,6 +49,7 @@ class InitiativeTests(unittest.TestCase):
         self.work = self.root / "studio"
         self.ledger = self.work / "workspace/backlogs/example/initiatives.json"
         self.cli("init-workspace", "--owner", "Fixture PM", "--delivery-system", "Fixture delivery")
+        reviewed_studio(self.root, self.work)
         self.cli("new", "company-context", self.company)
         self.cli("new", "product-context", self.product_context)
         self.product_id = records.work_state((self.work / self.product_context).read_text())[0]["ID"]

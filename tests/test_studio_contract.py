@@ -13,6 +13,7 @@ from urllib.request import Request, urlopen
 
 import test_opportunities
 import test_pm
+from onboarding_fixtures import reviewed_setup
 
 
 def git(repository, *args):
@@ -43,7 +44,7 @@ class StudioContractTests(unittest.TestCase):
             return result.stdout.strip()
 
     def test_first_write_after_a_direct_core_update(self):
-        test_pm.HubTests.setUp(self)
+        reviewed_setup(self)
         self.env = os.environ.copy()
         record = "workspace/goals/renewals.md"
         self.command("new", "goal", record)
@@ -116,7 +117,7 @@ class StudioContractTests(unittest.TestCase):
                 self.assertNotIn("fixture sentinel", message)
 
     def test_incompatible_checkout_refuses_new_customization_writes(self):
-        test_pm.HubTests.setUp(self)
+        reviewed_setup(self)
         self.env = os.environ.copy()
         settings = self.work / "settings.json"
         values = json.loads(settings.read_text())
@@ -155,6 +156,13 @@ class StudioContractTests(unittest.TestCase):
             "scope": "Weekly reviews", "behavior": "Start with the company summary."}}}
         policy = self.root.parent / "Company workflow.json"
         policy.write_text(json.dumps(company))
+        onboarding = action("context company show")
+        self.assertEqual(onboarding["revision"], 0)
+        self.assertIsNone(onboarding["pending"])
+        self.assertFalse((self.work / "workspace/onboarding/company.json").exists())
+        profile = action("context pm show")
+        self.assertIn("sections", profile)
+        self.assertNotIn("passages", profile)
         self.assertIsNone(action("workspace company show"))
         self.assertTrue(action("workspace company apply", str(policy))["changed"])
         self.command("override", "set", "weekly-review-order", "--scope", "Weekly reviews", "--behavior", rule)

@@ -2,7 +2,9 @@
 
 from datetime import date, timedelta
 import json
+import os
 import unittest
+from unittest.mock import patch
 
 import test_opportunities
 
@@ -153,6 +155,7 @@ class ShipReadinessTests(unittest.TestCase):
         self.assertEqual(guided["arguments"], ["example", "renewal"])
 
         original = self.hub.preview(self.ship())
+        reviewed_on = self.readiness(original)["reviewed_on"]
         self.change("task", self.edit(
             self.task, source="New canary report", resolution="The test alert reached the escalation lead.",
         ), preview=True)
@@ -160,14 +163,17 @@ class ShipReadinessTests(unittest.TestCase):
             self.monitor, status="blocked", blocked_reason=self.withdrawal, verification=None,
         ), preview=True)
         self.assertEqual([path.read_bytes() for path in files], originals)
-        self.assertEqual(self.readiness(original)["reviewed_on"], self.hub.today)
 
         self.change("launch-checklist", self.edit("support-handoff", title="Confirm EU support handoff"))
         self.change("task", self.edit(self.task, due_on=self.hub.today, priority="high"), self.edit(
             "support-demo", "add", title="Schedule the support demo",
             completion_criteria="The support lead accepts the invitation.",
         ))
-        self.assertEqual(self.hub.preview(self.ship()), original)
+        with patch.dict(os.environ, self.hub.env):
+            refreshed, *_ = test_opportunities.pm.initiative_store.prepare(
+                self.hub.root, "example", [self.ship()], review_dates={0: reviewed_on},
+            )
+        self.assertEqual(refreshed, original)
         self.hub.apply(original)
         self.assertEqual(self.current_initiative()["phase"], "shipped")
 

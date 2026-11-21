@@ -7,6 +7,7 @@ argument-hint: "[domain] [subject] [verb] [arguments]"
 # oryx actions
 
 Run `python3 tools/pm.py action` from the root of the oryx checkout.
+If an action returns a setup step, lead the [company](../../../playbook/company-context.md) or [PM walkthrough](../../../playbook/pm-context.md) in conversation. Resume the request after onboarding.
 For `/pm` alone, show the available domains from `action`.
 For a partial path, pass it to `action` to list the next choices.
 Use `--help` on a complete path to check its purpose and accepted options.
@@ -26,6 +27,7 @@ Run the guided action. Apply its applicable workspace instructions when followin
 Verify the required scope and source before writing. Observe the guide's existing permission and decision gates.
 
 For ordinary requests about product choices, use the [conversation guide](../../../playbook/conversation.md).
+When helping shape a goal or strategy, use [goal alignment](../../../playbook/framework.md#goal-alignment) with the PM's company context.
 
 ## Workspace rules
 

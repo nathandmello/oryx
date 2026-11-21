@@ -125,6 +125,29 @@ class LocalUITests(unittest.TestCase):
         self.assertEqual(rejected.returncode, 2)
         self.assertIn("invalid choice", rejected.stderr)
 
+    def test_unreviewed_studio_routes_api_reads_and_writes_to_agent_setup(self):
+        fixture = self.fixture
+        self.assertIn("products", self.call("catalog", {}))
+        fixture.work.rename(fixture.parent / "reviewed-studio")
+        fixture.cli("init-workspace", "--owner", "Fixture PM")
+        before = {path: path.read_bytes() for path in pm.inventory(fixture.work) if path.is_file()}
+        for endpoint, body in (
+            ("catalog", {}),
+            ("roadmap", {"product": "example"}),
+            ("roadmap-preview", {"mode": "new", "product": "example"}),
+            ("approve", {"id": "earlier-review"}),
+            ("work", {"product": "example", "command": "task", "operation": "apply", "save": True}),
+        ):
+            with self.subTest(endpoint=endpoint), self.assertRaises(HTTPError) as error:
+                self.call(endpoint, body)
+            with error.exception as response:
+                self.assertEqual(response.code, 409)
+                result = json.load(response)
+                self.assertEqual(result["status"], "onboarding_required")
+                self.assertEqual(result["onboarding"]["stage"], "company")
+                self.assertEqual(set(result["onboarding"]), {"stage", "stage_available", "prompt"})
+        self.assertEqual(before, {path: path.read_bytes() for path in pm.inventory(fixture.work) if path.is_file()})
+
     def test_open_session_keeps_roadmap_exports_fields_and_starters_across_studio_upgrade(self):
         fixture = self.fixture
         self.approve_candidate()

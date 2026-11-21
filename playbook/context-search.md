@@ -6,11 +6,21 @@ oryx ships an English embedding model with the system checkout. Existing private
 The resolver first identifies the company, product, area, or initiative. A follow-up can reuse the saved session scope.
 An ambiguous request returns possible subjects. A named record or exact identifier keeps its existing routing priority.
 
+When a search finds no match, describe what you checked. Leave the underlying question open.
+Carry a documented exclusion forward with its original scope and timing.
+
+For a question about the PM, use `pm.py pm-profile --topic responsibilities` or the relevant profile topic.
+Use `pm.py pm-profile` to list older or handwritten sections. Ask before opening a section that mixes personal subjects.
+Use the [stakeholder map](stakeholders.md) for reporting lines or decision roles.
+
 Within that scope, the resolver compares eligible passages by wording and meaning.
 It uses the title, heading, and valid section lead to interpret short passages.
 It checks selected notes against the current source file and returns the complete entry with its source references.
 Company boundaries, applicable rules, and closed decisions have first claim on the available space.
-Check cited records when evidence conflicts or the response reports a gap.
+
+Use each entry’s `evidence_status`, exact wording, source date, and scope when explaining it.
+Company lookups also surface relevant, unresolved onboarding questions. Preserve their follow-up cues.
+Carry an attached open question alongside its claim into later conversations. Ask before relying on conflicting or incomplete evidence.
 
 Risk reviews use the evidence journal and signed initiative records. They can apply even when a passage ranks below the search cutoff.
 Use `--history` to include recorded dispositions for the current scope.

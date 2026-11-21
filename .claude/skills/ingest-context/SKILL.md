@@ -1,11 +1,12 @@
 ---
 name: ingest-context
-description: Use automatically when the PM asks to capture, file, update, or reconcile context, including existing briefs, mixed evidence, and open questions.
+description: Use for company or PM onboarding and requests to capture, file, update, or reconcile context, including existing briefs, mixed evidence, and open questions.
 ---
 
 # Ingest context
 
-Use [the context rules](../../../playbook/context.md) and the routing command. The PM can request capture in plain language. Use the [conversation guide](../../../playbook/conversation.md) for coaching or offers. Keep authorized capture direct.
+Use the [company](../../../playbook/company-context.md) or [PM walkthrough](../../../playbook/pm-context.md). Carry open questions forward.
+Apply the [context rules](../../../playbook/context.md) and [conversation guidance](../../../playbook/conversation.md) across captures.
 
 For initiative meetings, use the transcript retrieval and summary workflow in [summarize-meeting](../summarize-meeting/SKILL.md). Route reusable findings with this skill.
 
@@ -21,20 +22,22 @@ When a release flags older records, follow [the context cleanup procedure](../..
 - Read parent briefs for inherited rules. Resolve conflicting authority before applying an exception.
 - Inspect permitted material in each supplied source. Record coverage as read, partial, or unavailable.
 - Supply inspected plaintext in each source’s `text` field when permitted. Use a private-root-relative link for a local source.
-- Inspect every source for relevant claims. Split mixed passages at claim boundaries.
+- Split source evidence by claim. Leave omissions open. Clarify material gaps.
 - Use [check-numbers](../check-numbers/SKILL.md) for material figures. Keep an unverified metric identifiable as a reported claim.
 - Keep actors, negation, conditions, exceptions, numbers, and locators. Record material implications with [evidence reviews](../../../playbook/evidence-reviews.md).
 - Inspect `risk_preview`. State material warnings in quiet mode. File risk history with the authorized source record.
-- Use one short excerpt per claim. Include every material commitment or exclusion, even when a source already supplies enough general facts.
-- Treat draft proposals and personal views as such. Flag unresolved authority or conflicts in the reply.
+- Quote each material claim, commitment, and explicit exclusion. Preserve its scope and time.
+- Attribute hypotheses to their owners in `interpretation`. Keep tentative wording, open questions, and each observation’s original scope.
+- Flag proposals, uncertain authority, and conflicts for review.
 
 ## Route
 
 - Choose the purpose first. Put reusable context under its entity in `context/`. Put plans, experiments, and other work in `workspace/`. Use the remit to explain why the item matters.
-- Keep `context/company/overview.md` focused on standing company facts and commitments. Link to ongoing developments and detailed records.
+- Keep the company overview focused on the market, business model, portfolio and company choices. Link to detailed records.
+- File product-market fit evidence with the offering and segment. Confirm any separate company implication before recording it.
 - Keep product information with its product. Set `product_area` for area-specific product or initiative claims, questions, and answers.
 - Route standing area guidance to its maintained area brief. Start inline until the [area filing test](../../../playbook/filing.md#product-area-context) passes.
-- Route supplied PM background and preferences into the PM profile with `scope: pm`. Confirm proposed ownership changes with the PM.
+- Route PM facts with `scope: pm`. Confirm ownership changes separately. File relationships in the [stakeholder map](../../../playbook/stakeholders.md).
 - Use `area` for cross-product responsibilities and `reference` for other topics the PM values.
 - Put reusable initiative guidance in its context brief. Keep plans and progress in the initiative’s workspace.
 - Surface a sibling product update as an FYI when relevant. Flag its concrete effect on an owned product.
@@ -47,14 +50,14 @@ When a release flags older records, follow [the context cleanup procedure](../..
 - Use delivery for requirements and design. Use detail to retain the source. Use unclear when ownership needs review.
 - Record a specific open question where its answer matters. Supply an answer only when an excerpt resolves it.
 - Capture actionable rules. Use vocabulary and decision fields for structured entries. Link permitted examples from actual work.
-- Record a decision as closed after confirmation. Preserve its scope, rationale, and next step.
+- Confirm the specific choice with the PM before recording a decision. Preserve its owner, scope, rationale and next step.
 
 ## Apply
 
-- Run `route-context` in preview mode. Inspect each home, heading, lead, disposition, and relevance. Account for each supplied source.
+- Review onboarding findings with the current stage’s capture command. For an existing company decision, preview `route-context` separately. Use the same router for ordinary capture. Inspect routes and source coverage.
 - Run `route-context --write PATH` for one authorised record at a time. Use an existing artifact's workflow for other records.
-- Treat access to a source as permission to read it. A suggested destination grants no write permission.
-- Report FYIs and other out-of-scope entries in the reply. Save them when the PM requests retention.
+- Use the PM's approved source scope. Seek separate permission to expand the search or save generated content.
+- Report FYIs in chat. An unmatched topic leaves involvement open. Save out-of-scope items only on request.
 - Keep ingestion diagnostics in the reply. A lasting note needs a distinct purpose and authorisation.
 - Keep earlier facts and open questions visible. Report conflicts before replacing accepted content.
 - Remove unused sections and stale material during an authorised review. Tie the review to a decision, release, or source change.

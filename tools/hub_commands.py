@@ -158,7 +158,7 @@ def show(catalog, parts):
         print(f"  /pm {path} [{effect}]  {entry['summary']}")
 
 
-def route(root, args):
+def route(root, args, *, check_setup=None):
     """Return the CLI arguments, or print the catalog or a workflow handoff."""
     catalog = load(root)
     if args == ["--catalog"]:
@@ -181,6 +181,8 @@ def route(root, args):
             raise ValueError("Unknown oryx action. Run pm.py action to list domains.")
         if help_requested and len(args) != len(parts) + 1:
             raise ValueError("Use help on its own after a domain or subject.")
+        if check_setup and not help_requested:
+            check_setup(None, None)
         show(catalog, parts)
         return None
     path = " ".join(parts)
@@ -192,6 +194,8 @@ def route(root, args):
         raise ValueError(f"Unknown oryx action. Run pm.py action {menu} to see the available paths.")
     entry = catalog["commands"][path]
     arguments = args[3:]
+    if check_setup and arguments not in (["-h"], ["--help"]):
+        check_setup(path, entry)
     if describe:
         print(json.dumps({"command": path, "effect": "guided", **entry}, indent=2))
         return None

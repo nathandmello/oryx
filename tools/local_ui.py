@@ -12,6 +12,7 @@ import webbrowser
 import initiative_store
 import layout
 import customizations
+import onboarding
 import roadmap_edit
 import storage
 import task_context
@@ -36,6 +37,11 @@ class App:
         self.confirm = confirm
         self.approval_lock = Lock()
         self.review = None
+
+    def require_setup(self):
+        state = onboarding.status(workspace.repo(self.root, "workspace"))
+        if not state["ready"]:
+            raise onboarding.SetupRequired(state)
 
     def catalog(self):
         private = workspace.repo(self.root, "workspace")
@@ -109,12 +115,14 @@ class App:
             if not self.confirm(self.root, review):
                 return {"cancelled": True}
             try:
+                self.require_setup()
                 revision = initiative_store.apply(self.root, review["product"], proposal, self.key)
             finally:
                 self.review = None
             return {"revision": revision}
 
     def dispatch(self, path, body):
+        self.require_setup()
         if path == "/api/catalog":
             return self.catalog()
         if path == "/api/approve":
@@ -223,6 +231,9 @@ class Handler(BaseHTTPRequestHandler):
             if not isinstance(body, dict):
                 raise ValueError("Supply a JSON object")
             result = self.server.app.dispatch(self.path, body)
+        except onboarding.SetupRequired as exc:
+            step = {key: exc.state[key] for key in ("stage", "stage_available", "prompt")}
+            self.json_response(409, onboarding.required(step))
         except (KeyError, TypeError, AttributeError):
             self.json_response(400, {"error": "Supply the fields for this oryx operation"})
         except (OSError, ValueError, subprocess.SubprocessError) as exc:

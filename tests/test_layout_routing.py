@@ -7,13 +7,14 @@ import sys
 import unittest
 
 import test_pm
+from onboarding_fixtures import reviewed_setup
 import filing
 import layout
 import pm
 
 
 class PurposeRoutingTests(unittest.TestCase):
-    setUp = test_pm.HubTests.setUp
+    setUp = reviewed_setup
 
     def cli(self, *args, payload=None, ok=True):
         run = subprocess.run([sys.executable, str(self.root / "tools/pm.py"), *args], cwd=self.root,

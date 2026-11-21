@@ -92,6 +92,61 @@ test("the shared launcher opens each named screen and stays there on reload", as
   }
 });
 
+test("an empty Studio opens its agent walkthrough from a task deep link", async ({ hub, page }) => {
+  const studio = path.join(hub.root, "studio");
+  const reviewed = path.join(path.dirname(hub.root), "reviewed-studio");
+  fs.renameSync(studio, reviewed);
+  execFileSync(python, [path.join(hub.root, "tools", "pm.py"), "init-workspace", "--owner", "Fixture PM"],
+    { cwd: hub.root, stdio: "pipe" });
+  const address = new URL(hub.url);
+  address.searchParams.set("screen", "tasks");
+  await page.goto(address.href);
+  await expect(page.getByRole("heading", { name: "Continue onboarding" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Company context" })).toBeVisible();
+  await expect(page.getByText("Continue in your oryx conversation.", { exact: false })).toBeVisible();
+  await expect(page.getByRole("textbox")).toHaveCount(0);
+  await expect(button(page, "New task")).toHaveCount(0);
+  await page.reload();
+  await expect(page.getByRole("heading", { name: "Continue onboarding" })).toBeVisible();
+
+  const catalog = path.join(hub.root, "playbook", "onboarding-frameworks.json");
+  const frameworks = JSON.parse(fs.readFileSync(catalog, "utf8"));
+  fs.writeFileSync(catalog, JSON.stringify({ ...frameworks, product: null }));
+  let progress = hub.cli(["onboarding", "status"]);
+  for (const topic of frameworks.company) {
+    progress = hub.cli(["onboarding", "review-topic"], {
+      revision: progress.revision, stage: "company", topic: topic.id,
+      outcome: "open", pm_reply: "I'm still figuring that out.",
+    });
+  }
+  await button(page, "Check progress").click();
+  await expect(page.getByRole("heading", { name: "PM context" })).toBeVisible();
+  await expect(page.getByText(frameworks.pm[0].question, { exact: true })).toBeVisible();
+  for (const topic of frameworks.pm) {
+    progress = hub.cli(["onboarding", "review-topic"], {
+      revision: progress.revision, stage: "pm", topic: topic.id,
+      outcome: "open", pm_reply: "Let's keep this open for now.",
+    });
+  }
+  await button(page, "Check progress").click();
+  await expect(page.getByRole("heading", { name: "Product context" })).toBeVisible();
+  await expect(page.getByText("You can still update your company, PM, and stakeholder context", { exact: false })).toBeVisible();
+  await expect(button(page, "New task")).toHaveCount(0);
+
+  const checkpoint = path.join(studio, "workspace", "onboarding", "review.json");
+  fs.writeFileSync(checkpoint, "damaged test checkpoint");
+  await button(page, "Check progress").click();
+  await expect(page.getByText("Ask oryx to review your saved progress with you.")).toBeVisible();
+  await expect(page.getByText("You can still update your company", { exact: false })).toHaveCount(0);
+
+  fs.writeFileSync(catalog, JSON.stringify(frameworks));
+  fs.renameSync(studio, path.join(path.dirname(hub.root), "empty-studio"));
+  fs.renameSync(reviewed, studio);
+  await button(page, "Check progress").click();
+  await expect(page.getByRole("heading", { name: "Tasks", exact: true })).toBeVisible();
+  expect(new URL(page.url()).searchParams.get("screen")).toBe("tasks");
+});
+
 test("compare and sign a cycle, filter the board, and approve a drag change", async ({ hub, page }) => {
   test.setTimeout(75_000);
   const template = path.join(hub.root, "templates", "prioritization.md");

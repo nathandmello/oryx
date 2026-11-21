@@ -12,6 +12,7 @@ import unittest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "tools"))
 import pm
+from onboarding_fixtures import reviewed_studio
 
 
 class InitiativeWorkTests(unittest.TestCase):
@@ -32,6 +33,7 @@ class InitiativeWorkTests(unittest.TestCase):
         self.env = dict(os.environ)
         self.env.pop("PM_HUB_SHARED_GROUP", None)
         self.cli("init-workspace", "--owner", "Fixture PM")
+        reviewed_studio(self.root, self.private)
         company = "context/company/overview.md"
         product = f"context/products/{self.product}/overview.md"
         self.cli("new", "company-context", company)

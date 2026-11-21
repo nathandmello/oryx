@@ -12,7 +12,8 @@ import sys
 
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE.parent))
-from test_pm import HubTests, pm, records
+from test_pm import HubTests, confirmed_decisions, pm, records
+from onboarding_fixtures import reviewed_studio
 
 
 def command(root, *args):
@@ -35,7 +36,13 @@ def capture(hub, destination, entries, evidence=None, evidence_id=None):
             dict(entry, source=1, quote=source["text"], location=source["title"])
             for entry in entries
         ]
-    result = hub.context_capture({"sources": sources, "entries": entries}, "--write", destination)
+    payload = {"sources": sources, "entries": entries}
+    if any("decision" in entry for entry in entries):
+        preview = hub.context_capture(payload)
+        if preview.returncode:
+            raise RuntimeError(preview.stdout or preview.stderr)
+        payload = confirmed_decisions(payload, json.loads(preview.stdout))
+    result = hub.context_capture(payload, "--write", destination)
     if result.returncode:
         raise RuntimeError(f"{destination}: {result.stdout or result.stderr}")
     return json.loads(result.stdout)["written"]
@@ -451,6 +458,7 @@ def main():
         hub = HubTests()
         try:
             hub.setUp()
+            reviewed_studio(hub.root, hub.work)
             results = [*checks(hub, evidence), *numeric_checks(hub.root)]
         finally:
             hub.doCleanups()

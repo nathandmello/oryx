@@ -7,6 +7,7 @@ import sys
 import unittest
 
 import test_pm
+from onboarding_fixtures import reviewed_setup
 import company_source
 import hook
 import overrides
@@ -20,7 +21,7 @@ def bundle(revision=1, **changes):
 
 
 class CompanySourceTests(unittest.TestCase):
-    setUp = test_pm.HubTests.setUp
+    setUp = reviewed_setup
 
     def cli(self, *args):
         result = subprocess.run([sys.executable, str(self.root / "tools/pm.py"), *args],

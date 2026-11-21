@@ -87,7 +87,7 @@ def source_rows(inputs):
 COMMITMENT = re.compile(r"\b(?:will|shall|must|never|prohibited|forbidden|excluded|cannot|won['’]t)\b", re.I)
 
 
-def verify_excerpts(inputs, entries, private):
+def verify_excerpts(inputs, entries, private, *, single_excerpt=False):
     """Check literal coverage in inspected text. Qualitative relevance still needs review."""
     reports = []
     for index, source in enumerate(inputs, 1):
@@ -128,7 +128,10 @@ def verify_excerpts(inputs, entries, private):
                     continue
                 start = whole.index(sentence, offset)
                 end = offset = start + len(sentence)
-                if not COMMITMENT.search(sentence):
+                if single_excerpt:
+                    if not any(left < end and right > start for left, right in spans):
+                        continue  # Other findings are reviewed independently.
+                elif not COMMITMENT.search(sentence):
                     continue
                 statements.append(sentence)
                 cursor = start
@@ -142,8 +145,13 @@ def verify_excerpts(inputs, entries, private):
                         break
                     cursor = min(end, right)
                 if re.search(r"\w", whole[cursor:end]):
+                    if single_excerpt:
+                        raise ValueError(f"Source {index}: retain the full reviewed sentence and its qualifications: {sentence}")
                     raise ValueError(f"Source {index}: route or explicitly defer the entire commitment: {sentence}")
-        reports.append({"source": index, "verification": "supplied text", "commitment_sentences": len(statements)})
+        if single_excerpt:
+            reports.append({"source": index, "verification": "reviewed excerpt matched inspected text"})
+        else:
+            reports.append({"source": index, "verification": "supplied text", "commitment_sentences": len(statements)})
     return reports
 
 
@@ -521,6 +529,13 @@ def note_filing(private, record):
 
 
 def validate_entry_shape(entry, section):
+    if "record_decision" in entry and "decision" not in entry:
+        raise ValueError("Use decision confirmation only to record an explicitly reviewed decision")
+    if "uncertainty" in entry:
+        if not section or entry.keys() & {"decision", "rule", "term", "question", "answers"}:
+            raise ValueError("Attach an unresolved question to a sourced statement or interpretation")
+        if not records.specific(line(entry["uncertainty"], "Unresolved question")):
+            raise ValueError("Describe the specific uncertainty that remains")
     if "supersedes" in entry:
         prior = entry["supersedes"]
         fields(prior, ("source", "entry"))
@@ -598,7 +613,35 @@ def section_leads(text, entries):
     return leads
 
 
-def route(payload, private, remit=None):
+def decision_review(entry, destination, source):
+    """Bind recording consent to the destination, decision, evidence and replacement."""
+    from decision_authority import fingerprint
+
+    reviewed = {"destination": destination, "decision": entry["decision"], "source": source,
+                "quote": entry["quote"], "location": entry["location"],
+                "product_area": entry.get("product_area"), "supersedes": entry.get("supersedes")}
+    return fingerprint(reviewed)
+
+
+def validate_decision_approval(entry, revision, checked_on):
+    if "record_decision" not in entry:
+        return
+    approval = entry["record_decision"]
+    fields(approval, ("revision", "pm", "date", "reference", "reply"))
+    if approval["revision"] != revision:
+        raise ValueError("Decision or evidence changed. Show the new decision preview to the PM")
+    reply = line(approval["reply"], "PM reply")
+    if reply.strip().rstrip(".").casefold() != "record this decision":
+        raise ValueError('For this decision preview, ask the PM to choose "Record this decision" explicitly')
+    iso_day(approval["date"], "Recording confirmation date")
+    if approval["date"] < max(entry["decision"]["date"], checked_on):
+        raise ValueError("Recording confirmation cannot predate the decision or the reviewed evidence")
+    for key in ("pm", "reference"):
+        if not records.specific(line(approval[key], key)):
+            raise ValueError("Supply the PM, discussion reference and exact confirmation reply")
+
+
+def route(payload, private, remit=None, *, single_excerpt=False, descriptive_intake=False):
     """Plan destinations and PM relevance independently from prepared excerpts."""
     fields(payload, ("sources", "entries"), ("responses",))
     responses = payload.get("responses", [])
@@ -614,7 +657,7 @@ def route(payload, private, remit=None):
     for entry in payload["entries"]:
         fields(entry, ("scope",), ("topic", "heading", "lead", "product", "product_area", "initiative", "subject",
                                     "record", "affects", "source", "location", "quote", "question", "answers",
-                                    "interpretation", "rule", "term", "decision", "supersedes", "risk"))
+                                    "interpretation", "uncertainty", "rule", "term", "decision", "record_decision", "supersedes", "risk"))
         scope = line(entry["scope"], "Scope")
         if scope not in TOPICS and scope not in DEFERRED | {"area", "reference"}:
             raise ValueError(f"Unknown context scope: {scope}")
@@ -633,6 +676,8 @@ def route(payload, private, remit=None):
             subject = f"product/{entry['product']}"
         elif scope == "company":
             canonical, subject = COMPANY_PATH, "company"
+        elif scope == "stakeholder":
+            canonical, subject = layout.STAKEHOLDERS, "stakeholders"
         elif scope == "pm":
             canonical, subject = REMIT_PATH, "pm"
         elif scope in ("area", "reference"):
@@ -686,8 +731,8 @@ def route(payload, private, remit=None):
             subject_key(affected, ("product", "area"))
             line(reason, "Consequence")
         attention, responsibilities = relevance(remit, subject, affects)
-        if scope == "pm" and not responsibilities:
-            attention = "pm"
+        if scope in {"pm", "stakeholder"} and not responsibilities:
+            attention = scope
 
         if "question" in entry:
             if not section or entry.keys() & {"source", "location", "quote", "answers", "interpretation"}:
@@ -712,6 +757,11 @@ def route(payload, private, remit=None):
                 line(entry["answers"], "Answered question")
             if "interpretation" in entry:
                 line(entry["interpretation"], "Interpretation")
+        if "decision" in entry:
+            evidence = sources[entry["source"] - 1]
+            revision = decision_review(entry, destination, evidence)
+            validate_decision_approval(entry, revision, evidence["checked_on"])
+            entry = dict(entry, decision_revision=revision)
         entries.append(dict(entry, destination=destination, section=section, disposition=disposition,
                             relevance=attention, responsibilities=responsibilities))
     originals = upgrades.source_paths(private)
@@ -731,12 +781,13 @@ def route(payload, private, remit=None):
             heading = entry["section"]
             entry["section_lead"] = leads[heading]
             entry["section_action"] = "reuse" if records.section(text, heading) is not None else "create"
-    verification = verify_excerpts(payload["sources"], entries, private)
+    verification = verify_excerpts(payload["sources"], entries, private, single_excerpt=single_excerpt)
     plan = {"sources": sources, "entries": entries, "source_checks": verification, "remit_configured": remit is not None,
             "remit_status": remit_status(remit)}
-    risk_preview = evidence_reviews.preview(private, entries, sources)
-    if risk_preview:
-        plan["risk_preview"] = risk_preview
+    if not descriptive_intake:
+        risk_preview = evidence_reviews.preview(private, entries, sources)
+        if risk_preview:
+            plan["risk_preview"] = risk_preview
     if responses:
         plan["responses"] = responses
     return plan
@@ -777,17 +828,29 @@ def scoped_text(entry, value):
     return value
 
 
+def pm_topic_marker(entry):
+    topic = entry.get("topic")
+    if entry.get("scope") == "pm" and topic in pm_profile.WALKTHROUGH_TOPICS:
+        return f" <!-- pm-topic:{topic} -->"
+    return ""
+
+
 def render_entry(entry, identifier):
-    cite = f"[{identifier}] ({literal(entry['location'])})"
+    cite = f"[{identifier}] ({literal(entry['location'])}){pm_topic_marker(entry)}"
     quote = literal(entry["quote"])
     if "term" in entry:
         term = entry["term"]
         return table_row([literal(term["name"]), f"{scoped_text(entry, quote)} {cite}", literal(term["owner"]), literal(term["avoid"])])
     if "decision" in entry:
         decision = entry["decision"]
+        evidence = f"{quote} {cite}"
+        if "record_decision" in entry:
+            approval = entry["record_decision"]
+            evidence += (f". Confirmed for recording by {literal(approval['pm'])} on {approval['date']} "
+                         f"({literal(approval['reference'])}): {literal(approval['reply'])}")
         return table_row([
             literal(decision["question"]), scoped_text(entry, literal(decision["scope"])), f"{literal(decision['person'])}, {decision['date']}",
-            f"{quote} {cite}", literal(decision["next_step"]),
+            evidence, literal(decision["next_step"]),
         ])
     if "rule" in entry:
         label, statement = "Rule", literal(entry["rule"])
@@ -798,8 +861,14 @@ def render_entry(entry, identifier):
                  "Reported metric" if metric_checks.is_claim(entry["quote"]) else "Fact")
         statement = "Source excerpt"
     if label == "Reported metric":
-        return f"- {label}: {scoped_text(entry, quote)} {cite}"
-    return f"- {label}: {scoped_text(entry, statement)} {cite}\n  > {quote}"
+        result = f"- {label}: {scoped_text(entry, quote)} {cite}"
+    else:
+        result = f"- {label}: {scoped_text(entry, statement)} {cite}\n  > {quote}"
+    if "uncertainty" in entry:
+        result += f"\n  Open question at capture: {scoped_text(entry, literal(entry['uncertainty']))}"
+    if "answers" in entry:
+        result += f"\n  Answers: {scoped_text(entry, literal(entry['answers']))}"
+    return result
 
 
 def mark_superseded(body, entry, replacement, known, date):
@@ -857,7 +926,7 @@ def insert_entries(text, selected, sources, private, target, leads=None):
             originals[heading] = records.split_context_lead(records.section(text, heading) or "")
             updates[heading] = section_body(originals[heading][1], heading)
         if "question" in entry:
-            bullet = f"- Unknown: {scoped_text(entry, literal(entry['question']))}"
+            bullet = f"- Unknown: {scoped_text(entry, literal(entry['question']))}{pm_topic_marker(entry)}"
         else:
             source = sources[entry["source"] - 1]
             reference = records.retarget_links(source["reference"], private / "README.md", target, private)
@@ -889,7 +958,7 @@ def insert_entries(text, selected, sources, private, target, leads=None):
     for entry in selected:
         if "answers" in entry:
             heading = entry["section"]
-            question = f"- Unknown: {scoped_text(entry, literal(entry['answers']))}"
+            question = f"- Unknown: {scoped_text(entry, literal(entry['answers']))}{pm_topic_marker(entry)}"
             # A question with continuation lines needs a separate review of the whole entry.
             pattern = rf"^{re.escape(question)}(?:\n(?!\n*  )|\Z)"
             updates[heading] = re.sub(pattern, "", updates[heading], flags=re.M).strip()
@@ -947,12 +1016,19 @@ def apply_profile(root, private, target, selected, sources, lint):
     return True
 
 
-def apply(root, destination, plan, owner, lint):
+def apply(root, destination, plan, owner, lint, *, descriptive_intake=False):
     private = storage.private_root(root)
     target = record_path(private, destination)
     original = target.read_text(encoding="utf-8") if target.is_file() else None
     marker = records.MARKER.match(original or "")
     selected = [entry for entry in plan["entries"] if entry["destination"] == destination]
+    for entry in selected:
+        if "decision" in entry:
+            if "record_decision" not in entry:
+                raise ValueError("Ask the PM to confirm recording the specific previewed decision. Supply record_decision.")
+            evidence = plan["sources"][entry["source"] - 1]
+            revision = decision_review(entry, destination, evidence)
+            validate_decision_approval(entry, revision, evidence["checked_on"])
     responses = [r for r in plan.get("responses", []) if r["record"] == destination]
     if not selected and not (responses and original is not None):
         raise ValueError("Preview the proposed context record and select a destination from that preview")
@@ -997,11 +1073,12 @@ def apply(root, destination, plan, owner, lint):
     candidate = insert_entries(text, selected, plan["sources"], private, target, section_leads(text, selected))
     candidate = records.ordered_sections(candidate, order)
     with storage.writer_lock(private):
-        documents = task_context.context_documents(private, override=(destination, candidate))
-        events = evidence_reviews.capture_events(private, documents, destination, selected, plan["sources"], responses)
-        if events:
-            plan["risk_events"] = events
-            candidate = evidence_reviews.append(candidate, events)
+        if not descriptive_intake:
+            documents = task_context.context_documents(private, override=(destination, candidate))
+            events = evidence_reviews.capture_events(private, documents, destination, selected, plan["sources"], responses)
+            if events:
+                plan["risk_events"] = events
+                candidate = evidence_reviews.append(candidate, events)
         if candidate == text:
             return False
         state = records.section(candidate, "Work state")

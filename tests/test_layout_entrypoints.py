@@ -10,6 +10,7 @@ import unittest
 from unittest.mock import patch
 
 import test_pm
+from onboarding_fixtures import reviewed_setup
 import context_capture
 import hook
 import pm
@@ -19,7 +20,7 @@ import upgrades
 
 
 class LayoutEntrypointTests(unittest.TestCase):
-    setUp = test_pm.HubTests.setUp
+    setUp = reviewed_setup
 
     def cli(self, *args, payload=None):
         return subprocess.run([sys.executable, str(self.root / "tools/pm.py"), *args], cwd=self.root,

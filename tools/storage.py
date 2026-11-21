@@ -140,8 +140,26 @@ def snapshot_reader(path):
         yield source
 
 
+_writer_scope = ContextVar("oryx_writer_scope", default=None)
+
+
 @contextmanager
 def writer_lock(private):
+    # Nested workflows use the same private writer lock while updating related records.
+    scope = (os.getpid(), private)
+    if _writer_scope.get() == scope:
+        yield
+        return
+    with _writer_locks(private):
+        token = _writer_scope.set(scope)
+        try:
+            yield
+        finally:
+            _writer_scope.reset(token)
+
+
+@contextmanager
+def _writer_locks(private):
     root = private.parent
     if private.name.casefold() in PRIVATE_ROOTS and (root / "playbook/release.json").is_file():
         # The outer inode remains in place when the private checkout changes its name.

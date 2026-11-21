@@ -1,6 +1,6 @@
 {
   "domains": {
-    "context": "Company, product, area, and initiative reference material, including source and meeting evidence.",
+    "context": "Company, PM, stakeholder, product, area and initiative reference material, including source and meeting evidence.",
     "strategy": "Goals and strategic choices about which problems and outcomes to pursue.",
     "discovery": "Customer and problem validation, discovery briefs, hypotheses, and experiments.",
     "initiative": "Intake, definition, and decisions for one proposed investment.",
@@ -50,6 +50,30 @@
     "workspace workflow open": {
       "summary": "Carry out the PM's named workspace workflow with the supplied inputs.",
       "guide": "playbook/overrides.md"
+    },
+    "context company capture": {
+      "summary": "Start or resume a guided company overview with the PM.",
+      "guide": "playbook/company-context.md"
+    },
+    "context company show": {
+      "summary": "Show the current review, approved source scope, and open company questions.",
+      "effect": "read",
+      "cli": ["company-onboarding", "status"],
+      "example": []
+    },
+    "context pm capture": {
+      "summary": "Start or resume a guided review of the PM’s role and working relationships.",
+      "guide": "playbook/pm-context.md"
+    },
+    "context pm show": {
+      "summary": "Inspect the PM profile or read a selected section.",
+      "effect": "read",
+      "cli": ["pm-profile"],
+      "example": []
+    },
+    "context stakeholder show": {
+      "summary": "Look up confirmed people, reporting lines and decision relationships in the stakeholder map.",
+      "guide": "playbook/stakeholders.md"
     },
     "context area show": {
       "summary": "Locate a product area's standing context and sources.",

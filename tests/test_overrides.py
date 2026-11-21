@@ -11,13 +11,14 @@ import unittest
 from unittest.mock import patch
 
 import test_pm
+from onboarding_fixtures import reviewed_setup
 import hook
 import overrides
 import pm
 
 
 class OverrideTests(unittest.TestCase):
-    setUp = test_pm.HubTests.setUp
+    setUp = reviewed_setup
 
     def cli(self, *args):
         result = subprocess.run([sys.executable, str(self.root / "tools/pm.py"), *args],

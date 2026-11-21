@@ -6,6 +6,7 @@ import re
 SLUG = re.compile(r"[a-z0-9]+(?:-[a-z0-9]+)*")
 COMPANY = "context/company/overview.md"
 PROFILE = "context/pm/context.md"
+STAKEHOLDERS = "context/stakeholders/overview.md"
 WORK_FOLDERS = {"goal": "goals", "problem": "problems", "strategy": "strategies",
                 "roadmap": "roadmaps", "experiment": "experiments"}
 INITIATIVE_BRIEFS = ("discovery-brief", "initiative-brief")
@@ -96,7 +97,7 @@ def governed_kind(name):
 def entity(name):
     """Return the context entity directory, independent of any topic below it."""
     parts = Path(name).parts
-    if parts[:2] in (("context", "company"), ("context", "pm")) and len(parts) >= 3:
+    if parts[:2] in (("context", "company"), ("context", "pm"), ("context", "stakeholders")) and len(parts) >= 3:
         return Path(*parts[:2])
     if len(parts) >= 4 and parts[:2] in (("context", "products"), ("context", "initiatives")):
         slug(parts[2])
@@ -106,7 +107,11 @@ def entity(name):
         if parts[1] == "products" and parts[3] == "areas":
             raise ValueError("Choose a named product area")
         return Path(*parts[:3])
-    raise ValueError("Choose a company, product, product area, or initiative context entity")
+    raise ValueError("Choose a company, stakeholder, product, product area, or initiative context entity")
+
+
+def stakeholder_record(name):
+    return Path(name).parts[:2] == ("context", "stakeholders")
 
 
 def brief_kind(name):
@@ -119,6 +124,8 @@ def brief_kind(name):
         return None
     if path.parent != owner:
         return None
+    if path.as_posix() == STAKEHOLDERS:
+        return "stakeholder-context"
     if owner == Path("context/company"):
         return "company-context"
     if owner.parts[:2] == ("context", "initiatives"):

@@ -7,6 +7,8 @@ import sys
 import unittest
 
 import test_pm
+from onboarding_fixtures import review_current_topic, reviewed_studio
+import onboarding_review
 import context_capture
 import pm
 import records
@@ -32,6 +34,7 @@ class ProductAreaTests(unittest.TestCase):
         return json.loads(result.stdout)["hookSpecificOutput"]["additionalContext"]
 
     def test_hierarchy_and_confirmed_consequences(self):
+        reviewed_studio(self.root, self.work)
         refunds = "product/checkout/area/refunds"
         receipts = "product/checkout/area/receipts"
         remit = {"responsibilities": [self.responsibility(refunds), self.responsibility(receipts, "shared"),
@@ -72,6 +75,7 @@ class ProductAreaTests(unittest.TestCase):
             self.assertEqual(both, ("affected", responsibilities))
 
     def test_area_scope_survives_capture_answers_and_structured_rows(self):
+        reviewed_studio(self.root, self.work)
         records.create(self.root, "company-context", "context/company/overview.md")
         fact = {"scope": "product", "product": "shop", "product_area": "refunds", "topic": "constraints",
                 "source": 1, "location": "Policy", "quote": "We will reimburse fees."}
@@ -81,7 +85,12 @@ class ProductAreaTests(unittest.TestCase):
         rows.extend([question, dict(question, question="Product area refunds — Which fees?")])
         name = "context/products/shop/overview.md"
         def write(entries, dest=name):
-            run = self.capture({"sources": [source], "entries": entries}, "--write", dest)
+            payload = {"sources": [source], "entries": entries}
+            if any("decision" in entry for entry in entries):
+                preview = self.capture(payload)
+                self.assertEqual(preview.returncode, 0, preview.stdout)
+                payload = test_pm.confirmed_decisions(payload, json.loads(preview.stdout))
+            run = self.capture(payload, "--write", dest)
             self.assertEqual(run.returncode, 0, run.stdout)
             return json.loads(run.stdout)["written"]
 
@@ -109,6 +118,7 @@ class ProductAreaTests(unittest.TestCase):
         self.assertEqual(pm.check(self.root), [])
 
     def test_invalid_areas_do_not_rewrite_existing_remits_or_create_records(self):
+        reviewed_studio(self.root, self.work)
         old = {"responsibilities": [], "follow": ["area/refunds"]}
         self.assertEqual(self.save(old).returncode, 0)
         path = self.work / context_capture.REMIT_PATH
@@ -126,40 +136,30 @@ class ProductAreaTests(unittest.TestCase):
             self.assertNotEqual(self.capture({"sources": [], "entries": [row]}).returncode, 0)
         self.assertFalse((self.work / "context/products/checkout").exists())
 
-    def test_new_and_existing_workspace_prompts(self):
-        empty = {"responsibilities": [], "follow": []}
-        whole = self.responsibility("product/shop")
-        assigned = dict(empty, responsibilities=[whole])
-        for remit, want in (
-            (None, context_capture.REMIT_PROMPT), (empty, context_capture.REMIT_PROMPT),
-            (dict(empty, follow=["area/pricing"]), context_capture.DRAFT_REMIT_PROMPT),
-            (dict(assigned, status="draft"), context_capture.DRAFT_REMIT_PROMPT),
-            (assigned, None), (dict(empty, status="confirmed"), None),
+    def test_capturing_ownership_does_not_complete_the_walkthrough(self):
+        company = records.create(self.root, "company-context", "context/company/overview.md")
+        original = company.read_bytes()
+        self.assertEqual(onboarding_review.status(self.work)["stage"], "company")
+        while onboarding_review.status(self.work)["stage"] == "company":
+            review_current_topic(self.work)
+        for remit in (
+            {"responsibilities": [], "follow": []},
+            {"responsibilities": [self.responsibility("product/shop")], "follow": [], "status": "confirmed"},
         ):
-            path = self.work / context_capture.REMIT_PATH
-            if remit is not None:
-                self.assertEqual(self.save(remit).returncode, 0)
-            before = path.read_bytes() if path.exists() else None
+            self.assertEqual(self.save(remit).returncode, 0)
+            report = json.loads(self.cli("align", "--status"))
+            self.assertEqual(report["onboarding"]["stage"], "pm")
             guidance = self.startup()
-            self.assertEqual(json.loads(self.cli("align", "--status")).get("remit_prompt"), want)
-            if want:
-                self.assertEqual(guidance.count(want), 1)
-            else:
-                self.assertNotIn(context_capture.REMIT_PROMPT, guidance)
-                self.assertNotIn(context_capture.DRAFT_REMIT_PROMPT, guidance)
-            self.assertEqual(path.read_bytes() if path.exists() else None, before)
-            self.assertEqual(pm.check(self.root), [])
-        self.work.rename(self.root.parent / "previous-private")
-        self.assertNotIn(context_capture.REMIT_PROMPT, self.startup())
-        self.assertIn(context_capture.REMIT_PROMPT, self.cli("init-workspace"))
-        self.assertFalse((self.work / context_capture.REMIT_PATH).exists())
+            self.assertEqual(json.loads(guidance.splitlines()[-1])["onboarding"]["stage"], "pm")
+            self.assertEqual(company.read_bytes(), original)
 
     def test_damaged_remit_is_reported_and_capture_preserves_it(self):
+        reviewed_studio(self.root, self.work)
         path = self.work / context_capture.REMIT_PATH
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text("# PM context\n\n## PM remit\n\nStatus: broken\n")
         original = path.read_bytes()
-        self.assertIn("repairing", self.startup())
+        self.assertNotIn(context_capture.REMIT_PROMPT, self.startup())
         question = {"scope": "product", "product": "shop", "product_area": "returns", "topic": "constraints",
                     "question": "What returns window applies?"}
         result = self.capture({"sources": [], "entries": [question]}, "--write", "context/products/shop/overview.md")
@@ -194,6 +194,7 @@ class ProductAreaTests(unittest.TestCase):
         self.assertEqual(context_capture.relevance(remit, "product/checkout/area/checkout", {}), ("following", []))
 
     def test_independent_area_brief_preserves_inline_evidence_and_answer_home(self):
+        reviewed_studio(self.root, self.work)
         product = "context/products/shop/overview.md"
         area = "context/products/shop/areas/refunds/overview.md"
         initiative = "context/products/shop/initiatives/pilot/overview.md"
@@ -254,6 +255,7 @@ class ProductAreaTests(unittest.TestCase):
         self.assertEqual(pm.check(self.root), [])
 
     def test_area_brief_uses_legacy_parent_and_refuses_path_conflicts(self):
+        reviewed_studio(self.root, self.work)
         product = "context/products/shop/overview.md"
         area = "context/products/shop/areas/refunds/overview.md"
         old = test_pm.legacy_product(self.root, self.work, "products/shop/history/overview.md")
@@ -280,6 +282,7 @@ class ProductAreaTests(unittest.TestCase):
         self.assertNotEqual(self.capture({"sources": [], "entries": [foreign]}, "--write", area).returncode, 0)
 
     def test_area_filing_guard_protects_contract_sources_and_reserved_home(self):
+        reviewed_studio(self.root, self.work)
         product = "context/products/shop/overview.md"
         area = "context/products/shop/areas/refunds/overview.md"
         candidate = "context/products/shop/sources/approved.md"

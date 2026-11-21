@@ -8,6 +8,7 @@ import sys
 import unittest
 
 import test_opportunities
+from test_pm import confirmed_decisions
 
 
 class ContextRiskTests(unittest.TestCase):
@@ -30,7 +31,8 @@ class ContextRiskTests(unittest.TestCase):
         packet["entries"][0].update(topic="decisions", decision={
             "question": "When can EU bulk export launch?", "scope": decision_scope, "person": person,
             "date": self.today, "next_step": "Draft the customer update."})
-        return record, packet
+        preview = json.loads(self.h.cli("route-context", value=packet))
+        return record, confirmed_decisions(packet, preview)
 
     def capture(self, owner, packet):
         return json.loads(self.h.cli("route-context", "--write", owner, value=packet))

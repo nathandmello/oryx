@@ -12,7 +12,7 @@ import upgrades
 from urllib.parse import quote, unquote, urlsplit, urlunsplit
 from uuid import uuid4
 
-CONTEXT_KINDS = ("company-context", "product-context", "product-area-context", "initiative-context", "context-note")
+CONTEXT_KINDS = ("company-context", "stakeholder-context", "product-context", "product-area-context", "initiative-context", "context-note")
 OPPORTUNITY_KINDS = ("discovery-brief", "initiative-brief", "prioritization")
 KINDS = (*CONTEXT_KINDS, "goal", "problem", "strategy", "experiment", "roadmap", *OPPORTUNITY_KINDS)
 FIELDS = ("ID", "State", "Mode", "Last checkpoint", "Next action", "Waiting on", "Resume when")
@@ -33,9 +33,14 @@ SHARED_TOPICS = {
     "reviews": "Review and approvals",
 }
 CONTEXT_TOPICS = {
+    "stakeholder": {
+        "people": "People and teams", "reporting": "Reporting relationships",
+        "authority": "Decision roles", "collaboration": "Working relationships",
+    },
     "company": {
         "organisation": "Organisation and scope", "markets": "Customers and markets",
-        "business-model": "Business model", "direction": "Direction and goals",
+        "business-model": "Business model", "portfolio": "Product portfolio",
+        "growth": "Growth and competitive advantage", "direction": "Direction and goals",
         "operations": "How the business operates", "constraints": "Constraints and open questions",
         **SHARED_TOPICS,
     },
@@ -62,11 +67,17 @@ CONTEXT_TABLES = {
 }
 CONTEXT_LEAD = "<!-- pm: context-lead -->"
 CONTEXT_LEADS = {
+    "People and teams": "Consult when identifying the people or teams involved in the PM’s work.",
+    "Reporting relationships": "Consult when identifying who reports to whom within the stated scope.",
+    "Decision roles": "Consult when identifying who recommends, decides, or advises on a specific decision.",
+    "Working relationships": "Consult when identifying confirmed collaborators and dependencies for a particular area of work.",
     "Context": "Consult when checking the evidence for the subject named in this note.",
     "Data boundaries": "Consult before selecting, sharing, or retaining data for PM work.",
     "Organisation and scope": "Consult when identifying the company, business unit, or product responsible for a decision.",
     "Customers and markets": "Consult when identifying buyers, users, partners, or markets for a product decision.",
     "Business model": "Consult when assessing how an opportunity affects customer value, revenue, or costs.",
+    "Product portfolio": "Consult when tracing how offerings work together to deliver value to a customer.",
+    "Growth and competitive advantage": "Consult when assessing what drives growth or explains why customers choose the company.",
     "Direction and goals": "Consult when checking whether proposed work supports company priorities.",
     "How the business operates": "Consult when finding decision owners, operating dependencies, or the teams involved in PM work.",
     "Constraints and open questions": "Consult before making commitments that depend on company limits or unresolved questions.",
@@ -200,6 +211,11 @@ def section(text, name):
 
 def heading_order(kind, template):
     order = [name for name, *_ in section_blocks(template)]
+    if kind == "company-context":
+        # Earlier company briefs could place these sourced sections anywhere.
+        # Keep their placement when an existing brief receives new evidence.
+        flexible = {CONTEXT_TOPICS["company"][topic] for topic in ("portfolio", "growth")}
+        order = [name for name in order if name not in flexible]
     if kind in ("context-note", "product-area-context") and "Context controls" in order:
         order.insert(order.index("Context controls"), "Filing")
     if kind in CONTEXT_KINDS and "Context controls" in order:
@@ -488,7 +504,7 @@ def context_errors(path, text, kind, texts, content_sections, template=False):
         errors.append("context review is overdue; review the record and its sources")
 
     value = controls.get("Parent context", "")
-    if value == "none" and kind in {"company-context", "context-note"}:
+    if value == "none" and kind in {"company-context", "stakeholder-context", "context-note"}:
         pass
     elif draft and PLACEHOLDER.fullmatch(value):
         pass
@@ -702,6 +718,8 @@ def draft_text(root, kind, target, title=None, owner="", product_parent=None, in
         if not initiative_id or (section(text, "Parent initiative") or "").strip() != "{{initiative_id}}":
             raise ValueError("Use the registered initiative ID and the brief template's Parent initiative section")
         text = text.replace("{{initiative_id}}", initiative_id)
+    if kind == "stakeholder-context" and title is None:
+        title = "Stakeholder map"
     if kind == "product-area-context" and title is None:
         title = target.parent.name.replace("-", " ").capitalize() + " context"
     title = title or target.stem.replace("-", " ").capitalize()

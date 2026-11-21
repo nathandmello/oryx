@@ -2,6 +2,11 @@
 
 Source: Nathan's framework, supplied in this conversation on 2026-11-18. This file preserves its method for future work.
 
+## Product context and remit
+
+For product work, use the PM’s [confirmed remit](context.md#pm-remit) and their reviewed company and product context.
+Trace a customer outcome to the product's contribution. Clarify decision rights when they matter.
+
 ## Strategy
 
 Strategy connects business needs to chosen problems and a high-level solution hypothesis. Explain why the choice matters and how it can help.
@@ -35,6 +40,12 @@ Keep user stories, detailed flows, and engineering specifications in the configu
 
 ## Goal alignment
 
+Before starting product strategy, check which company objective the product should support and what establishes its current priority.
+If that objective is unclear, explain the gap and offer to clarify it with the PM first.
+Unrelated gaps can wait. A completed onboarding pass preserves the record of what the PM already reviewed.
+
+When the founder owns the company objective, their confirmed account can establish it. If their priority is learning, ask what decision that learning will inform.
+
 An outcome has five parts: metric, baseline, target, time horizon, and guardrails.
 
 Use [the metric registry](metrics.md) for the effective calculation and population.
@@ -43,7 +54,9 @@ Connect organisation goals, product goals, customer outcomes, initiative goals, 
 
 In an alignment session, separate proposed solutions, customer outcomes, and organisational objectives. Trace proposed solutions back to their problem and intended outcome.
 
-When goals are unclear, ask why the organisation funds the team. Record a provisional interpretation and its owner; preserve the gap.
+If a company deck describes a market as an opportunity, ask whether leadership has chosen to pursue it.
+Carry the original wording and open question into strategy and planning until the PM can establish the choice.
+Ask the PM which outcome the product can influence. Preserve the source of official targets and the PM's rationale for proposed ones.
 
 ## Problems and evidence
 
