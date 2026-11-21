@@ -1202,16 +1202,17 @@ def main() -> int:
             return 0
         if args.command == "route-context":
             payload = storage.json_input(os.sys.stdin.read())
-            private = workspace.optional_repo(ROOT) or ROOT / storage.STUDIO
             setup_decision = bool(setup and company_onboarding.setup_decision(payload))
             if setup_decision:
                 if setup["stage"] == "repair" or args.write not in (None, layout.COMPANY):
                     raise onboarding.SetupRequired(setup)
-                company_onboarding.check_decision_source(private, payload["sources"])
             elif setup and (args.write == layout.COMPANY or not setup_capture(payload)):
                 raise onboarding.SetupRequired(setup)
             if args.write is not None:
                 settings = prepare_private_write(ROOT)
+            private = workspace.optional_repo(ROOT) or ROOT / storage.STUDIO
+            if setup_decision:
+                company_onboarding.check_decision_source(private, payload["sources"])
             entries = payload.get("entries") if isinstance(payload, dict) else None
             pm_entries = isinstance(entries, list) and any(
                 isinstance(entry, dict) and entry.get("scope") in ("pm", "stakeholder") for entry in entries

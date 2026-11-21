@@ -54,7 +54,7 @@ When a release flags older records, follow [the context cleanup procedure](../..
 
 ## Apply
 
-- Review onboarding findings with the current stage’s capture command. For ordinary capture, preview `route-context`. Inspect routes and source coverage.
+- Review onboarding findings with the current stage’s capture command. For an existing company decision, preview `route-context` separately. Use the same router for ordinary capture. Inspect routes and source coverage.
 - Run `route-context --write PATH` for one authorised record at a time. Use an existing artifact's workflow for other records.
 - Use the PM's approved source scope. Seek separate permission to expand the search or save generated content.
 - Report FYIs in chat. An unmatched topic leaves involvement open. Save out-of-scope items only on request.
