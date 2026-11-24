@@ -294,8 +294,61 @@ def table(text, name, columns):
     return rows[1:], []
 
 
-def area_brief_path(product, area):
-    return layout.area(product, area)
+def marked_area(path):
+    if path.resolve() != path or not path.is_file():
+        return False
+    with path.open("rb") as stream:
+        return stream.readline(128).rstrip() == b"<!-- pm: product-area-context -->"
+
+
+def area_brief_path(product, area, *, private=None, group=None):
+    """Resolve a stable product/area subject; an explicit group can propose a new home."""
+    proposed = layout.area(product, area, group if group is not None else "areas")
+    if private is None:
+        return proposed
+    root = private / Path(layout.product(product)).parent
+    if root.resolve() != root:
+        raise ValueError(f"Redirected product context for {product}")
+    homes = []
+    if root.is_dir():
+        for folder in root.iterdir():
+            if (folder.name in layout.AREA_RESERVED or not layout.SLUG.fullmatch(folder.name)
+                    or folder.is_symlink() or not folder.is_dir()):
+                continue
+            candidate = folder / area / "overview.md"
+            if candidate.parent.is_symlink() or candidate.is_symlink():
+                raise ValueError(f"Redirected product area path: {candidate.relative_to(private)}")
+            if not candidate.is_file():
+                continue
+            if marked_area(candidate):
+                homes.append(candidate.relative_to(private).as_posix())
+            elif folder.name in {"areas", group}:
+                raise ValueError(f"Review the existing file at {candidate.relative_to(private)} before using it as area context")
+    if len(homes) > 1:
+        raise ValueError(f"Multiple homes for product/{product}/area/{area}: " + ", ".join(sorted(homes)))
+    if homes and group is not None and homes[0] != proposed:
+        raise ValueError(f"Reuse the existing product area at {homes[0]}")
+    name = homes[0] if homes else proposed
+    target = private / name
+    if target.resolve() != target:
+        raise ValueError(f"Redirected product area path: {name}")
+    if group is not None:
+        folder = target.parent.parent
+        if folder.exists() and (not folder.is_dir() or any(
+                item.is_file() and not item.name.startswith(".") for item in folder.iterdir())):
+            raise ValueError(f"Area group conflicts with an existing topic or file: {folder.name}")
+        if target.parent.exists() and not target.parent.is_dir():
+            raise ValueError(f"Area name conflicts with an existing file: {area}")
+        if group != "areas" and folder.is_dir() and not homes:
+            for sibling in folder.iterdir():
+                if sibling.name.startswith("."):
+                    continue
+                if sibling == target.parent and sibling.is_dir() and not any(sibling.iterdir()):
+                    continue
+                if marked_area(sibling / "overview.md"):
+                    continue
+                raise ValueError(f"Area group conflicts with existing material in {sibling.relative_to(private)}")
+    return name
 
 
 def is_area_path(path):
@@ -692,6 +745,9 @@ def create(root, kind, destination, title=None, owner="", filing_contract=None, 
         raise ValueError(f"Unknown template: {kind}")
     if context_location(kind, relative):
         raise ValueError(context_location(kind, relative))
+    if kind == "product-area-context":
+        product, area, group = layout.area_identity(relative)
+        area_brief_path(product, area, private=workspace, group=group)
     text = draft_text(root, kind, target, title, owner, product_parent=product_parent, initiative_id=initiative_id)
     if filing_contract:
         if kind == "product-area-context":

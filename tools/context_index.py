@@ -38,7 +38,7 @@ def cache_path(private):
             raise ValueError("Redirected cache directory")
     identity = private.stat()
     key = sha256(os.fsencode(private.resolve()) + f"/{identity.st_dev}/{identity.st_ino}".encode()).hexdigest()
-    path = root / (key + "-v2.sqlite")
+    path = root / (key + "-v3.sqlite")
     if path.is_symlink() or (path.exists() and not path.is_file()):
         raise ValueError("Redirected cache file")
     return path
@@ -94,17 +94,18 @@ class Index:
         for (raw,) in self.execute("SELECT rows FROM notes WHERE name=? AND view=?", (name, view)):
             try:
                 rows = json.loads(unpacked(raw, name + view))
-                if isinstance(rows, list) and all(isinstance(row, list) and len(row) == 3 and
+                if isinstance(rows, list) and all(isinstance(row, list) and len(row) == 4 and
                                                   isinstance(row[0], str) and isinstance(row[1], str) and
-                                                  isinstance(row[2], bool) for row in rows):
-                    return [{"record": name, "section": section, "text": text, "binding": binding}
-                            for section, text, binding in rows]
+                                                  isinstance(row[2], bool) and (row[3] is None or isinstance(row[3], str))
+                                                  for row in rows):
+                    return [{"record": name, "section": section, "text": text, "binding": binding,
+                             **({"product_area": area} if area else {})} for section, text, binding, area in rows]
             except (ValueError, TypeError):
                 pass
         return None
 
     def save_projection(self, name, view, rows):
-        data = [[row["section"], row["text"], row["binding"]] for row in rows]
+        data = [[row["section"], row["text"], row["binding"], row.get("product_area")] for row in rows]
         self.execute("INSERT OR REPLACE INTO notes VALUES(?,?,?)", (name, view, sealed(json.dumps(data).encode(), name + view)))
 
     def vector(self, name, key):

@@ -3,6 +3,7 @@
 import csv
 from io import StringIO
 import json
+import shutil
 import unittest
 
 import test_opportunities
@@ -29,9 +30,23 @@ class InitiativeAreaTests(unittest.TestCase):
         self.hub.cli("set-remit", value=data)
 
     def inline_context(self):
-        entry = {"scope": "product", "product": "example", "product_area": "renewals",
-                 "topic": "constraints", "question": "Which renewal window applies?"}
-        self.hub.cli("route-context", "--write", self.hub.product_context, value={"sources": [], "entries": [entry]})
+        import test_pm
+        test_pm.legacy_inline_area(self.hub.root, self.hub.work, "example", "renewals", "Which renewal window applies?")
+
+    def test_initiative_lookup_omits_area_evidence_after_a_duplicate_home_appears(self):
+        h = self.hub
+        record = layout.area("example", "billing", "components")
+        h.cli("new", "product-area-context", record, "--reason", "Finance checks billing terms.",
+              "--trigger", "Review when billing terms change.")
+        h.submit(h.setup_event(), {**h.capture(), "areas": [self.standalone]})
+        duplicate = h.work / layout.area("example", "billing", "plugins")
+        duplicate.parent.mkdir(parents=True)
+        shutil.copyfile(h.work / record, duplicate)
+        result = json.loads(h.cli("task-context", "Show initiative evidence", "--product", "example",
+                                  "--initiative", h.i.split("/", 1)[1]))
+        self.assertTrue(any("Multiple homes" in warning for warning in result["warnings"]))
+        self.assertFalse(any(row["record"] in {record, duplicate.relative_to(h.work).as_posix()}
+                             for row in result["entries"]))
 
     def test_optional_areas_resolve_current_context_and_filter_each_portfolio_view(self):
         h = self.hub

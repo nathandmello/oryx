@@ -6,7 +6,7 @@ Use [the starters](../templates/README.md) for recurring reference.
 
 Keep standing company facts and commitments in `studio/context/company/overview.md`. Link separately maintained reference notes.
 
-Link product context to its company. Area and initiative briefs inherit their product. Record each decision and exception under its owner.
+Link products to their company during the [product walkthrough](product-context.md). Area and initiative briefs inherit their product. Record each decision and exception under its owner.
 
 For a single-product startup, the chosen market and business model belong to the company.
 Customer problems, usage and product-market fit evidence belong with the specific product and segment.
@@ -109,7 +109,8 @@ Apply the [section rules](filing.md#when-a-section-earns-its-place). Retain cont
 
 Use `context` for other PM facts. Update confirmed ownership separately.
 
-Supply `product_area` for an evidenced product or initiative area. Use `scope: area` and `subject: area/<slug>` for unqualified responsibilities. Confirm the parent before assigning one. Other reference topics use `reference` with `subject: topic/<slug>`.
+Follow [area filing](filing.md#product-area-context) for `product_area` and `area_group`. Confirm the parent.
+Use `scope: area` with `area/<slug>` for unqualified responsibilities. Reference topics use `reference` with `topic/<slug>`.
 
 Deferred scopes are `delivery`, `detail`, and `unclear`.
 

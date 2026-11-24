@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+from functools import partial
 import json
 import os
 import sys
@@ -36,6 +37,7 @@ import pm_profile
 import pm_profile_view
 import company_source
 import company_onboarding
+import product_intake
 import onboarding
 import onboarding_review
 import customizations
@@ -62,7 +64,8 @@ REQUIRED = (
     "tools/studio_layout.py", "tools/company_source.py", "playbook/customization.md", "playbook/overrides.md",
     "tools/conversation.py", conversation.GUIDE, "tools/company_onboarding.py", "tools/onboarding.py",
     "tools/onboarding_review.py", "playbook/onboarding-frameworks.json", "tools/pm_profile_view.py",
-    "playbook/pm-context.md", "playbook/stakeholders.md",
+    "playbook/pm-context.md", "playbook/product-context.md", "playbook/stakeholders.md",
+    "tools/product_intake.py", "tools/outcome_context.py",
     "tools/hub_commands.py", "playbook/commands.md", hub_commands.CATALOG,
     ".agents/skills/extend-hub/SKILL.md", ".claude/skills/extend-hub/SKILL.md",
     ".agents/skills/ingest-context/SKILL.md", ".claude/skills/ingest-context/SKILL.md",
@@ -354,6 +357,8 @@ def check_workspace(root: Path, system_texts: dict[str, str]) -> list[str]:
     errors.extend(decision_forecasts.check_workspace(private))
     files = inventory(private)
     initiative_work_homes = set()
+    captures = {company_onboarding.FILE: "company", company_onboarding.PM_FILE: "pm",
+                company_onboarding.PRODUCT_FILE: "product"}
     for path in files:
         rel = path.relative_to(private).as_posix()
         label = f"{private.name}/{rel}"
@@ -368,13 +373,12 @@ def check_workspace(root: Path, system_texts: dict[str, str]) -> list[str]:
         parts = path.relative_to(private).parts
         if (len(parts) == 3 and parts[:2] == ("workspace", "forecasts") and path.suffix == ".json"):
             continue  # The forecast checker validates every receipt in this directory.
-        if rel in {company_onboarding.FILE, company_onboarding.PM_FILE, onboarding_review.FILE}:
+        if rel in captures or rel == onboarding_review.FILE:
             try:
                 if rel == onboarding_review.FILE:
                     onboarding_review.status(private)
                 else:
-                    kind = "pm" if rel == company_onboarding.PM_FILE else "company"
-                    company_onboarding.read(private, kind)
+                    company_onboarding.read(private, captures[rel])
             except (ValueError, OSError) as exc:
                 errors.append(f"{label}: {exc}")
             continue
@@ -738,6 +742,8 @@ def studio_setup(private):
     walkthrough = onboarding.status(private)
     setup = {"onboarding": walkthrough}
     stages = ("company",) if walkthrough["stage"] in {"company", "repair"} else ("company", "pm")
+    if walkthrough["stage"] in {"product", "ready"}:
+        stages += ("product",)
     for kind in stages:
         try:
             status = company_onboarding.status(private, kind)
@@ -782,6 +788,12 @@ def capture_errors(root, target, text, *, destination_only=False):
     rel = target.relative_to(private).as_posix()
     texts = {f"templates/{kind}.md": (root / "templates" / f"{kind}.md").read_text(encoding="utf-8")
              for kind in records.KINDS}
+    if destination_only and layout.brief_kind(rel) in {"product-context", "product-area-context"}:
+        parent = layout.COMPANY if layout.brief_kind(rel) == "product-context" else layout.product(Path(rel).parts[2])
+        parent_path = private / parent
+        if parent_path.resolve() == parent_path and parent_path.is_file():
+            with parent_path.open("rb") as stream:
+                texts[parent] = stream.readline(128).decode("utf-8")
     for path in (() if destination_only else inventory(private)):
         parts = path.relative_to(private).parts
         if (path != target and path.suffix == ".md" and path.resolve() == path and path.is_file()
@@ -840,14 +852,18 @@ def build_parser():
     ui.add_argument("--key", help="Absolute path to the PM signing key or its agent-backed public key")
     ui.add_argument("--no-open", action="store_true", help="Print the local URL without launching a browser")
     setup = commands.add_parser("onboarding", help="Continue the current guided walkthrough")
-    setup.add_argument("operation", choices=("status", "review-topic"))
+    setup.add_argument("operation", choices=("status", "select-product", "review-topic"))
     company_setup = commands.add_parser("company-onboarding", help="Review or resume company context in Studio")
     company_setup.add_argument("operation", choices=company_onboarding.OPERATIONS)
-    pm_setup = commands.add_parser("pm-onboarding", help="Review PM and stakeholder context in Studio")
-    pm_setup.add_argument("operation", choices=company_onboarding.PM_OPERATIONS)
-    inspect_pm = pm_setup.add_mutually_exclusive_group()
-    inspect_pm.add_argument("--gap", metavar="REV/INDEX", help="Inspect one deferred gap at the displayed revision")
-    inspect_pm.add_argument("--pending", action="store_true", help="Inspect the proposed wording awaiting review")
+    for kind, description in (("pm", "Review PM and stakeholder context in Studio"),
+                              ("product", "Review product and area context in Studio")):
+        capture = commands.add_parser(f"{kind}-onboarding", help=description)
+        capture.add_argument("operation", choices=company_onboarding.PM_OPERATIONS)
+        inspect = capture.add_mutually_exclusive_group()
+        inspect.add_argument("--gap", metavar="REV/INDEX", help="Inspect one deferred gap at the displayed revision")
+        inspect.add_argument("--pending", action="store_true", help="Inspect the proposed wording awaiting review")
+        if kind == "product":
+            inspect.add_argument("--evidence", action="store_true", help="Recall one finding for the current walkthrough topic from approved local sources")
     route = commands.add_parser("route-context", help="Route supplied context evidence from JSON on stdin")
     route.add_argument("--write", metavar="PATH", help="Apply entries to one authorised context record")
     area = commands.add_parser("area-context", help="Locate a product area's context and its source records")
@@ -909,6 +925,9 @@ def incomplete_setup():
 
 
 def check_action_setup(path, entry):
+    if path in {"context product capture", "context product show"}:
+        require_product_stage()
+        return
     if path in {"context pm capture", "context stakeholder show"}:
         require_pm_stage()
         return
@@ -928,12 +947,18 @@ def require_pm_stage():
         raise onboarding.SetupRequired(state)
 
 
+def require_product_stage():
+    state = incomplete_setup()
+    if state and (state["stage"] != "product" or not state["stage_available"]):
+        raise onboarding.SetupRequired(state)
+
+
 def setup_capture(payload):
     """Only foundational evidence may pass through the generic capture tool during setup."""
     if not isinstance(payload, dict) or payload.get("responses") or not isinstance(payload.get("entries"), list):
         return False
     for entry in payload["entries"]:
-        if not isinstance(entry, dict) or entry.get("scope") not in ("company", "pm", "product", "stakeholder"):
+        if not isinstance(entry, dict) or entry.get("scope") not in ("company", "pm", "stakeholder"):
             return False
         if any(key in entry for key in ("decision", "record_decision", "product_area")) or entry.get("topic") == "decisions":
             return False
@@ -945,17 +970,51 @@ def setup_capture(payload):
     return True
 
 
+def company_signal_destination(payload):
+    """Identify a single product finding encountered while gathering approved company evidence."""
+    if not isinstance(payload, dict) or payload.keys() != {"sources", "entries"} or not isinstance(payload["entries"], list):
+        return None
+    if not isinstance(payload["sources"], list) or len(payload["sources"]) != 1:
+        return None
+    descriptive = {"scope", "topic", "quote", "source", "location", "uncertainty", "interpretation"}
+    for row in payload["entries"]:
+        if not isinstance(row, dict) or row.get("scope") not in {"company", "product"}:
+            return None
+        allowed = descriptive | {"product"} if row["scope"] == "product" else descriptive
+        if row.keys() - allowed or row.get("source") != 1 or not row.get("quote") or row.get("topic") in (None, "decisions"):
+            return None
+    product = [row for row in payload["entries"] if row["scope"] == "product"]
+    if len(product) != 1:
+        return None
+    return layout.product(product[0].get("product"))
+
+
+def early_signal_plan(private, payload, remit):
+    state = company_onboarding.read(private)[1]
+    if not state["approved"] or state["pending"]:
+        raise ValueError("Approve the company source plan and finish the current finding before filing the product signal")
+    source = context_capture.source_rows(payload["sources"])[0]
+    if not any(company_onboarding.within_scope(allowed, source["reference"]) for allowed in state["plan"]["sources"]):
+        raise ValueError("The product signal needs a source from the approved company capture")
+    plan = context_capture.route(payload, private, remit, single_excerpt=True, descriptive_intake=True)
+    if plan["source_checks"][0]["verification"] != "reviewed excerpt matched inspected text":
+        raise ValueError("Supply inspected evidence before filing a product signal from the company walkthrough")
+    return plan
+
+
 def check_command_setup(args):
     if args.command == "override" and args.operation in {"list", "show", "set", "remove"}:
         return None
     if args.command == "set-remit":
         require_pm_stage()
         return None
-    if args.command == "pm-onboarding":
-        inspecting = args.gap is not None or args.pending
+    if args.command in {"pm-onboarding", "product-onboarding"}:
+        inspecting = args.gap is not None or args.pending or getattr(args, "evidence", False)
         if inspecting and args.operation != "status":
-            raise ValueError("Use --gap or --pending only with pm-onboarding status")
-        if inspecting or args.operation != "status":
+            raise ValueError(f"Use inspection options only with {args.command} status")
+        if args.command == "product-onboarding":
+            require_product_stage()
+        elif inspecting or args.operation != "status":
             require_pm_stage()
         return None
     if args.command in SETUP_TOOLS:
@@ -967,7 +1026,8 @@ def check_command_setup(args):
         return None
     if args.command == "task-context":
         return state
-    if args.command == "route-context" and (args.write is None or onboarding.setup_destination(args.write)):
+    if args.command == "route-context" and (args.write is None or onboarding.setup_destination(args.write)
+            or state["stage"] == "product" and state["stage_available"] and layout.brief_kind(args.write) == "product-area-context"):
         if args.write and (Path(args.write).parts[:2] == ("context", "company") and args.write != layout.COMPANY or
                            company_onboarding.pm_destination(args.write) and state["stage"] != "product"):
             raise onboarding.SetupRequired(state)
@@ -975,8 +1035,8 @@ def check_command_setup(args):
     if (args.command == "new" and company_onboarding.pm_destination(args.path) and
             state["stage"] != "product"):
         raise onboarding.SetupRequired(state)
-    if (args.command == "new" and args.kind in {"company-context", "pm-context", "product-context", "stakeholder-context", "context-note"}
-            and onboarding.setup_destination(args.path)):
+    if (args.command == "new" and args.kind in {"company-context", "pm-context", "stakeholder-context", "context-note"}
+            and Path(args.path).parts[:2] != ("context", "products") and onboarding.setup_destination(args.path)):
         return None
     raise onboarding.SetupRequired(state)
 
@@ -996,9 +1056,10 @@ def main() -> int:
             print(json.dumps(onboarding.required(state), indent=2, ensure_ascii=False))
             return 0
         if args.command == "onboarding":
-            if args.operation == "review-topic":
+            if args.operation != "status":
                 prepare_private_write(ROOT)
-                onboarding_review.review(workspace.repo(ROOT, "workspace"), storage.json_input(sys.stdin.read()))
+                operation = onboarding_review.select_product if args.operation == "select-product" else onboarding_review.review
+                operation(workspace.repo(ROOT, "workspace"), storage.json_input(sys.stdin.read()))
             print(json.dumps(onboarding.status(workspace.repo(ROOT, "workspace")), indent=2, ensure_ascii=False))
             return 0
         if args.command == "agent":
@@ -1098,6 +1159,8 @@ def main() -> int:
                 print(f"Created {created.relative_to(ROOT)}.")
                 return 0
             with storage.writer_lock(private):
+                if company_onboarding.product_capture_owns(private, args.path):
+                    raise ValueError("Review the proposed product context with product-onboarding")
                 if args.path == layout.STAKEHOLDERS and company_onboarding.active(private, kind="pm"):
                     raise ValueError("Review and accept the proposed stakeholder record with pm-onboarding")
                 filing.check_new(private, args.kind, args.path, args.title)
@@ -1189,9 +1252,11 @@ def main() -> int:
                 context_capture.write_remit(private, remit)
             print(f"Saved studio/{context_capture.REMIT_PATH}.")
             return 0
-        if args.command in {"company-onboarding", "pm-onboarding"}:
-            kind = "pm" if args.command == "pm-onboarding" else "company"
-            if args.operation == "status":
+        if args.command in {"company-onboarding", "pm-onboarding", "product-onboarding"}:
+            kind = args.command.split("-", 1)[0]
+            if getattr(args, "evidence", False):
+                result = product_intake.recall(workspace.repo(ROOT, "workspace"))
+            elif args.operation == "status":
                 result = company_onboarding.status(workspace.repo(ROOT, "workspace"), kind,
                                                    gap=getattr(args, "gap", None), pending=getattr(args, "pending", False))
             else:
@@ -1202,18 +1267,27 @@ def main() -> int:
             return 0
         if args.command == "route-context":
             payload = storage.json_input(os.sys.stdin.read())
-            setup_decision = bool(setup and company_onboarding.setup_decision(payload))
-            if setup_decision:
-                if setup["stage"] == "repair" or args.write not in (None, layout.COMPANY):
+            kind = company_onboarding.decision_kind(payload)
+            early_signal = company_signal_destination(payload) if setup and setup["stage"] in {"company", "pm"} else None
+            if setup and kind:
+                if (setup["stage"] == "repair" or kind == "company" and args.write not in (None, layout.COMPANY)
+                        or kind == "product" and (setup["stage"] != "product" or not setup["stage_available"])):
                     raise onboarding.SetupRequired(setup)
-            elif setup and (args.write == layout.COMPANY or not setup_capture(payload)):
+            elif early_signal:
+                if args.write not in (None, early_signal):
+                    raise onboarding.SetupRequired(setup)
+            elif setup and (args.write == layout.COMPANY or args.write and Path(args.write).parts[:2] == ("context", "products")
+                            or not setup_capture(payload)):
                 raise onboarding.SetupRequired(setup)
             if args.write is not None:
                 settings = prepare_private_write(ROOT)
             private = workspace.optional_repo(ROOT) or ROOT / storage.STUDIO
-            if setup_decision:
-                company_onboarding.check_decision_source(private, payload["sources"])
             entries = payload.get("entries") if isinstance(payload, dict) else None
+            active_product = not setup and company_onboarding.entries_in_product_round(private, entries)
+            if active_product and kind != "product":
+                raise ValueError("Review and accept product context with product-onboarding")
+            guided_decision = bool(kind and (setup or active_product))
+            bounded = bool(early_signal or guided_decision and kind == "product")
             pm_entries = isinstance(entries, list) and any(
                 isinstance(entry, dict) and entry.get("scope") in ("pm", "stakeholder") for entry in entries
             )
@@ -1223,11 +1297,14 @@ def main() -> int:
                 if company_onboarding.active(private, kind="pm"):
                     raise ValueError("Use pm-onboarding to preview findings within the approved PM source plan")
             remit, error = context_capture.inspect_remit(private)
-            plan = context_capture.route(payload, private, remit, single_excerpt=setup_decision)
-            if setup_decision and plan["source_checks"][0]["verification"] != "reviewed excerpt matched inspected text":
-                raise ValueError("Supply inspected source text or a readable local source for this company decision")
+            if guided_decision:
+                plan = company_onboarding.decision_plan(private, kind, payload, remit, destination=args.write)
+            elif early_signal:
+                plan = early_signal_plan(private, payload, remit)
+            else:
+                plan = context_capture.route(payload, private, remit)
             definitions = {}
-            for entry in plan["entries"]:
+            for entry in (() if bounded else plan["entries"]):
                 text = entry.get("quote", "")
                 if metric_checks.is_claim(text):
                     product = entry.get("product")
@@ -1243,12 +1320,22 @@ def main() -> int:
                 if any(ARTIFACT.search(Path(part).stem) for part in Path(args.write).parts):
                     raise ValueError("Engineering artifacts belong in the delivery system")
                 with storage.writer_lock(private):
-                    if setup_decision:
-                        company_onboarding.check_decision_source(private, payload["sources"])
+                    apply_plan = plan
+                    if early_signal:
+                        if onboarding.status(private)["stage"] not in {"company", "pm"}:
+                            raise ValueError("Setup advanced. Review this finding with the product walkthrough.")
+                        apply_plan = early_signal_plan(private, payload, context_capture.inspect_remit(private)[0])
+                    if guided_decision:
+                        apply_plan = company_onboarding.decision_plan(
+                            private, kind, payload, context_capture.inspect_remit(private)[0], destination=args.write)
+                    elif company_onboarding.product_capture_owns(private, args.write):
+                        raise ValueError("Review and accept product context with product-onboarding")
                     if company_onboarding.pm_destination(args.write) and company_onboarding.active(private, kind="pm"):
                         raise ValueError("Review and accept PM or stakeholder context with pm-onboarding")
-                    company_onboarding.check_capture(private, args.write, plan)
-                    if context_capture.apply(ROOT, args.write, plan, settings["owner"], capture_errors):
+                    company_onboarding.check_capture(private, args.write, apply_plan)
+                    lint = partial(capture_errors, destination_only=True) if bounded else capture_errors
+                    if context_capture.apply(ROOT, args.write, apply_plan, settings["owner"], lint,
+                                             descriptive_intake=bounded, title=apply_plan.get("brief_title")):
                         plan["written"] = args.write
             print(json.dumps(plan, indent=2, ensure_ascii=False))
             return 0

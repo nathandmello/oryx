@@ -12,7 +12,7 @@ import sys
 
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE.parent))
-from test_pm import HubTests, confirmed_decisions, pm, records
+from test_pm import HubTests, confirmed_decisions, legacy_inline_area, pm, records
 from onboarding_fixtures import reviewed_studio
 
 
@@ -120,6 +120,8 @@ def checks(hub, evidence):
 
     area_entry = {"scope": "product", "product": "payments", "product_area": "refunds", "topic": "constraints",
                   "interpretation": "Check earlier partial refunds before quoting a remaining amount."}
+    for product in ("payments", "slack-imports"):
+        legacy_inline_area(hub.root, hub.work, product, "refunds", "Which limit applies?")
     first = capture(hub, payments, [area_entry], evidence, "stripe-total")
     before = (hub.work / payments).read_bytes()
     replay = capture(hub, payments, [area_entry], evidence, "stripe-total")

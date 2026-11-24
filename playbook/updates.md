@@ -4,7 +4,8 @@ Private format 2 applies.
 
 | Release | Change |
 | --- | --- |
-| 0.12.0 | Adds [company](company-context.md) and [PM](pm-context.md) walkthroughs, including a [stakeholder map](stakeholders.md). Update shared Studio clients before saving a map. Existing records can supply evidence. Product work waits for product onboarding. |
+| 0.13.0 | Adds the [product walkthrough](product-context.md) after the PM pass. Completed company and PM topics carry forward. Existing `areas/` briefs keep their paths and citations. Update clients sharing a Studio before writing briefs under team-specific folders. |
+| 0.12.0 | Adds [company](company-context.md) and [PM](pm-context.md) walkthroughs, including a [stakeholder map](stakeholders.md). Update shared Studio clients before saving a map. Existing records can supply evidence. That release held product work at the third stage. |
 | 0.11.1 | Updates [conversation guidance](conversation.md) to ground agreement in evidence. Capture and coaching keep omissions open and preserve confirmed limits. |
 | 0.11.0 | Adds [workspace overrides](overrides.md) and [template and roadmap customization](customization.md). Existing records retain their contents. |
 | 0.10.0 | Adds [decision coaching](conversation.md), [weekly review](decision-review.md), and [forecasts](decision-forecasts.md). |

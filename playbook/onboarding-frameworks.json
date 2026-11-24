@@ -13,5 +13,12 @@
     {"id": "aspirations", "question": "Is there a part of product work you’d like more of?"},
     {"id": "stakeholders", "question": "Who do you work with most closely?"}
   ],
-  "product": null
+  "product": [
+    {"id": "purpose", "question": "Where does this fit in the business today?"},
+    {"id": "customers", "question": "Who relies on it today?"},
+    {"id": "experience", "question": "How does that work for someone using it today?"},
+    {"id": "business-value", "question": "How is it meant to contribute to the business?"},
+    {"id": "performance", "question": "What have you seen so far about how it’s doing?"},
+    {"id": "environment", "question": "What shapes how your team runs it today?"}
+  ]
 }

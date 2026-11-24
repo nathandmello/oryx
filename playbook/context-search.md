@@ -6,12 +6,29 @@ oryx ships an English embedding model with the system checkout. Existing private
 The resolver first identifies the company, product, area, or initiative. A follow-up can reuse the saved session scope.
 An ambiguous request returns possible subjects. A named record or exact identifier keeps its existing routing priority.
 
+## Choose evidence for the activity
+
+Start with the PM’s purpose and the decisions they already made. A direct lookup can take one search.
+For a broader request, identify the questions that could change the answer. Search the authorised records for each.
+Follow confirmed relationships when a question needs wider context. Preserve the scope of every claim you use.
+
+For product strategy, check the company objective, the product’s contribution, and the customer problem in the PM’s scope.
+
+For “Did Refunds get better?”, first look for what the PM agreed would count as better.
+If the agreed outcome was fewer support contacts, look for the measure, cohort, baseline, and comparable result.
+A pilot result speaks for its participants and period. A product-wide trend alone cannot establish the pilot’s effect.
+
+When two outcomes fit and the PM has not chosen one, ask which outcome they want to assess.
+If an essential figure is missing, offer to check an agreed source. Continue work supported by the available evidence.
+
 When a search finds no match, describe what you checked. Leave the underlying question open.
 Carry a documented exclusion forward with its original scope and timing.
 
 For a question about the PM, use `pm.py pm-profile --topic responsibilities` or the relevant profile topic.
 Use `pm.py pm-profile` to list older or handwritten sections. Ask before opening a section that mixes personal subjects.
-Use the [stakeholder map](stakeholders.md) for reporting lines or decision roles.
+Consult the [stakeholder map](stakeholders.md) when a reporting line or decision role affects the task.
+
+## How search selects passages
 
 Within that scope, the resolver compares eligible passages by wording and meaning.
 It uses the title, heading, and valid section lead to interpret short passages.

@@ -257,6 +257,15 @@ class CompanyOnboardingTests(unittest.TestCase):
         product_path = context_capture.product_path("billing")
         product_brief = self.work / product_path
         payload = {"sources": [notes], "entries": [company_entry, product_entry]}
+        for source, message in (
+            (dict(notes, reference="Different operator interview"), "approved company capture"),
+            ({key: value for key, value in notes.items() if key != "text"}, "inspected evidence"),
+            (dict(notes, text=commitment), "excerpt differs"),
+        ):
+            with self.subTest(message=message), self.assertRaises(subprocess.CalledProcessError) as rejected:
+                cli("route-context", "--write", product_path, payload=dict(payload, sources=[source]))
+            self.assertIn(message, rejected.exception.stdout)
+            self.assertFalse(product_brief.exists())
         preview = cli("route-context", payload=payload)
         self.assertEqual([item["destination"] for item in preview["entries"]],
                          [context_capture.COMPANY_PATH, product_path])

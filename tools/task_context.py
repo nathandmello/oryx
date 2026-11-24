@@ -17,6 +17,7 @@ import context_index
 import context_search
 import layout
 import metric_registry
+import outcome_context
 import records
 import storage
 import upgrades
@@ -32,7 +33,8 @@ STOP_WORDS = set("about again and api app are can from give have here how its ou
                  "ingest utc file read data source captured pending questions owner follow".split())
 FOLLOW_UP = re.compile(r"^(?:please\s+)?(?:(?:can|could|would) you\s+(?:please\s+)?)?"
                        r"(?:continue\b|resume\b|revise (?:it|that|this)\b|"
-                       r"update (?:it|that|this)\b|make (?:it|that|this)\b|what about\b)", re.I)
+                       r"update (?:it|that|this)\b|make (?:it|that|this)\b|what about\b|"
+                       r"(?:did|has) (?:it|that|this) (?:improve[d]?|get(?:ten)? better)[?!.]?$)", re.I)
 SWITCH = re.compile(
     r"^(?:(?:please|now|let's|let’s)\s+)*(?:switch|move)\s+(?:from\b.+?\b)?to\s+", re.I
 )
@@ -113,7 +115,7 @@ def read_document(relative, path, *, text=None, through=None):
                 if through is None or checked <= through.isoformat()}
     return {
         "record": name, "kind": kind[1], "title": title(relative, text), "product": product,
-        "area": entity.name if entity.parts[3:4] == ("areas",) else None,
+        "area": entity.name if layout.area_identity(relative) else None,
         "initiative": initiative, "parent": parent, "text": text, "company": entity == Path(layout.COMPANY).parent,
         "sources": {row[0]: {**dict(zip(records.SOURCE_COLUMNS, row)), "coverage": coverage.get(row[0], "unrecorded")}
                     for row in sources
@@ -140,9 +142,13 @@ def context_documents(private, *, override=None, through=None):
 
 
 def inherit_products(documents):
-    for doc in documents.values():
+    for name, doc in list(documents.items()):
         if doc["initiative"] and not doc["product"] and doc["parent"] in documents:
             doc["product"] = documents[doc["parent"]]["product"]
+        if doc["area"] and doc["kind"] != "product-area-context":
+            overview = (layout.entity(name) / "overview.md").as_posix()
+            if documents.get(overview, {}).get("kind") != "product-area-context":
+                del documents[name]
 
 
 def resolved_artifact(name, documents):
@@ -166,6 +172,41 @@ def resolved_artifact(name, documents):
 def mentions(prompt, name):
     phrase = r"[\s-]+".join(re.escape(part) for part in re.split(r"[\s-]+", name.strip()))
     return bool(phrase and re.search(r"(?<!\w)" + phrase + r"(?!\w)", prompt, re.I))
+
+
+CONTEXT_SUBJECT = re.compile(
+    r"^(?:(?:please|help (?:me|us)|let['’]s)\s+)*(?:think through|work on|draft|review|show|assess|evaluate)"
+    r"\s+(?:(?:me|the|our|a|product)\s+)*(?:strategy|context|outcomes?|performance|results?) (?:for|of) "
+    r"(?:the |our )?([^?.!]+)[?.!]*$", re.I)
+
+
+def activity_subjects(documents, prompt):
+    """A name in a claim or an example need not be the subject of the PM's request."""
+    match = CONTEXT_SUBJECT.match(prompt.strip())
+    subject = match[1] if match else outcome_context.subject(prompt)
+    if not subject:
+        return []
+    phrase = " ".join(subject.casefold().replace("-", " ").split())
+    matches, pilot_scopes = set(), set()
+    for doc in documents.values():
+        product = doc["product"]
+        if not product:
+            continue
+        # Older briefs identify areas in individual entries rather than in dedicated records.
+        subjects = [(a, None, a) for a in doc["areas"]]
+        if doc["kind"] in {"product-context", "product-area-context", "initiative-context"}:
+            subjects.extend((doc["area"], doc["initiative"], label)
+                            for label in (doc["title"], doc["area"] or doc["initiative"] or product))
+        for area, initiative, label in subjects:
+            name = label.casefold().replace("-", " ")
+            labels = (name, product.replace("-", " ") + " " + name)
+            identity = (product, area or "", initiative or "")
+            if phrase in labels:
+                matches.add(identity)
+            elif not initiative and phrase.endswith(" pilot") and phrase[:-6] in labels:
+                # Search this subject for the pilot cohort; an actual pilot record takes precedence.
+                pilot_scopes.add(identity)
+    return sorted(matches or pilot_scopes)
 
 
 def routing_metadata(doc):
@@ -236,7 +277,7 @@ def source_matches(scoped, prompt, terms):
     return direct, len(terms & aliases)
 
 
-def choose_scope(private, documents, prompt, cwd, previous, explicit):
+def choose_scope(private, documents, prompt, cwd, previous, explicit, relationships):
     overview = {doc["product"]: doc for doc in documents.values() if doc["kind"] == "product-context"}
     switched = bool(SWITCH.match(prompt))
     followup = not switched and FOLLOW_UP.match(prompt.strip())
@@ -280,6 +321,34 @@ def choose_scope(private, documents, prompt, cwd, previous, explicit):
     terms = words(prompt)
     named = sorted(product for product, doc in overview.items()
                    if mentions(prompt, product) or mentions(prompt, doc["title"]))
+    if len(named) == 1:
+        # A consumer's own, reviewed statement can identify the requested shared area.
+        product = named[0]
+        links = relationships(product)
+        mentioned = {subject.rsplit("/", 1)[1] for subject in links if mentions(prompt, subject.rsplit("/", 1)[1])}
+        if links:
+            for meta in documents.values():
+                if (meta["kind"] == "product-area-context" and f"product/{meta['product']}/area/{meta['area']}" in links
+                        and words(meta["title"]) - {"context", "overview"} and mentions(prompt, meta["title"])):
+                    mentioned.add(meta["area"])
+        if len(mentioned) == 1:
+            return with_relationship({"product": product, "area": next(iter(mentioned)), "initiative": None}), []
+        if mentioned:
+            return {}, sorted(subject for subject in relationships(product) if subject.rsplit("/", 1)[1] in mentioned)
+    subjects = activity_subjects(documents, prompt)
+    if subjects:
+        # A named parent disambiguates homonymous children. A product of the same name remains a candidate.
+        if len(named) == 1:
+            parent = named[0]
+            qualifier = re.search(r"\b(?:in|within|under|on)\s+([^?.!,]+)[?.!]*$", prompt.strip(), re.I)
+            if qualifier and qualifier[1].casefold() in {parent.replace("-", " "), overview[parent]["title"].casefold()}:
+                qualified = [choice for choice in subjects if choice[0] == parent]
+                subjects = qualified or subjects
+        if len(subjects) == 1 and set(named) <= {subjects[0][0]}:
+            product, area, initiative = subjects[0]
+            return with_relationship({"product": product, "area": area or None, "initiative": initiative or None}), []
+        choices = {f"product/{p}/area/{a}" if a else f"{p}/{i}" if i else p for p, a, i in subjects}
+        return {}, sorted(choices | (set(named) - {p for p, _, _ in subjects}))
     if len(named) == 1:
         return with_relationship(inferred_scope(documents, named[0], terms)), []
     if named:
@@ -382,7 +451,47 @@ def linked_entries(doc, areas, through):
                 if decision_date and decision_date[1] > through.isoformat():
                     continue
             yield {"record": doc["record"], "section": section, "text": content, "sources": sources,
-                   "binding": binding}
+                   "binding": binding, **({"product_area": row[1]} if row else {})}
+
+
+SHARED_AREA = re.compile(rf"^  Shared area: (product/{layout.SLUG.pattern}/area/{layout.SLUG.pattern})$", re.M)
+
+
+def sources_checked(row, through):
+    return bool(row["sources"]) and all(
+        source.get("coverage") in {"read", "partial"}
+        and re.fullmatch(r"\d{4}-\d{2}-\d{2}", source["Checked on"])
+        and source["Checked on"] <= through.isoformat() for source in row["sources"])
+
+
+def shared_row_reviews(row, reviews):
+    """Identify an active qualification without importing other products' review material."""
+    for review in reviews.values():
+        if review["state"] not in evidence_reviews.OPEN:
+            continue
+        unreadable = review["classification"] == "unreadable history" and review["owner"] == row["record"]
+        if unreadable or any(claim.get("record") == row["record"] and claim.get("section") == row["section"]
+                             and claim.get("text") and claim["text"] in row["text"] for claim in review["claims"]):
+            yield review["id"]
+
+
+def shared_area_links(doc, through):
+    """A current sourced fact in the consumer's overview is the authority for following a link."""
+    if not doc or doc["kind"] != "product-context" or doc["record"] != layout.product(doc["product"]):
+        return {}
+    links = {}
+    if "  Shared area: " not in doc["text"]:
+        return links
+    for row in linked_entries(doc, set(), through):
+        matches = SHARED_AREA.findall(row["text"])
+        if len(matches) != 1 or not row["text"].startswith("- Fact:") or evidence_status(row) != "source statement":
+            continue
+        if not sources_checked(row, through):
+            continue
+        subject = matches[0]
+        if subject.split("/")[1] != doc["product"]:
+            links[subject] = row
+    return links
 
 
 def question_key(row, label):
@@ -456,7 +565,7 @@ def resolve_inventory(private, prompt, *, cwd, previous, explicit, explain, incl
             scope = scope or record_scope or None
         result = resolve_current(private, prompt, location, prior, scope, explain, include_history, through,
                                  index, docs, loaded, stamps)
-        if conversation.strategy_activity(prompt, result["scope"].get("product")):
+        if result["status"] != "ambiguous" and conversation.strategy_activity(prompt, result["scope"].get("product")):
             result["activity_check"] = conversation.strategy_prerequisite(result)
         return result, docs
 
@@ -508,13 +617,19 @@ def relevant_company_questions(private, prompt):
 
 def resolve_current(private, prompt, cwd, previous, explicit, explain, include_history, through,
                     index, docs, loaded, stamps):
-    scope, choices = choose_scope(private, docs, prompt, cwd, previous, explicit)
-
     def live(name):
         doc = live_document(private, name, loaded, stamps, through)
         doc["product"] = docs[name]["product"]
         return doc
 
+    relationships_by_product = {}
+    def relationships(product):
+        if product not in relationships_by_product:
+            parent = layout.product(product)
+            relationships_by_product[product] = shared_area_links(live(parent), through) if parent in docs else {}
+        return relationships_by_product[product]
+
+    scope, choices = choose_scope(private, docs, prompt, cwd, previous, explicit, relationships)
     risk_ids = set(re.findall(r"\brisk-[0-9a-f]{20}\b", prompt))
     journals = (live(name) for name, meta in docs.items() if meta["journal"])
     saved_reviews = evidence_reviews.stored(journals, through.isoformat())
@@ -532,6 +647,33 @@ def resolve_current(private, prompt, cwd, previous, explicit, explain, include_h
             choices = []
     status = "ambiguous" if choices else "resolved" if scope else "unscoped"
     result = {"status": status, "scope": scope, "choices": choices, "entries": [], "warnings": []}
+    shared = None
+    if scope.get("area"):
+        product, area = scope["product"], scope["area"]
+        try:
+            local = records.area_brief_path(product, area, private=private)
+            links = {subject: row for subject, row in relationships(product).items() if subject.endswith("/area/" + area)}
+            if links:
+                choices = set(links)
+                if local in docs or any(doc["product"] == product and area in doc["areas"] for doc in docs.values()):
+                    choices.add(f"product/{product}/area/{area}")
+                if len(choices) != 1:
+                    result.update(status="ambiguous", scope={}, choices=sorted(choices),
+                                  warnings=["Confirm which area and product the PM means before using the evidence."])
+                    return result
+                subject, relation = next(iter(links.items()))
+                if review_id := next(shared_row_reviews(relation, saved_reviews), None):
+                    raise ValueError(f"Confirm the relationship to {subject}: {review_id} remains open.")
+                owner = subject.split("/")[1]
+                shared = records.area_brief_path(owner, area, private=private)
+                parent = layout.product(owner)
+                if (shared not in docs or docs[shared]["kind"] != "product-area-context"
+                        or parent not in docs or docs[shared]["parent"] != parent):
+                    raise ValueError(f"The cited relationship points to {subject}, but its reviewed brief is unavailable.")
+                result["shared_area"] = {"subject": subject, "area_brief": shared, "relationship": relation}
+        except ValueError as exc:
+            result.update(status="ambiguous", scope={}, warnings=[str(exc)])
+            return result
     metrics = metric_registry.effective(private.parent, private, scope.get("product"), through.isoformat())
     for key in sorted(metric_registry.qualified_ids(prompt) - metrics.keys()):
         result["warnings"].append(f"No approved definition of {key} exists for this scope on {through.isoformat()}.")
@@ -552,7 +694,10 @@ def resolve_current(private, prompt, cwd, previous, explicit, explain, include_h
                 result["unresolved_company_questions"] = gaps
     product, area, initiative = (scope.get(key) for key in ("product", "area", "initiative"))
     areas = {area} if area else set()
-    signed_reviews = []
+    shape_strategy = bool(product and conversation.strategy_activity(prompt, product))
+    assessment = outcome_context.assessment_request(prompt) if product and not scope.get("stakeholders") else None
+    lookup = None
+    signed_reviews, targets = [], []
     if product and (private / layout.initiative_register(product)).is_file():
         import initiative_store
         try:
@@ -568,11 +713,22 @@ def resolve_current(private, prompt, cwd, previous, explicit, explain, include_h
                 if initiative:
                     areas.update(item_areas)
                 if through >= date.today():
+                    if assessment and initiative:
+                        # Keep signed targets separate from actual observations. The initiative view verifies readings and corrections.
+                        lookup = ["initiative", "show", product, item["id"]]
+                        targets = outcome_context.target_preview(item, product)
                     signed_reviews.extend({**r, "initiative": item["id"]} for r in initiative_views.signal_reviews(private, item))
                 elif item.get("_signal_reviews"):
                     result["warnings"].append(f"{item['id']}: verify the signed evidence history for the requested date.")
         except (OSError, ValueError) as exc:
             result["warnings"].append(f"Could not verify the registered initiative scope: {exc}")
+    if initiative:
+        for inherited_area in sorted(areas):
+            try:
+                records.area_brief_path(product, inherited_area, private=private)
+            except ValueError as exc:
+                areas.remove(inherited_area)
+                result["warnings"].append(str(exc))
     overview = docs.get(layout.product(product)) if product else None
     company = (overview["parent"] or layout.COMPANY) if overview else layout.COMPANY if scope.get("company") else None
     if scope.get("stakeholders") and layout.STAKEHOLDERS not in docs:
@@ -584,7 +740,7 @@ def resolve_current(private, prompt, cwd, previous, explicit, explain, include_h
     terms = words(prompt)
     rows, base, due_dates = [], set(), {}
     labels, cached_notes = {}, {}
-    view = json.dumps([through.isoformat(), sorted(areas)])
+    view = json.dumps([through.isoformat(), sorted(areas), "scoped-entries"])
     review_documents = []
     map_product = product if scope.get("stakeholders") else None
 
@@ -594,7 +750,7 @@ def resolve_current(private, prompt, cwd, previous, explicit, explain, include_h
         return mentions(statement, map_product) or bool(overview and words(overview["title"]) and mentions(statement, overview["title"]))
 
     for name, meta in docs.items():
-        if not evidence_reviews.in_scope(meta, scope, areas, company):
+        if name != shared and not evidence_reviews.in_scope(meta, scope, areas, company):
             continue
         if meta["reviewable"]:
             review_documents.append(live(name))
@@ -609,6 +765,11 @@ def resolve_current(private, prompt, cwd, previous, explicit, explain, include_h
         if candidates is None:
             doc = live(name)
             candidates = list(linked_entries(doc, areas, through))
+            if name == shared:
+                candidates = [row for row in candidates if sources_checked(row, through)]
+                for row in candidates:
+                    if ids := list(shared_row_reviews(row, saved_reviews)):
+                        row["risk_reviews"] = ids
             if scoped_map:
                 candidates = [row for row in candidates if names_product(row["text"]) or names_product(row["section"])]
             if optional_note:
@@ -623,7 +784,19 @@ def resolve_current(private, prompt, cwd, previous, explicit, explain, include_h
                                                     meta["leads"].get(heading))))
         rows.extend(candidates)
 
-    hits, scores, mode = context_search.rank(prompt, scope, rows, labels, index, tokens, IDENTIFIER)
+    query = prompt
+    if shape_strategy:
+        query += " Company objective, product contribution and customer problem."
+    outcome_subject, criteria = set(), set()
+    if assessment:
+        outcome_subject = {i for i, row in enumerate(rows) if outcome_context.same_subject(row, docs[row["record"]], scope)}
+        criteria = {i for i in outcome_subject if outcome_context.definition(rows[i])}
+        # The overview is live on both cold and warm lookups. Its wording helps find measured results in notes.
+        clues = [context_search.passage(rows[i]).splitlines()[0][:200] for i in sorted(criteria)
+                 if rows[i]["record"] in base and outcome_context.usable_candidate(rows[i])]
+        query += " Success measure, cohort, baseline and observed result. " + " ".join(clues[:4])
+    hits, scores, mode = context_search.rank(query, scope, rows, labels, index, tokens, IDENTIFIER)
+    hits.update(criteria)
     admitted = base | {rows[i]["record"] for i in hits}
     if not hits and "?" in prompt and not any(name in prompt for name in base):
         result["evidence_gap"] = "No close passage matched the question. Verify the answer against the scoped records."
@@ -643,6 +816,10 @@ def resolve_current(private, prompt, cwd, previous, explicit, explain, include_h
         if name in base or i in hits or (governed and name in admitted):
             # Preserve inherited constraints ahead of constraints from newly discovered notes.
             priority = (0 if name in base else 1) if governed else 2
+            if shape_strategy and not governed and (name != layout.COMPANY or row["section"] != "Direction and goals"):
+                priority += 1
+            if assessment and not governed:
+                priority += 0 if i in criteria else 1 if i in outcome_subject else 2
             exact, fused, semantic = scores[i]
             order = (priority, row["section"] != "Data boundaries", not row["binding"], name not in prompt,
                      not exact, -fused, -semantic, name)
@@ -701,6 +878,8 @@ def resolve_current(private, prompt, cwd, previous, explicit, explain, include_h
     budget = 6500 - len("[]")
     for row in entries:
         row = dict(row, evidence_status=evidence_status(row))
+        if row["record"] == shared:
+            row["applies_within"] = result["shared_area"]["subject"]
         key = question_key(row, "  Open question at capture: ")
         if key and key in answers:
             row["subsequent_answers"] = answers[key]
@@ -715,6 +894,11 @@ def resolve_current(private, prompt, cwd, previous, explicit, explain, include_h
             continue
         result["entries"].append(row)
         budget -= size
+    if assessment:
+        candidates = [n for n, row in enumerate(result["entries"], 1)
+                      if outcome_context.same_subject(row, docs[row["record"]], scope) and outcome_context.definition(row)
+                      and outcome_context.usable_candidate(row)]
+        result["activity_check"] = outcome_context.check(candidates, targets, lookup, assessment.groupdict().get("measure"))
     numeric_context = " ".join(row["text"] for row in result["entries"] if row["text"].startswith("- Reported metric:"))
     selected_metrics = metric_registry.matching(metrics, f"{prompt} {numeric_context}")
     if selected_metrics:
@@ -877,6 +1061,14 @@ def turn_context(private, prompt, *, cwd=None, saved=None, explicit=None, work_r
         pm_cue = company_onboarding.followup(private, prompt, company_scope=False, kind="pm")
         if pm_cue:
             turn["pm_followup"] = pm_cue
+        subject = f"product/{scope['product']}" if scope.get("product") and not scope.get("stakeholders") else None
+        if subject and scope.get("area"):
+            subject += f"/area/{scope['area']}"
+        if subject or (result["status"] == "unscoped" and company_onboarding.PRODUCT_SETUP.search(prompt)):
+            product_cue = company_onboarding.followup(private, prompt, company_scope=False, kind="product",
+                                                      subject=subject)
+            if product_cue:
+                turn["product_followup"] = product_cue
     result["conversation"] = turn
     record = previous.get("record") if same_work and not scope and not selected_new_owner else None
     if checkpoint:

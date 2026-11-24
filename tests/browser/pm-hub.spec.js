@@ -94,8 +94,7 @@ test("the shared launcher opens each named screen and stays there on reload", as
 
 test("an empty Studio opens its agent walkthrough from a task deep link", async ({ hub, page }) => {
   const studio = path.join(hub.root, "studio");
-  const reviewed = path.join(path.dirname(hub.root), "reviewed-studio");
-  fs.renameSync(studio, reviewed);
+  fs.renameSync(studio, path.join(path.dirname(hub.root), "reviewed-studio"));
   execFileSync(python, [path.join(hub.root, "tools", "pm.py"), "init-workspace", "--owner", "Fixture PM"],
     { cwd: hub.root, stdio: "pipe" });
   const address = new URL(hub.url);
@@ -111,7 +110,6 @@ test("an empty Studio opens its agent walkthrough from a task deep link", async 
 
   const catalog = path.join(hub.root, "playbook", "onboarding-frameworks.json");
   const frameworks = JSON.parse(fs.readFileSync(catalog, "utf8"));
-  fs.writeFileSync(catalog, JSON.stringify({ ...frameworks, product: null }));
   let progress = hub.cli(["onboarding", "status"]);
   for (const topic of frameworks.company) {
     progress = hub.cli(["onboarding", "review-topic"], {
@@ -130,18 +128,28 @@ test("an empty Studio opens its agent walkthrough from a task deep link", async 
   }
   await button(page, "Check progress").click();
   await expect(page.getByRole("heading", { name: "Product context" })).toBeVisible();
-  await expect(page.getByText("You can still update your company, PM, and stakeholder context", { exact: false })).toBeVisible();
+  await expect(page.getByText(progress.prompt, { exact: true })).toBeVisible();
   await expect(button(page, "New task")).toHaveCount(0);
 
   const checkpoint = path.join(studio, "workspace", "onboarding", "review.json");
+  const validProgress = fs.readFileSync(checkpoint);
   fs.writeFileSync(checkpoint, "damaged test checkpoint");
   await button(page, "Check progress").click();
   await expect(page.getByText("Ask oryx to review your saved progress with you.")).toBeVisible();
-  await expect(page.getByText("You can still update your company", { exact: false })).toHaveCount(0);
-
-  fs.writeFileSync(catalog, JSON.stringify(frameworks));
-  fs.renameSync(studio, path.join(path.dirname(hub.root), "empty-studio"));
-  fs.renameSync(reviewed, studio);
+  fs.writeFileSync(checkpoint, validProgress);
+  progress = hub.cli(["onboarding", "select-product"], {
+    revision: progress.revision, subject: null, pm_reply: "I don't have an assigned product yet.",
+  });
+  for (const topic of frameworks.product) {
+    await button(page, "Check progress").click();
+    await expect(page.getByText(progress.prompt, { exact: true })).toBeVisible();
+    await expect(button(page, "New task")).toHaveCount(0);
+    progress = hub.cli(["onboarding", "review-topic"], {
+      revision: progress.revision, stage: "product", subject: progress.product_scope.subject, topic: topic.id,
+      outcome: "open", pm_reply: "We discussed it. Please leave this open.",
+    });
+  }
+  expect(progress.ready).toBe(true);
   await button(page, "Check progress").click();
   await expect(page.getByRole("heading", { name: "Tasks", exact: true })).toBeVisible();
   expect(new URL(page.url()).searchParams.get("screen")).toBe("tasks");

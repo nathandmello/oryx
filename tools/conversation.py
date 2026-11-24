@@ -106,7 +106,7 @@ def strategy_activity(prompt, product=None):
     product_label = re.escape(product or "").replace(r"\-", "[- ]")
     scope = rf"(?:{product_label}(?:['’]s)?\s+)?" if product else ""
     subject = r"(?:(?:a|an|the|my|our|this|new)\s+)*" + scope + r"(?:product\s+)?strategy\b"
-    if re.match(r"^(?:please\s+)?(?:help (?:me|us) with|i(?:['’]m| am) working on)\s+" + subject, prompt, re.I):
+    if re.match(r"^(?:please\s+)?(?:help (?:me|us) (?:with|think through)|i(?:['’]m| am) working on)\s+" + subject, prompt, re.I):
         return True
     return bool(re.match(
         r"^(?:(?:please|let['’]s|i (?:want|need|would like) to|(?:can|could|would) (?:you|we)|"

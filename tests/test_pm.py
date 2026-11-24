@@ -36,6 +36,17 @@ def confirmed_decisions(payload, preview):
     return dict(payload, entries=reviewed)
 
 
+def legacy_inline_area(root, private, product, area, question):
+    """An existing inline question from the Studio format before dedicated area capture."""
+    name = pm.layout.product(product)
+    path = private / name
+    if not path.exists():
+        records.create(root, "product-context", name)
+    heading = "## Constraints\n"
+    line = f"- Unknown: Product area {area} — {question} <!-- product-area:{area} -->"
+    path.write_text(path.read_text().replace(heading, heading + "\n" + line + "\n", 1))
+
+
 def legacy_product(root, private, name):
     path = private / name
     path.parent.mkdir(parents=True, exist_ok=True)

@@ -8,6 +8,7 @@ import shutil
 import subprocess
 
 from meeting_transcripts import ROOT, hub_command, pm, reviewed_studio, snapshot
+from onboarding_fixtures import review_current_topic
 
 
 CASES = json.loads(Path(__file__).with_name("coaching_cases.json").read_text(encoding="utf-8"))
@@ -52,6 +53,13 @@ def prepare(run, case):
                 "revision": status["revision"], "stage": "company", "topic": topic,
                 "outcome": "open", "pm_reply": "We discussed this. Leave it open.",
             }))
+    elif case == "product-scope":
+        private = hub / "studio"
+        roles = [{"subject": f"product/{parent}/area/salesforce", "role": "owner", "goals": [], "depends_on": []}
+                 for parent in ("analytics", "payments")]
+        pm.context_capture.write_remit(private, {"status": "confirmed", "responsibilities": roles, "follow": []})
+        while json.loads(hub_command(hub, "onboarding", "status"))["stage"] in {"company", "pm"}:
+            review_current_topic(private)
     elif case not in {"company-first", "founder-company"}:
         seed_product_work(hub, day)
     print(hub_command(hub, "check").strip())
@@ -158,7 +166,7 @@ def pm_walkthrough_checks(run, turn, changed, current):
         "only_authorized_changes": changed == allowed,
         "company_pass_complete": journey["walkthroughs"]["company"]["complete"],
         "setup_stage": journey["stage"] == ("product" if turn == 10 else "pm"),
-        "available_step": journey["stage_available"] == (turn < 10),
+        "available_step": journey["stage_available"],
         "product_work_held": not journey["ready"],
         "reviewed_points": journey["walkthroughs"]["pm"]["reviewed"] == {
             topic: outcome for milestone, topic, outcome in milestones if milestone <= turn},
@@ -235,6 +243,12 @@ def audit(run, baseline, turn):
             expected = False
     checks = {"system_intact": snapshot(hub) == baseline["system"],
               "only_authorized_changes": changed <= allowed, "expected_write": expected}
+    if case == "product-scope":
+        journey = json.loads(hub_command(hub, "onboarding", "status"))
+        subject = journey["product_scope"]["subject"]
+        checks["only_authorized_changes"] = changed == ({"workspace/onboarding/review.json"} if turn >= 2 else set())
+        checks["confirmed_subject"] = subject == ("product/analytics/area/salesforce" if turn >= 2 else None)
+        checks["capture_is_chat_only"] = journey["stage"] == "product" and not journey["walkthroughs"]["product"]["reviewed"]
     if case == "pm-walkthrough":
         checks.update(pm_walkthrough_checks(run, turn, changed, current))
     if case == "company-first":

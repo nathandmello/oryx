@@ -1,4 +1,4 @@
-"""Review a single company, PM or stakeholder finding under a PM-approved source plan."""
+"""Review one context finding under a PM-approved source plan."""
 
 from datetime import date
 from functools import partial
@@ -11,13 +11,16 @@ import context_capture as capture
 import layout
 import onboarding_review
 import pm_profile
+import product_intake
 import records
 import storage
 
 FILE = "workspace/onboarding/company.json"
 PM_FILE = "workspace/onboarding/pm.json"
+PRODUCT_FILE = "workspace/onboarding/product.json"
 OPERATIONS = ("status", "plan", "approve", "propose", "accept", "defer", "gap", "resolve", "finish")
 PM_OPERATIONS = (*OPERATIONS, "discard")
+PRODUCT_OPERATIONS = PM_OPERATIONS
 GAP_FIELDS = ("question", "why", "next_action", "resume_when")
 NEXT = {
     "welcome": "Offer to help set up company context. Listen first.",
@@ -37,8 +40,17 @@ PM_NEXT = {
 }
 PM_SETUP = re.compile(r"\b(?:PM (?:onboarding|setup|context|profile|remit)|stakeholder map|my (?:role|remit))\b", re.I)
 
+PRODUCT_NEXT = {
+    **PM_NEXT,
+    "welcome": "Use the confirmed remit to discuss the product as it operates today.",
+    "existing": "Use the existing product or area brief. Review one relevant finding at a time.",
+    "review": "Offer to reopen the product finding with product-onboarding status --pending.",
+}
+PRODUCT_SETUP = re.compile(r"\b(?:product (?:onboarding|setup|context|brief)|area (?:context|brief))\b", re.I)
+
+
 def checkpoint(kind):
-    return {"pm": PM_FILE, "company": FILE}[kind]
+    return {"pm": PM_FILE, "company": FILE, "product": PRODUCT_FILE}[kind]
 
 
 def pm_destination(destination):
@@ -63,7 +75,7 @@ def read(private, kind="company"):
             or state["revision"] < 1 or type(state["approved"]) is not bool or not isinstance(state["gaps"], list)):
         raise ValueError(f"Invalid {kind} onboarding checkpoint")
     for gap in state["gaps"]:
-        validate_gap(gap)
+        validate_gap(gap, kind)
     if state["plan"] is not None:
         validate_plan(state["plan"], kind)
     if state["approved"] and state["plan"] is None:
@@ -71,10 +83,10 @@ def read(private, kind="company"):
     item = state["pending"]
     if item is not None:
         capture.fields(item, ("source_scope", "source", "entry", "destination", "section", "previous", "verification"),
-                       ("risk_preview",))
+                       ("risk_preview", "creates_parent") if kind == "product" else ("risk_preview",))
         if not state["approved"]:
             raise ValueError(f"Pending {kind} finding needs an approved plan")
-        if kind == "pm":
+        if kind in ("pm", "product"):
             # Discard cross-record comparisons from earlier preview builds on the next approved write.
             item.pop("risk_preview", None)
     return raw, state
@@ -108,19 +120,34 @@ def active_phase(state):
 
 def view(private, state, kind="company", *, show_pending=False):
     home = layout.COMPANY if kind == "company" else layout.PROFILE
-    next_steps = NEXT if kind == "company" else PM_NEXT
+    next_steps = {"company": NEXT, "pm": PM_NEXT, "product": PRODUCT_NEXT}[kind]
+    if kind == "product":
+        current = product_intake.scope(private)
+        subject = state["plan"]["subject"] if state["plan"] else (
+            None if current["selection_required"] else current["subject"])
+        home = layout.product(subject.split("/")[1]) if subject else None
     phase = active_phase(state)
     if phase is None:
-        existing = (has_company_context(private) if kind == "company" else
-                    any((private / path).is_file() for path in (layout.PROFILE, layout.STAKEHOLDERS)))
+        if kind == "product":
+            existing = bool(home and (private / home).is_file())
+        elif kind == "company":
+            existing = has_company_context(private)
+        else:
+            existing = any((private / path).is_file() for path in (layout.PROFILE, layout.STAKEHOLDERS))
         if existing:
             phase = "existing"
         else:
             phase = "paused" if state["revision"] else "welcome"
     pending = state["pending"]
     result = {"revision": state["revision"], "phase": phase, "next_action": next_steps[phase],
-              "overview": home if (private / home).is_file() else None, "plan": state["plan"]}
-    if kind == "pm":
+              "overview": home if home and (private / home).is_file() else None, "plan": state["plan"]}
+    if kind == "product":
+        result.update(responsibilities=current["choices"], subject=subject)
+        if state["plan"] and subject not in current["choices"]:
+            result["next_action"] = "The saved plan's subject is outside the current remit. Check the change with the PM."
+        if "remit_problem" in current:
+            result["remit_problem"] = current["remit_problem"]
+    if kind in ("pm", "product"):
         result.update(has_pending=pending is not None, gap_count=len(state["gaps"]),
                       gap_selectors=[f"{state['revision']}/{i}" for i in range(1, len(state["gaps"]) + 1)])
         result["pending"] = ({k: v for k, v in pending.items() if k not in ("previous", "risk_preview")}
@@ -135,8 +162,9 @@ def status(private, kind="company", *, gap=None, pending=False):
     state = read(private, kind)[1]
     result = view(private, state, kind, show_pending=pending)
     if gap is not None:
-        if kind != "pm" or gap not in result["gap_selectors"]:
-            raise ValueError("Choose a current PM gap selector from pm-onboarding status")
+        if kind not in ("pm", "product") or gap not in result["gap_selectors"]:
+            label = "PM" if kind == "pm" else kind
+            raise ValueError(f"Choose a current {label} gap selector from {kind}-onboarding status")
         position = result["gap_selectors"].index(gap)
         return {"revision": state["revision"], "gap": state["gaps"][position]}
     if pending:
@@ -174,8 +202,8 @@ def reported_pm_event(cue, prompt):
     return re.sub(r"^(?:i|we) +(?:(?:have|just) +)*(?:finished|completed|had) +", "", report) == event
 
 
-def followup(private, prompt, company_scope, kind="company"):
-    setup_words = COMPANY_SETUP if kind == "company" else PM_SETUP
+def followup(private, prompt, company_scope, kind="company", *, subject=None):
+    setup_words = {"company": COMPANY_SETUP, "pm": PM_SETUP, "product": PRODUCT_SETUP}[kind]
     if DEFER.search(prompt) or not (private / checkpoint(kind)).exists():
         return None
     try:
@@ -186,6 +214,10 @@ def followup(private, prompt, company_scope, kind="company"):
             return f"Check the saved {kind} onboarding state before resuming. Run pm.py {kind}-onboarding status."
         return None
     resuming = bool((company_scope or setup_words.search(prompt)) and RESUME.search(prompt))
+    if resuming and kind == "product" and state["plan"] and subject and setup["subject"] != subject:
+        return None
+    if resuming and kind == "product" and setup["phase"] == "review":
+        return "Offer to reopen the pending product finding with product-onboarding status --pending."
     if resuming and kind == "pm" and setup["phase"] == "review":
         return ("Offer to reopen the pending PM draft. After the PM agrees, "
                 "inspect it with pm.py pm-onboarding status --pending.")
@@ -193,6 +225,13 @@ def followup(private, prompt, company_scope, kind="company"):
         return f"Resume {kind} setup at phase {setup['phase']}. {setup['next_action']} Read pm.py {kind}-onboarding status."
     words = re.findall(r"\w+", prompt.casefold())
     for index, gap in enumerate(state["gaps"], 1):
+        if kind == "product":
+            if not subject and resuming:
+                subject = setup["subject"]
+            if subject == gap["subject"] and cue_matches(gap["resume_when"], words, resuming):
+                return ("Offer to revisit the scoped product question if relevant. With the PM's agreement, "
+                        f"inspect product-onboarding status --gap {state['revision']}/{index}.")
+            continue
         if kind == "pm":
             # Even a matching event can be incidental. Keep personal questions and next steps
             # out of automatic turn context; the PM can choose to open their private capture.
@@ -215,28 +254,68 @@ def active(private, kind="company"):
     return read(private, kind)[1]["plan"] is not None
 
 
-def setup_decision(payload):
-    """Identify the single company choice eligible for separate recording consent during setup."""
+def decision_kind(payload):
+    """Identify one documented choice eligible for the separate recording workflow."""
     if not isinstance(payload, dict) or set(payload) != {"sources", "entries"}:
-        return False
+        return None
     sources, entries = payload["sources"], payload["entries"]
     if not isinstance(sources, list) or len(sources) != 1 or not isinstance(entries, list) or len(entries) != 1:
-        return False
+        return None
     entry = entries[0]
-    return (isinstance(entry, dict) and entry.get("scope") == "company" and entry.get("topic") == "decisions"
-            and "decision" in entry and entry.keys() <= {
-                "scope", "topic", "source", "location", "quote", "decision", "record_decision"})
+    if not isinstance(entry, dict) or entry.get("topic") != "decisions" or "decision" not in entry:
+        return None
+    kind = entry.get("scope")
+    fields = {"scope", "topic", "source", "location", "quote", "decision", "record_decision"}
+    if kind == "product":
+        fields.update(("product", "product_area", "area_group"))
+    if kind in ("company", "product") and entry.keys() <= fields:
+        return kind
 
 
-def check_decision_source(private, sources):
-    _, state = read(private)
+def decision_plan(private, kind, payload, remit, *, destination=None):
+    """Recheck the approved round, exact destination and inspected excerpt on preview and under the write lock."""
+    _, state = read(private, kind)
     if not state["approved"]:
-        raise ValueError("Approve the company source plan before reviewing a company decision")
+        raise ValueError(f"Approve the {kind} source plan before reviewing a {kind} decision")
     if state["pending"]:
-        raise ValueError("Accept or defer the pending company finding before reviewing a decision")
-    reference = capture.source_rows(sources)[0]["reference"]
+        raise ValueError(f"Accept or defer the pending {kind} finding before reviewing a decision")
+    reference = capture.source_rows(payload["sources"])[0]["reference"]
     if not any(within_scope(scope, reference) for scope in state["plan"]["sources"]):
-        raise ValueError("Decision source is outside the approved company plan")
+        raise ValueError(f"Decision source is outside the approved {kind} plan")
+    approved_homes = [layout.COMPANY]
+    if kind == "product":
+        entry, approved_homes = product_intake.finding(private, state["plan"], payload["entries"][0])
+        if entry.get("product_area") and not capture.record_path(private, layout.product(entry["product"])).is_file():
+            raise ValueError("Review and accept the parent product brief before recording an area decision")
+        payload = dict(payload, entries=[entry])
+    plan = capture.route(payload, private, remit, single_excerpt=True, descriptive_intake=kind == "product")
+    target = plan["entries"][0]["destination"]
+    if target not in approved_homes or destination not in (None, target):
+        raise ValueError("Use the reviewed decision's approved destination")
+    if plan["source_checks"][0]["verification"] != "reviewed excerpt matched inspected text":
+        raise ValueError(f"Supply inspected source text or a readable local source for this {kind} decision")
+    if kind == "product":
+        title = state["plan"].get("titles", {}).get(target)
+        if not title and not entry.get("product_area"):
+            title = entry["product"].replace("-", " ")
+        if title:
+            plan["brief_title"] = title
+    return plan
+
+
+def entries_in_product_round(private, entries):
+    if not isinstance(entries, list):
+        return False
+    targets = [(entry.get("product"), entry.get("product_area")) for entry in entries
+               if isinstance(entry, dict) and entry.get("scope") == "product"]
+    if not targets:
+        return False
+    plan = read(private, "product")[1]["plan"]
+    if not plan:
+        return False
+    product, area, parent, child = product_intake.places(plan)
+    return ((child is not None and (product, area) in targets)
+            or (parent in plan["destinations"] and (product, None) in targets))
 
 
 def check_capture(private, destination, plan):
@@ -250,9 +329,32 @@ def check_capture(private, destination, plan):
     raise ValueError("Review and accept this company finding with company-onboarding")
 
 
+def product_capture_owns(private, destination):
+    if not str(destination).startswith("context/products/"):
+        return False
+    plan = read(private, "product")[1]["plan"]
+    if not plan:
+        return False
+    identity = layout.area_identity(destination)
+    if identity:
+        product, area, _, child = product_intake.places(plan)
+        return child is not None and identity[:2] == (product, area)
+    try:
+        home = layout.entity(destination) / "overview.md"
+    except ValueError:
+        return False
+    return home.as_posix() in plan["destinations"]
+
+
 def validate_plan(plan, kind="company"):
-    required = ("purpose", "sources", "destinations") if kind == "pm" else ("purpose", "sources")
-    capture.fields(plan, required)
+    required = ("purpose", "sources")
+    if kind in ("pm", "product"):
+        required += ("destinations",)
+    if kind == "product":
+        required += ("subject",)
+    capture.fields(plan, required, ("titles",) if kind == "product" else ())
+    if kind == "product":
+        product_intake.places(plan)
     if kind == "pm":
         places = plan["destinations"]
         if (not isinstance(places, list) or not places or not all(pm_destination(path) for path in places)
@@ -268,8 +370,11 @@ def validate_plan(plan, kind="company"):
         raise ValueError("List each approved source scope once")
 
 
-def validate_gap(gap):
-    capture.fields(gap, GAP_FIELDS, ("basis",))
+def validate_gap(gap, kind="company"):
+    required = (*GAP_FIELDS, "subject", "destination") if kind == "product" else GAP_FIELDS
+    capture.fields(gap, required, ("basis",))
+    if kind == "product":
+        product_intake.places({"subject": gap["subject"], "destinations": [gap["destination"]]})
     if "basis" in gap:
         capture.fields(gap["basis"], ("reference", "date", "location", "quote"))
         for field, value in gap["basis"].items():
@@ -322,12 +427,12 @@ def prepare(private, state, data, *, restoring=False, kind="company"):
     if not within_scope(scope, source["reference"]):
         raise ValueError("Source reference is outside the approved source scope")
     entry = entries[0]
-    scopes = ("pm", "stakeholder") if kind == "pm" else ("company",)
+    scopes = ("pm", "stakeholder") if kind == "pm" else (kind,)
     if not isinstance(entry, dict) or entry.get("scope") not in scopes or entry.get("source") != 1:
         raise ValueError(f"Supply one sourced {kind} finding for this review")
     if kind == "pm" and entry.get("scope") == "pm" and entry.get("topic") == "stakeholders":
         raise ValueError("Review relationships in the separate stakeholder map")
-    if kind == "pm" and entry.keys() & {"rule", "term", "record_decision", "risk", "supersedes"}:
+    if kind in ("pm", "product") and entry.keys() & {"rule", "term", "record_decision", "risk", "supersedes"}:
         raise ValueError("PM setup captures descriptive context. Use the owning workflow for actions and policy changes")
     if "decision" in entry or entry.get("topic") == "decisions":
         raise ValueError("Wording approval cannot record a decision. Preview and confirm it separately with route-context.")
@@ -339,10 +444,16 @@ def prepare(private, state, data, *, restoring=False, kind="company"):
             raise ValueError("Review the destination with the PM and approve a revised plan before filing there")
         if "record" in entry and (not isinstance(entry["record"], dict) or entry["record"].get("path") != expected):
             raise ValueError("Review the finding in its approved canonical profile or stakeholder destination")
-    plan = routed(private, sources[0], entry, descriptive_intake=kind == "pm")
+        approved_homes = [expected]
+    if kind == "product":
+        entry, approved_homes = product_intake.finding(private, state["plan"], entry)
+    plan = routed(private, sources[0], entry, descriptive_intake=kind in ("pm", "product"))
     row = plan["entries"][0]
-    if kind == "pm" and row["destination"] not in state["plan"]["destinations"]:
+    if kind in ("pm", "product") and row["destination"] not in approved_homes:
         raise ValueError("Review the destination with the PM and approve a revised plan before filing there")
+    if (kind == "product" and "product_area" in entry and "lead" in entry
+            and row["destination"] == layout.product(entry["product"])):
+        raise ValueError("Review the area answer on its own before changing a product-wide section lead")
     if kind == "company" and (not row["destination"] or not row["destination"].startswith("context/company/")):
         raise ValueError("Choose the company overview or a qualifying company supporting record")
     path = capture.record_path(private, row["destination"])
@@ -351,6 +462,10 @@ def prepare(private, state, data, *, restoring=False, kind="company"):
         raise ValueError("Supply inspected source text or a readable local source for the reviewed finding")
     pending = {"entry": entry, "source": source, "source_scope": scope, "destination": row["destination"],
                "section": row["section"], "previous": fingerprint(path), "verification": verification}
+    if kind == "product" and "product_area" in entry:
+        parent = layout.product(entry["product"])
+        if not capture.record_path(private, parent).is_file():
+            pending["creates_parent"] = parent
     if plan.get("risk_preview"):
         pending["risk_preview"] = plan["risk_preview"]
     return pending, plan
@@ -375,15 +490,39 @@ def accept(root, private, state, owner, lint, kind="company"):
         saved = path.read_text(encoding="utf-8") if path.is_file() else ""
         if item["destination"] == layout.PROFILE:
             saved = pm_profile.capture_block(saved)[1] or ""
-        if saved and capture.contains_capture(saved, path, entry, item["section"], [source], private):
+        recorded = entry
+        if kind == "product" and layout.brief_kind(item["destination"]) == "product-area-context":
+            recorded = {key: value for key, value in entry.items() if key != "product_area"}
+        if saved and capture.contains_capture(saved, path, recorded, item["section"], [source], private):
             return  # Recover if the record was saved before the checkpoint write.
         raise ValueError("The target changed since review. Preview the finding again")
+    if current.get("creates_parent") and current["creates_parent"] != item.get("creates_parent"):
+        raise ValueError("The parent product brief changed. Preview the finding again")
     if current.get("risk_preview") != item.get("risk_preview"):
         raise ValueError("The evidence risk changed. Preview the finding again")
     plan["source_checks"][0]["verification"] = item["verification"]
-    if kind == "pm":
+    descriptive = kind in ("pm", "product")
+    parent = None
+    if kind == "product" and current.get("creates_parent"):
+        parent = private / current["creates_parent"]
+        title = state["plan"].get("titles", {}).get(current["creates_parent"])
+        scaffold = product_intake.scaffold(root, private, current["creates_parent"], lint, title)
+
+    if descriptive:
         lint = partial(lint, destination_only=True)
-    capture.apply(root, item["destination"], plan, owner, lint, descriptive_intake=kind == "pm")
+    try:
+        if kind == "product":
+            title = state["plan"].get("titles", {}).get(item["destination"])
+            if not title and item["destination"] == layout.product(entry["product"]):
+                title = entry["product"].replace("-", " ")
+            capture.apply(root, item["destination"], plan, owner, lint, descriptive_intake=True, title=title)
+        else:
+            capture.apply(root, item["destination"], plan, owner, lint, descriptive_intake=descriptive)
+    except (ValueError, OSError):
+        # A failed first area write must not leave an unused shell. Never remove an edited parent.
+        if parent and scaffold and not path.exists() and parent.is_file() and parent.read_bytes() == scaffold.encode():
+            parent.unlink()
+        raise
 
 
 def change(root, operation, payload, owner, lint, kind="company"):
@@ -397,6 +536,8 @@ def change(root, operation, payload, owner, lint, kind="company"):
         data = {key: value for key, value in payload.items() if key != "revision"}
         if operation == "plan":
             validate_plan(data, kind)
+            if kind == "product":
+                product_intake.check_plan(private, data)
             if state["pending"]:
                 raise ValueError("Accept or defer the pending finding before changing the source plan")
             state.update(plan=data, approved=False)
@@ -405,6 +546,8 @@ def change(root, operation, payload, owner, lint, kind="company"):
             if operation == "approve":
                 if state["plan"] is None or state["approved"]:
                     raise ValueError("Present the proposed plan before approving it")
+                if kind == "product":
+                    product_intake.check_plan(private, state["plan"])
                 state["approved"] = True
             elif operation == "accept":
                 accept(root, private, state, owner, lint, kind)
@@ -413,7 +556,7 @@ def change(root, operation, payload, owner, lint, kind="company"):
                 if state["pending"]:
                     raise ValueError("Accept or defer the pending finding before finishing")
                 state.update(plan=None, approved=False)
-        elif operation == "discard" and kind == "pm":
+        elif operation == "discard" and kind in ("pm", "product"):
             capture.fields(data, ())
             if state["pending"] is None:
                 raise ValueError("There is no pending finding to discard")
@@ -421,9 +564,18 @@ def change(root, operation, payload, owner, lint, kind="company"):
         elif operation == "propose":
             state["pending"], _ = prepare(private, state, data, kind=kind)
         elif operation in {"defer", "gap"}:
-            capture.fields(data, GAP_FIELDS)
-            validate_gap(data)
-            existing = next((gap for gap in state["gaps"] if gap["question"] == data["question"]), {})
+            if kind == "product":
+                capture.fields(data, (*GAP_FIELDS, "destination"))
+                if not state["approved"] or data["destination"] not in state["plan"]["destinations"]:
+                    raise ValueError("Review the product question and its destination in an approved plan")
+                product_intake.check_plan(private, state["plan"])
+                data["subject"] = state["plan"]["subject"]
+                if operation == "defer" and state["pending"] and data["destination"] != state["pending"]["destination"]:
+                    raise ValueError("Defer this question in the pending finding's destination")
+            validate_gap(data, kind)
+            existing = next((gap for gap in state["gaps"] if gap["question"] == data["question"]
+                             and gap.get("destination") == data.get("destination")
+                             and gap.get("subject") == data.get("subject")), {})
             if "basis" in existing:
                 data["basis"] = existing["basis"]
             if operation == "defer":
@@ -433,10 +585,13 @@ def change(root, operation, payload, owner, lint, kind="company"):
                 data["basis"] = {**{k: item["source"][k] for k in ("reference", "date")},
                                  **{k: item["entry"][k] for k in ("location", "quote")}}
                 state["pending"] = None
-            state["gaps"] = [gap for gap in state["gaps"] if gap["question"] != data["question"]] + [data]
+            state["gaps"] = [gap for gap in state["gaps"] if gap is not existing] + [data]
         elif operation == "resolve":
             capture.fields(data, ("question",))
-            gaps = [gap for gap in state["gaps"] if gap["question"] != data["question"]]
+            destination = (state["pending"] or {}).get("destination")
+            gaps = [gap for gap in state["gaps"] if gap["question"] != data["question"] or
+                    (kind == "product" and (gap["destination"] != destination or
+                                            gap["subject"] != (state["plan"] or {}).get("subject")))]
             if len(gaps) == len(state["gaps"]):
                 raise ValueError("Choose an existing gap to resolve")
             if not state["pending"] or state["pending"]["entry"].get("answers") != data["question"]:

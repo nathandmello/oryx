@@ -7,7 +7,8 @@ argument-hint: "[domain] [subject] [verb] [arguments]"
 # oryx actions
 
 Run `python3 tools/pm.py action` from the root of the oryx checkout.
-If an action returns a setup step, lead the [company](../../../playbook/company-context.md) or [PM walkthrough](../../../playbook/pm-context.md) in conversation. Resume the request after onboarding.
+If an action returns a setup step, lead the current walkthrough in conversation. Follow the [company](../../../playbook/company-context.md), [PM](../../../playbook/pm-context.md), or [product](../../../playbook/product-context.md) guide. Resume the request after onboarding.
+
 For `/pm` alone, show the available domains from `action`.
 For a partial path, pass it to `action` to list the next choices.
 Use `--help` on a complete path to check its purpose and accepted options.
@@ -24,7 +25,8 @@ Keep the request read-only if a stop check flags a stale approval. Report the op
 
 A catalog description with effect `guided` identifies the shared guide and task.
 Run the guided action. Apply its applicable workspace instructions when following the shared guide.
-Verify the required scope and source before writing. Observe the guide's existing permission and decision gates.
+Use the [task context guide](../../../playbook/context-search.md) to find evidence for the activity’s open questions.
+Verify the scope and source before writing. Observe the guide's existing permission and decision gates.
 
 For ordinary requests about product choices, use the [conversation guide](../../../playbook/conversation.md).
 When helping shape a goal or strategy, use [goal alignment](../../../playbook/framework.md#goal-alignment) with the PM's company context.

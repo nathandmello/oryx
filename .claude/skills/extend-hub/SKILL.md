@@ -14,12 +14,13 @@ Read `AGENTS.md` and the existing work relevant to the request. Complete the dep
 3. Choose the smallest complete change. Keep unrelated features outside its scope.
 4. Define the record format, source references, relationships, checkpoints, and review triggers that the work needs.
 5. Put judgment and method guidance in the skill. Put deterministic checks in scripts.
-6. Define the evidence each activity needs to start. Support partial progress and preserve unrelated gaps.
+6. Identify the questions an activity must answer. Specify which [scoped evidence](../../../playbook/context-search.md) it retrieves and which gaps need PM input.
 7. Add meaningful tests for new enforcement. Check a valid case and a rejected case.
 8. Keep instructions portable. Author shared skills under `.agents/skills/`.
 
 For PM-facing work, identify what oryx can prepare, what the PM decides, and where they review the wording.
 Verify the same craft steps and evidence checks under deadline pressure.
+Test the activity from an ordinary PM request with relevant evidence, a material gap, and a plausible unrelated match.
 
 For every shared slash command change, follow the [command convention](../../../playbook/commands.md).
 Register its path and target in the shared catalog. Preserve published paths with aliases when needed.

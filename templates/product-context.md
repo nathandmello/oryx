@@ -9,11 +9,11 @@ Use [the context rules](../playbook/context.md). Keep sections that guide recurr
 
 ## The product
 
-{{What it does, who uses it, and how it makes money or saves work. Link separately maintained areas. Use the team's measures.}}
+{{Describe what people can do today and where the product fits in their journey. Explain its intended contribution. Link relevant area briefs.}}
 
 ## The vision
 
-{{Why users return, one to three core actions, and how often each occurs.}}
+{{State why the product exists and cite any existing direction or commitments. Attribute an early hypothesis to its source.}}
 
 ## The users
 
@@ -45,7 +45,7 @@ Use [the context rules](../playbook/context.md). Keep sections that guide recurr
 
 ## Goals, performance, and gaps
 
-{{Link active goals and measures where useful. State open questions that affect work.}}
+{{Link existing goals and measures. State the observed result, population, period, definition, source, and limitations. Record open questions.}}
 
 ## Context controls
 

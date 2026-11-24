@@ -40,6 +40,27 @@ class OutcomeReviewTests(unittest.TestCase):
     def due(self):
         return [row["id"] for row in json.loads(self.hub.cli("backlog", "--due"))]
 
+    def test_activity_retrieves_the_signed_target_only_for_its_initiative(self):
+        h = self.hub
+        self.release("renewal-rate")
+        observed = self.measure("renewal-rate", "pilot-cohort", h.today)
+        h.submit(observed)
+        query = "How did it perform?"
+        initiative = json.loads(h.cli("task-context", "--product", "example", "--initiative", "renewal", query))
+        check = initiative["activity_check"]
+        self.assertEqual(check["status"], "check_source_and_scope")
+        targets = check["recorded_targets"]
+        self.assertEqual(len(targets), 1)
+        for field in ("metric", "initiative", "baseline", "target", "due", "source"):
+            self.assertEqual(targets[0][field], h.target()[field])
+        self.assertEqual(h.work / targets[0]["record"], h.ledger)
+        view = json.loads(h.cli(*check["initiative_lookup"]))
+        reading = view["initiative"]["measurements"]["pilot-cohort"]
+        for field in ("value", "source", "observed_on"):
+            self.assertEqual(reading[field], observed[field])
+        product = json.loads(h.cli("task-context", "--product", "example", query))
+        self.assertNotIn("recorded_targets", product["activity_check"])
+
     def test_review_accounts_for_each_target_and_reschedules_remaining_work(self):
         h = self.hub
         self.release("renewal-rate", "retention")
