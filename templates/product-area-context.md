@@ -9,11 +9,11 @@ Use [the context rules](../playbook/context.md). Keep standing guidance for this
 
 ## Area scope and ownership
 
-{{Name the parent product, the area’s boundaries and its owner. Explain the user job this area serves.}}
+{{Use the team’s term for this part of the product. Name its parent, confirmed remit, and user job.}}
 
 ## Area outcomes
 
-{{Describe the area outcome and its contribution to the product.}}
+{{Describe the intended area outcome, who agreed it, and how it contributes to the parent product.}}
 
 ## Area users and workflow
 
@@ -45,7 +45,7 @@ Use [the context rules](../playbook/context.md). Keep standing guidance for this
 
 ## Goals, performance, and gaps
 
-{{Link active goals and measures where useful. State open questions that affect work.}}
+{{Link existing goals. For each observed result, cite the measure, cohort, period, source, and limitations. Record open questions.}}
 
 ## Context controls
 

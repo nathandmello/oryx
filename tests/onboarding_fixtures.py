@@ -7,7 +7,7 @@ import onboarding_review
 
 
 def define_fixture_frameworks(root):
-    """Supply pending stages only in a disposable Core installation."""
+    """Supply a framework only when a test explicitly models an unavailable stage."""
     if root.resolve() == Path(__file__).resolve().parents[1]:
         raise ValueError("Use a disposable Core checkout for fictional onboarding frameworks")
     path = root / "playbook/onboarding-frameworks.json"
@@ -22,10 +22,20 @@ def define_fixture_frameworks(root):
 def review_current_topic(private):
     state = onboarding_review.status(private)
     stage = state["stage"]
+    identifier = {}
+    if stage == "product":
+        scope = state["product_scope"]
+        if scope["selection_required"]:
+            subject = scope["choices"][0] if scope["choices"] else None
+            state = onboarding_review.select_product(private, {
+                "revision": state["revision"], "subject": subject,
+                "pm_reply": "Let's start with this responsibility." if subject else "My assignment is still open.",
+            })
+        identifier = {"subject": state["product_scope"]["subject"]}
     topic = state["walkthroughs"][stage]["next_topic"]
     onboarding_review.review(private, {
         "revision": state["revision"], "stage": stage, "topic": topic["id"],
-        "outcome": "open", "pm_reply": "I don't know yet. Let's leave this open.",
+        "outcome": "open", "pm_reply": "I don't know yet. Let's leave this open.", **identifier,
     })
 
 

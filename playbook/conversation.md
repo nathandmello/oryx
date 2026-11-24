@@ -28,9 +28,9 @@ Once all walkthroughs are complete, revisit the request and check the evidence i
 
 ## Start with the choice
 
-Identify the choice before opening a template. Distinguish a product outcome from a schedule, owner, or delivery task.
-Resolve scope with [task context](working.md#resume). Read relevant goals, evidence, and accepted decisions. Reuse the PM's answers.
-Ask about scope only if a wrong choice changes the work.
+Start with what the PM wants to learn or decide. Distinguish a product outcome from a schedule or delivery task.
+Use [task context](context-search.md) to answer the questions that matter for this activity. Reuse the PM’s answers.
+Keep the breakdown in the background. Bring up a gap when it changes the next step.
 
 Use the PM’s stated intent to explore, compare, or commit. Clarify the stage if it matters.
 Choose the question that most affects this choice. Wait for the answer.

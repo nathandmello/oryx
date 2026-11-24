@@ -48,7 +48,7 @@ class ProductAreaTests(unittest.TestCase):
             ("search", "filters", "following"), ("tax", "rates", "dependency"),
         ]
         rows = [dict({"scope": "product", "product": product, "topic": "constraints", "question": "Which rule applies?"},
-                     **({"product_area": area} if area else {})) for product, area, _ in routes]
+                     **({"product_area": area, "area_group": "areas"} if area else {})) for product, area, _ in routes]
         rows += [{"scope": "company", "topic": "constraints", "question": "When will the change take effect?",
                   "affects": {key: "The settlement date changes."}} for key in (refunds, "product/catalogue/area/search", "product/checkout")]
         self.assertEqual(self.save(remit).returncode, 0)
@@ -57,7 +57,7 @@ class ProductAreaTests(unittest.TestCase):
         got = json.loads(preview.stdout)["entries"]
         self.assertEqual([r["relevance"] for r in got], [want for _, _, want in routes] + ["affected", "affected", "company"])
         self.assertEqual([r["destination"] for r in got[:len(routes)]],
-                         [f"context/products/{product}/overview.md" for product, _, _ in routes])
+                         [pm.layout.area(product, area) if area else pm.layout.product(product) for product, area, _ in routes])
         self.assertEqual(got[-3]["responsibilities"], [remit["responsibilities"][0]])
 
     def test_exact_area_role_wins_regardless_of_order(self):
@@ -94,6 +94,8 @@ class ProductAreaTests(unittest.TestCase):
             self.assertEqual(run.returncode, 0, run.stdout)
             return json.loads(run.stdout)["written"]
 
+        for area in ("refunds", "receipts"):
+            test_pm.legacy_inline_area(self.root, self.work, "shop", area, question["question"])
         write(rows)
         write([dict(fact, answers=question["question"]), dict(fact, product_area="receipts"),
                dict(fact, topic="vocabulary", term={"name": "Fee", "owner": "Finance", "avoid": "Rate"}),
@@ -162,6 +164,7 @@ class ProductAreaTests(unittest.TestCase):
         self.assertNotIn(context_capture.REMIT_PROMPT, self.startup())
         question = {"scope": "product", "product": "shop", "product_area": "returns", "topic": "constraints",
                     "question": "What returns window applies?"}
+        test_pm.legacy_inline_area(self.root, self.work, "shop", "returns", question["question"])
         result = self.capture({"sources": [], "entries": [question]}, "--write", "context/products/shop/overview.md")
         self.assertEqual(result.returncode, 0, result.stdout)
         plan = json.loads(result.stdout)
@@ -211,6 +214,8 @@ class ProductAreaTests(unittest.TestCase):
         def view():
             return json.loads(self.cli("area-context", "shop", "refunds"))
 
+        for item_product, item_area in (("shop", "refunds"), ("shop", "invoices"), ("other", "refunds")):
+            test_pm.legacy_inline_area(self.root, self.work, item_product, item_area, question["question"])
         capture([question, fact, dict(question, product_area="invoices")], "--write", product)
         capture([dict(fact, scope="initiative", initiative="pilot")], "--write", initiative)
         capture([dict(question, product="other")], "--write", "context/products/other/overview.md")

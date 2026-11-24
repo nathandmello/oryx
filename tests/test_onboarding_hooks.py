@@ -22,6 +22,13 @@ class OnboardingHookTests(unittest.TestCase):
         self.cwd = self.root
         self.frameworks = define_fixture_frameworks(self.root)
 
+    def confirm_owner(self, subject):
+        result = test_pm.HubTests.save_remit(self, {
+            "status": "confirmed", "follow": [], "responsibilities": [
+                {"subject": subject, "role": "owner", "goals": [], "depends_on": []}],
+        })
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
     def test_standing_corrections_and_preferences_apply_during_onboarding(self):
         start = self.cli("onboarding", "status")
         rule = "Ask before offering a recap."
@@ -57,6 +64,8 @@ class OnboardingHookTests(unittest.TestCase):
                     "pm": "/pm portfolio backlog show",
                     "product": "Expedite mode. Put Billing on the roadmap."}
         for stage in ("company", "pm", "product"):
+            if stage == "pm":
+                self.confirm_owner("product/billing")
             for topic in self.frameworks[stage]:
                 for client in clients:
                     route, guidance = self.prompt(client, client, requests[stage])
@@ -68,6 +77,9 @@ class OnboardingHookTests(unittest.TestCase):
                     if stage == "pm":
                         self.assertIn("playbook/pm-context.md", guidance)
                         self.assertIn("pm-onboarding status", state["pm_updates"])
+                    elif stage == "product":
+                        self.assertIn("playbook/product-context.md", guidance)
+                        self.assertIn("product-onboarding", guidance)
                     self.assertNotIn("entries", route)
                     self.assertNotIn("Expedite mode is active", guidance)
                     self.assertNotIn("Use conversation data for continuity", guidance)
@@ -174,7 +186,8 @@ class OnboardingHookTests(unittest.TestCase):
         self.assertNotIn("pm_followup", self.cli("task-context", "Quiet mode. " + cue)["onboarding"])
         for client in ("Codex", "Claude"):
             self.assertEqual(self.prompt(client, "return-" + client, cue)[0]["onboarding"], state)
-        review_current_topic(self.work)
+        while onboarding_review.status(self.work)["stage"] == "product":
+            review_current_topic(self.work)
         self.assertIn("Offer to revisit", self.cli("task-context", cue)["conversation"]["pm_followup"])
 
     def test_personal_gap_stays_private_on_unrelated_work_in_every_stage(self):
@@ -268,3 +281,56 @@ class OnboardingHookTests(unittest.TestCase):
             self.assertIn("required Studio onboarding", result["hookSpecificOutput"]["permissionDecisionReason"])
         self.assertEqual(existing.read_text(), "# Q4 roadmap\n")
         self.assertFalse((self.work / "workspace/notes/new.md").exists())
+
+    def test_product_walkthrough_and_agreed_source_plan_protect_native_edits(self):
+        while onboarding_review.status(self.work)["stage"] == "company":
+            review_current_topic(self.work)
+        self.confirm_owner("product/analytics/area/salesforce")
+        while onboarding_review.status(self.work)["stage"] == "pm":
+            review_current_topic(self.work)
+        parent = layout.product("analytics")
+        plugin = "context/products/analytics/plugins/salesforce/overview.md"
+        source = "Salesforce connector team interview"
+        self.cli("product-onboarding", "plan", payload={
+            "subject": "product/analytics/area/salesforce", "revision": 0, "purpose": "Review the connector workflow.",
+            "sources": [source], "destinations": [parent, plugin],
+        })
+        self.cli("product-onboarding", "approve", payload={"revision": 1})
+        for client in ("Codex", "Claude"):
+            pending, guidance = self.prompt(client, client, "Help me prepare a roadmap.")
+            self.assertEqual(pending["onboarding"]["stage"], "product")
+            self.assertIn("playbook/product-context.md", guidance)
+            self.assertNotIn(source, guidance)
+            for path in (parent, plugin):
+                if client == "Codex":
+                    denied = self.turn(client, "PreToolUse", client, tool_name="apply_patch", tool_input={
+                        "input": f"*** Begin Patch\n*** Add File: studio/{path}\n+# Unreviewed\n*** End Patch"})
+                else:
+                    denied = self.turn(client, "PreToolUse", client, tool_name="Write",
+                                       tool_input={"file_path": str(self.work / path), "content": "# Unreviewed"})
+                self.assertEqual(denied["hookSpecificOutput"]["permissionDecision"], "deny")
+                self.assertFalse((self.work / path).exists())
+        while onboarding_review.status(self.work)["stage"] == "product":
+            review_current_topic(self.work)
+        note = self.work / "context/products/analytics/plugins/salesforce/support.md"
+        self.assertIn("product-onboarding", hook.edit_reason(self.root, self.work, note, ""))
+        alternate = self.work / "context/products/analytics/extensions/salesforce/support.md"
+        self.assertIn("product-onboarding", hook.edit_reason(self.root, self.work, alternate, ""))
+        sibling = self.work / "context/products/analytics/components/reporting/support.md"
+        self.assertIn("route-context", hook.edit_reason(self.root, self.work, sibling, ""))
+        gap = {"question": "How many pilot accounts enabled the connector?",
+               "why": "Qualify the pilot result.", "next_action": "Check the pilot cohort count.",
+               "resume_when": "When the cohort export arrives.", "destination": plugin}
+        self.cli("product-onboarding", "gap", payload={"revision": 2, **gap})
+        self.cli("product-onboarding", "finish", payload={"revision": 3})
+        self.assertIn("route-context", hook.edit_reason(self.root, self.work, note, ""))
+        for client in ("Codex", "Claude"):
+            prompts = [
+                ("product/analytics/area/salesforce The cohort export arrived.", True),
+                ("product/analytics/area/reporting The cohort export arrived.", False),
+                ("Quiet mode. product/analytics/area/salesforce The cohort export arrived.", False),
+            ]
+            for prompt, expected in prompts:
+                result, guidance = self.prompt(client, client + prompt, prompt)
+                self.assertEqual("product_followup" in result["conversation"], expected)
+                self.assertNotIn(gap["question"], guidance)

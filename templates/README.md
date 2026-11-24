@@ -9,7 +9,7 @@ Create only the artifact needed for the current work. Templates guide thought; t
 | [Company context](company-context.md) | Customer value, economics, portfolio, growth, competitive advantage, and strategic trade-offs | `context/company/overview.md` |
 | [Stakeholder map](stakeholder-context.md) | People, teams, reporting lines, decision roles, and working relationships | `context/stakeholders/overview.md` |
 | [Product context](product-context.md) | Product purpose, users, vocabulary, constraints, and accepted decisions | `context/products/<product>/overview.md` |
-| [Product area context](product-area-context.md) | Standing area boundaries, users, rules, goals, and decisions | `context/products/<product>/areas/<area>/overview.md` |
+| [Product area context](product-area-context.md) | Standing area boundaries, users, rules, goals, and decisions | `context/products/<product>/<group>/<area>/overview.md` |
 | [Initiative context](initiative-context.md) | Outcome, affected workflow, dependencies, and decisions for recurring initiative work | `context/products/<product>/initiatives/<initiative>/overview.md` |
 | [Context note](context-note.md) | Supporting detail that passes [the filing test](../playbook/filing.md) | One topic level under the owning context entity, when the filing rule permits it |
 | [Goal](goal.md) | The five outcome components and their alignment | `workspace/goals/` |
@@ -45,12 +45,12 @@ python3 tools/pm.py new product-context context/products/example/overview.md --t
 python3 tools/pm.py new initiative-context context/products/example/initiatives/renewals/overview.md --parent context/products/example/overview.md --title "Renewals context"
 ```
 
-For a separately maintained [product area](../playbook/filing.md#product-area-context), record the reader need and review trigger:
+Use the [product walkthrough](../playbook/product-context.md) during setup. After onboarding, you can create a brief for a confirmed plugin.
 
 ```sh
-python3 tools/pm.py new product-area-context context/products/example/areas/refunds/overview.md \
-  --title "Refunds context" --reason "Support uses refund eligibility rules each week." \
-  --trigger "Finance changes the refund policy."
+python3 tools/pm.py new product-area-context context/products/example/plugins/salesforce/overview.md \
+  --title "Salesforce plugin" --reason "Support checks export permissions each week." \
+  --trigger "The plugin changes its export permissions."
 ```
 
 Create registered briefs after capture. The command fills the Parent initiative section from the signed register. For the fictional product `checkout` and initiative `refund-delays`, run:

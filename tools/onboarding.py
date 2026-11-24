@@ -40,6 +40,8 @@ def status(private):
         attach_capture(private, state, "company")
         if state["stage"] != "company":
             attach_capture(private, state, "pm")
+        if state["stage"] == "product" and state["stage_available"]:
+            attach_capture(private, state, "product")
     except (OSError, ValueError) as exc:
         return {"ready": False, "stage": "repair", "stage_available": False,
                 "prompt": "Your saved walkthrough needs attention before we can continue.",
@@ -59,12 +61,18 @@ def status(private):
             "Keep role facts with the PM and named relationships in the stakeholder map. "
             "Offer a private check-in on an agreed cue. Inspect personal details only after the PM chooses to revisit that point."
         )
+    if state["stage"] == "product" and state["stage_available"]:
+        state["product_updates"] = (
+            "Use playbook/product-context.md and pm.py product-onboarding status. Reuse the PM's confirmed remit. "
+            "For an area, cover its parent product and the owned scope in one pass. Keep their findings separate. "
+            "Leave unverified outcomes open. Ask before looking in a new source or saving a finding."
+        )
     return state
 
 
 def attach_capture(private, state, kind):
     """Expose only the action needed to resume. Keep sources and proposed wording in the capture command."""
-    action_key = "capture_next_action" if kind == "company" else "pm_capture_next_action"
+    action_key = "capture_next_action" if kind == "company" else f"{kind}_capture_next_action"
     try:
         phase = company_onboarding.active_phase(company_onboarding.read(private, kind=kind)[1])
     except (OSError, ValueError):
@@ -75,7 +83,8 @@ def attach_capture(private, state, kind):
         return
     if phase:
         state[f"{kind}_phase"] = phase
-        actions = company_onboarding.NEXT if kind == "company" else company_onboarding.PM_NEXT
+        actions = {"company": company_onboarding.NEXT, "pm": company_onboarding.PM_NEXT,
+                   "product": company_onboarding.PRODUCT_NEXT}[kind]
         state[action_key] = actions[phase]
 
 
@@ -84,12 +93,16 @@ def for_request(private, state, prompt, previous_mode=None):
     mode = conversation.mode_request(prompt)[0] or previous_mode
     if mode in ("quiet", "expedite"):
         return {**state, "conversation_mode": mode}
-    if state["stage"] == "repair":
+    if state["stage"] not in onboarding_review.STAGES:
         return state
     result = dict(state)
-    kinds = ("company",) if state["stage"] == "company" else ("company", "pm")
+    kinds = onboarding_review.STAGES[:onboarding_review.STAGES.index(state["stage"]) + 1]
     for kind in kinds:
-        cue = company_onboarding.followup(private, prompt, company_scope=state["stage"] == kind, kind=kind)
+        scope = state.get("product_scope", {})
+        if kind == "product" and (scope.get("selection_required") or not scope.get("subject")):
+            continue
+        cue = company_onboarding.followup(private, prompt, company_scope=state["stage"] == kind, kind=kind,
+                                          subject=scope.get("subject") if kind == "product" else None)
         if cue:
             result[f"{kind}_followup"] = cue
     return result

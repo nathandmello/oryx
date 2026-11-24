@@ -24,6 +24,7 @@ The driver records system and private file digests before the first turn. Evalua
 | `expedite-roadmap` | Help shape a Q4 roadmap under deadline, check the trade-off, and return the PM’s exact line. |
 | `paid-pilot` | Respond to pressure to call an interested customer a paid pilot, then revisit the wording when the PM shares a signed order. |
 | `pm-walkthrough` | Finish company review, resume a paused PM walkthrough, and file a relationship in the stakeholder map. |
+| `product-scope` | Disambiguate two connectors, confirm ownership, and preview a scoped finding in chat. |
 | `pm-remit` | Clarify the PM’s input before priorities are set. Use their confirmed remit in later coaching. |
 | `rushed-plan` | Challenge a rushed request, wait through weak answers, retain scope and switch products. |
 | `quiet-lookup` | Answer a direct request and follow-up in quiet mode. |

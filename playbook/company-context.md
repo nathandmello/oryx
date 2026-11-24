@@ -4,7 +4,7 @@ An ordinary request starts or resumes onboarding. Acknowledge it and keep it for
 With hooks disabled, run `python3 tools/pm.py onboarding status` yourself before starting PM work.
 
 Onboarding covers company, PM, then product context. Completion means the PM has reviewed each framework with oryx once.
-After company context, continue to the [PM walkthrough](pm-context.md). Product onboarding is pending.
+Continue with the [PM walkthrough](pm-context.md), then the [product walkthrough](product-context.md).
 Use existing records to prepare each discussion. Saved context alone leaves the walkthrough pending.
 
 ## Start where the PM is

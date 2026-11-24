@@ -5,6 +5,7 @@ import unittest
 
 import test_pm
 import company_onboarding
+import context_capture
 import onboarding_review as review
 import pm
 
@@ -18,9 +19,23 @@ class WalkthroughTests(unittest.TestCase):
         topic = status["walkthroughs"][stage]["next_topic"]["id"]
         values = {"revision": status["revision"], "stage": stage, "topic": topic,
                   "outcome": outcome, "pm_reply": "Leave that open for now."}
+        if stage == "product":
+            values["subject"] = status["product_scope"]["subject"]
         return review.review(self.work, dict(values, **changes))
 
-    def test_every_company_and_pm_topic_can_remain_open_and_product_work_stays_held(self):
+    def select(self, subject):
+        return review.select_product(self.work, {"revision": review.status(self.work)["revision"],
+                                     "subject": subject, "pm_reply": "Let's use this scope for the walkthrough."})
+
+    def product_stage(self):
+        while review.status(self.work)["stage"] in {"company", "pm"}:
+            self.record()
+
+    def remit(self, *subjects):
+        context_capture.write_remit(self.work, {"status": "confirmed", "follow": [],
+            "responsibilities": [{"subject": s, "role": "owner", "goals": [], "depends_on": []} for s in subjects]})
+
+    def test_first_pass_can_leave_every_answer_open_without_a_product_or_area_record(self):
         self.assertFalse((self.work / review.FILE).exists())
         topics = ("customers", "economics", "portfolio", "growth", "tradeoffs")
         for number, topic in enumerate(topics):
@@ -38,7 +53,7 @@ class WalkthroughTests(unittest.TestCase):
             self.assertEqual(state["walkthroughs"]["pm"]["next_topic"]["id"], topic)
             state = self.record()
         self.assertEqual(state["stage"], "product")
-        self.assertFalse(state["stage_available"])
+        self.assertTrue(state["stage_available"])
         self.assertFalse(state["ready"])
         self.assertTrue(state["walkthroughs"]["pm"]["complete"])
         self.assertEqual(profile.read_bytes() if profile.exists() else None, profile_before)
@@ -49,6 +64,71 @@ class WalkthroughTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "currently available"):
             review.review(self.work, {"revision": state["revision"], "stage": "pm", "topic": "fake",
                                       "outcome": "reviewed", "pm_reply": "Yes."})
+        with self.assertRaisesRegex(ValueError, "Choose the product"):
+            self.record()
+        self.assertIsNone(self.select(None)["product_scope"]["subject"])
+        for topic in ("purpose", "customers", "experience", "business-value", "performance", "environment"):
+            state = self.record(topic=topic)
+        self.assertTrue(state["ready"])
+        self.assertIsNone(state["reviewed_product_subject"])
+        self.assertFalse(list((self.work / "context/products").glob("**/overview.md")))
+
+    def test_coverage_belongs_to_selected_scope_and_survives_switching(self):
+        first, second = "product/payments/area/refunds", "product/support"
+        self.remit(first, second)
+        self.product_stage()
+        scope = review.status(self.work)["product_scope"]
+        self.assertTrue(scope["selection_required"])
+        self.assertCountEqual(scope["choices"], [first, second])
+        with self.assertRaisesRegex(ValueError, "Confirm the product"):
+            self.select("product/payments")  # Owning Refunds gives no authority over its parent.
+        self.select(first)
+        covered = self.record("reviewed")
+        self.assertEqual(covered["walkthroughs"]["product"]["next_topic"]["id"], "customers")
+        self.assertEqual(self.select(second)["walkthroughs"]["product"]["reviewed"], {})
+        resumed = self.select(first)
+        self.assertEqual(resumed["walkthroughs"]["product"], covered["walkthroughs"]["product"])
+        while review.status(self.work)["stage"] == "product":
+            result = self.record()
+        self.assertEqual(result["reviewed_product_subject"], first)
+        self.assertFalse(self.select(second)["ready"])
+        self.assertTrue(self.select(first)["ready"])
+
+    def test_single_remit_is_reused_and_moved_responsibility_requires_fresh_review(self):
+        first, second = "product/payments", "product/lending"
+        self.remit(first)
+        self.product_stage()
+        status = review.status(self.work)
+        self.assertEqual(status["product_scope"], {"choices": [first], "subject": first, "selection_required": False})
+        self.remit(second)
+        with self.assertRaisesRegex(ValueError, "scope changed"):
+            self.record(subject=first)
+        self.record()
+        self.remit(first)
+        self.assertTrue(review.status(self.work)["product_scope"]["selection_required"])
+        with self.assertRaisesRegex(ValueError, "Choose the product"):
+            self.record()
+        self.assertEqual(self.select(first)["walkthroughs"]["product"]["reviewed"], {})
+
+    def test_old_pm_completion_opens_product_setup_without_rewriting_receipts(self):
+        self.product_stage()
+        path = self.work / review.FILE
+        prior = json.loads(path.read_bytes())
+        self.assertEqual(set(prior), {"format", "revision", "reviewed", "completed"})
+        original = path.read_bytes()
+        self.assertTrue(review.status(self.work)["product_scope"]["selection_required"])
+        self.assertEqual(path.read_bytes(), original)
+        self.select(None)
+        self.record()
+        self.remit("product/payments")
+        pending = review.status(self.work)
+        self.assertTrue(pending["product_scope"]["selection_required"])
+        fresh = self.select("product/payments")
+        self.assertEqual(fresh["walkthroughs"]["product"]["reviewed"], {})
+        current = json.loads(path.read_bytes())
+        for stage in ("company", "pm"):
+            self.assertEqual(current["completed"][stage], prior["completed"][stage])
+            self.assertEqual(current["reviewed"][stage], prior["reviewed"][stage])
 
     def test_pausing_existing_capture_and_writing_a_brief_do_not_review_any_topics(self):
         company = self.work / "context/company/overview.md"
@@ -103,6 +183,7 @@ class WalkthroughTests(unittest.TestCase):
         for _ in definitions["company"]:
             self.record()
         self.assertEqual(self.record()["stage"], "product")
+        self.select(None)
         completed = self.record()
         self.assertTrue(completed["ready"])
         self.assertEqual(completed["stage"], "ready")

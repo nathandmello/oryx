@@ -99,7 +99,19 @@
       "The PM’s title and release work leave skills, aspirations and influence open. Hear their role in recommendations and final authority separately. Record walkthrough coverage while respecting the instruction to keep these answers in chat.",
       "Accept an open expectation. Listen to the aspiration without assigning an exercise or drafting a development plan. Deadline pressure does not advance the walkthrough.",
       "Preview and save the stakeholder line separately. Meeting chair establishes neither reporting hierarchy nor final authority. Keep those open without inventing traits or writing a person profile.",
-      "After covering all five PM topics, explain the product-context handoff and why product work remains on hold. Leave the company record, PM profile’s earlier wording and structured ownership untouched."
+      "After covering all five PM topics, offer the available product walkthrough. The PM's prior remit confirms no assigned product. Let them confirm or clarify that scope. Preserve earlier records and keep product work gated through the walkthrough."
+    ]
+  },
+  "product-scope": {
+    "turns": [
+      "Help me set up product context for the Salesforce connector.",
+      "The Analytics one. I own that connector. Someone else owns Analytics. Let's start with what I know and keep the evidence in chat for now.",
+      "Two customers asked about syncing opportunities. We haven't seen either of them use it yet. What would you put in the brief? Keep this in chat."
+    ],
+    "criteria": [
+      "Two confirmed product teams use the Salesforce name. Ask which connector the PM means before proposing a destination or gathering sources.",
+      "Use the confirmed parent Analytics and the PM's term connector. Confirm the onboarding scope. Preserve separate responsibility for the parent. Respect the chat-only constraint on all findings.",
+      "Preview one concise connector-specific finding. Preserve the two requests and the PM's account of observed use. Treat adoption, broader demand and the product-wide customer base as open."
     ]
   },
   "pm-remit": {

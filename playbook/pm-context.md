@@ -82,7 +82,7 @@ Use `onboarding status` for the current walkthrough topic. Review relevant exist
 Use `onboarding review-topic` with the walkthrough revision, `stage: pm`, topic ID, outcome, and actual PM reply.
 A reviewed topic can stay open or be inapplicable. The receipt records its disposition. Their answer enters the profile only through approved capture.
 
-A pause preserves the current topic. After the stakeholder pass, follow the product stage shown by onboarding.
+A pause preserves the current topic. After the stakeholder pass, start the [product walkthrough](product-context.md) from the PM’s confirmed remit.
 
 ## Use the profile later
 

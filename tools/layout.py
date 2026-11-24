@@ -29,8 +29,22 @@ def product(name):
     return f"context/products/{slug(name)}/overview.md"
 
 
-def area(product_name, area_name):
-    return f"context/products/{slug(product_name)}/areas/{slug(area_name)}/overview.md"
+AREA_RESERVED = {"initiatives", "sources", "secrets"}
+
+
+def area(product_name, area_name, group="areas"):
+    if (slug(group) in AREA_RESERVED or slug(area_name) in {"sources", "secrets"}
+            or slug(product_name) in {"sources", "secrets"}):
+        raise ValueError("Choose a product area outside reserved context folders")
+    return f"context/products/{product_name}/{group}/{area_name}/overview.md"
+
+
+def area_identity(name):
+    """Return the product, stable area slug and team folder for a path below an area."""
+    parts = Path(name).parts
+    if (len(parts) >= 6 and parts[:2] == ("context", "products") and parts[3] not in AREA_RESERVED
+            and not {parts[2], parts[4]} & {"sources", "secrets"} and all(SLUG.fullmatch(p) for p in parts[2:5])):
+        return parts[2], parts[4], parts[3]
 
 
 def initiative(name, product_name=None):
@@ -101,7 +115,7 @@ def entity(name):
         return Path(*parts[:2])
     if len(parts) >= 4 and parts[:2] in (("context", "products"), ("context", "initiatives")):
         slug(parts[2])
-        if parts[1] == "products" and parts[3] in {"areas", "initiatives"} and len(parts) >= 6:
+        if area_identity(name) or parts[1] == "products" and parts[3] == "initiatives" and len(parts) >= 6:
             slug(parts[4])
             return Path(*parts[:5])
         if parts[1] == "products" and parts[3] == "areas":
@@ -131,9 +145,9 @@ def brief_kind(name):
     if owner.parts[:2] == ("context", "initiatives"):
         return "initiative-context"
     if owner.parts[:2] == ("context", "products"):
-        return {"areas": "product-area-context", "initiatives": "initiative-context"}.get(
-            owner.parts[3] if len(owner.parts) == 5 else "", "product-context"
-        )
+        if len(owner.parts) == 5:
+            return "initiative-context" if owner.parts[3] == "initiatives" else "product-area-context"
+        return "product-context"
     return None
 
 

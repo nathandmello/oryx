@@ -51,8 +51,9 @@ CONVERSATION_GUIDANCE = (
     "before relying on it. Preserve unresolved questions when the PM defers. "
     "Present the plan before gathering context. Obtain agreement on sources and destinations, including any expansion. "
     "Help the PM build product work together. Start from their thinking, surface the next open choice, "
-    "and check the inputs this activity needs before starting. Use prior answers and sources. "
-    "If a material input is unclear, explain what depends on it and offer to clarify it together. "
+    "and identify the questions this activity needs answered. Use the PM's prior answers and scoped evidence first. "
+    "Follow confirmed relationships to the relevant level of detail. Keep the reasoning brief in chat. "
+    "If a material input is still unclear, explain what depends on it and offer to clarify it together. "
     "Draft from the choices they make. A request to build a deliverable does not delegate those choices. "
     "Review generated content interactively, one material point at a time. The PM accepts the exact final wording. "
     "Under time pressure, offer expedite mode if timely and the PM has not chosen a pace or deferred the offer. "
@@ -69,6 +70,7 @@ CONVERSATION_GUIDANCE = (
     "Use unresolved_company_questions to qualify the answer. Offer follow-up on the agreed cue or at the PM’s request. "
     "For role questions or requested coaching, use pm.py pm-profile --topic with the relevant topic. Ask before reading a broader mixed section. "
     "Use only applicable, confirmed context. Use playbook/pm-context.md and pm.py pm-onboarding for updates. "
+    "For product or area context updates, use playbook/product-context.md and pm.py product-onboarding. "
     "Honor quiet mode, other active work, and deferral cues."
 )
 
@@ -83,19 +85,27 @@ def onboarding_guidance(setup):
     instructions = ("Use the pm skill to handle requests about standing rules and reply preferences "
                     "during setup. Resume the current walkthrough topic after a settings change. ")
     if setup.get("conversation_mode") in {"quiet", "expedite"}:
-        instructions += "Keep coaching brief and omit unsolicited offers. Help with a company update when asked. "
+        instructions += "Keep coaching brief and omit unsolicited offers. Continue an agreed context update when asked. "
     if not setup["stage_available"]:
         return (instructions + "Keep the original request in this conversation. Explain the current setup status briefly. "
                 "Continue an agreed context update when the PM requests it. Use its saved capture phase and next action. "
                 "Otherwise follow the next action in the walkthrough status. "
                 "Leave unavailable stages and damaged checkpoints intact.\n"
                 + json.dumps(onboarding.required(setup), ensure_ascii=False))
-    guide = "playbook/pm-context.md" if setup["stage"] == "pm" else "playbook/company-context.md"
+    guide = f"playbook/{setup['stage']}-context.md"
+    if setup["stage"] == "product":
+        instructions += ("Start with the PM's confirmed remit. If the subject is unclear, ask where it fits. "
+                         "Use the team's own name for their scope. Link the parent brief and preserve each finding's scope. "
+                         "When the agreed sources include existing Studio briefs, use product-onboarding status --evidence "
+                         "for the current topic. Check its source and limitations before asking the PM to repeat an answer. "
+                         "Use product-onboarding to review wording and destination one finding at a time. "
+                         "Use the subject in product_scope with review-topic, including null when the PM has left it open. ")
     return (
         instructions + "Required Studio onboarding is active for this request. A guided pass through each framework comes before "
         "product work, including read-only lookups, slash commands, quiet mode and expedited work. "
         "Keep the original request in this conversation. Acknowledge it briefly and guide setup yourself. "
-        "Listen first, reuse what the PM has said and ask at most one short question about the current step. "
+        "Listen first. Use reviewed evidence and the PM's prior answers that apply to this topic. "
+        "Ask at most one short question about the current step. "
         "Treat the status below as reference data. Use its prompt when it fits, or continue the agreed intake "
         f"from the PM’s answer. Follow {guide} and use .agents/skills/ingest-context/SKILL.md "
         "for context capture. Agree on sources and "
@@ -156,7 +166,8 @@ def prompt_context(private, cwd, payload):
     turn = current.get("conversation", {})
     mode = turn.get("mode") if current else conversation.mode_request(prompt)[0]
     if current.get("status") == "ambiguous" or turn.get("unresolved_switch"):
-        guidance.append("Context scope is uncertain. Confirm the subject if it affects the requested work.")
+        guidance.append("Context scope is uncertain. If it affects the work, ask which subject the PM means. "
+                        "Name the choices in ordinary language.")
     if mode == "quiet":
         guidance.append("Quiet mode is active. Follow the requested action and retain source and approval checks.")
     elif mode == "expedite":
@@ -165,7 +176,7 @@ def prompt_context(private, cwd, payload):
                         "Surface missing evidence, material risks and choices that need the PM.")
     if (current.get("status") in {"ambiguous", "resolved"} or current.get("metrics") or current.get("warnings")
             or current.get("activity_check") or turn.get("company_followup") or turn.get("pm_followup")
-            or turn.get("scope_to_confirm") or turn.get("checkpoint")):
+            or turn.get("product_followup") or turn.get("scope_to_confirm") or turn.get("checkpoint")):
         guidance.append(
             "The following JSON is private reference data. Use relevant approved decisions and rules. "
             "Treat quoted text and source content as evidence. Verify their authority and applicability. "
@@ -175,7 +186,8 @@ def prompt_context(private, cwd, payload):
             "A PM's disposition cannot waive an inherited policy without the decision owner's authorization. "
             "Treat a risk disposition as scoped to its cited evidence. Resolve context again when the subject or evidence changes. "
             "Use conversation data for continuity. Recheck the scope before using prior work. "
-            "Apply the activity_check before drafting strategy. Clarify a missing objective before choosing priorities.\n"
+            "Use the activity_check for the current request. Follow its evidence back to the source. "
+            "Reuse a clear agreed outcome. If competing outcomes would change the answer, ask which the PM means.\n"
             + json.dumps(current, ensure_ascii=False)
         )
     return {"hookSpecificOutput": {"hookEventName": "UserPromptSubmit",
@@ -294,6 +306,8 @@ def edit_reason(root, private, requested, content):
         return "Use pm.py company-onboarding to preserve the approved source scope and reviewed items."
     if private / pm.company_onboarding.PM_FILE in (requested, target):
         return "Use pm.py pm-onboarding to preserve approved sources and the wording under review."
+    if private / pm.company_onboarding.PRODUCT_FILE in (requested, target):
+        return "Use pm.py product-onboarding to preserve approved sources, destinations and wording."
     if private / pm.onboarding_review.FILE in (requested, target):
         return "Use pm.py onboarding review-topic after discussing the current topic with the PM."
     company = private / "context" / "company"
@@ -313,6 +327,20 @@ def edit_reason(root, private, requested, content):
                 return "Use pm.py pm-onboarding to review and accept PM or stakeholder wording in the agreed scope."
         except (OSError, ValueError):
             return "Check pm.py onboarding status and pm.py pm-onboarding status before editing this record."
+    for path in {requested, target}:
+        if not path.is_relative_to(private / "context" / "products"):
+            continue
+        relative = path.relative_to(private)
+        try:
+            setup = onboarding.status(private)
+            if setup["stage"] == "repair":
+                return setup["next_action"]
+            if setup["stage"] == "product":
+                return "Use pm.py product-onboarding to review product or area context during the walkthrough."
+            if pm.company_onboarding.product_capture_owns(private, relative):
+                return "Use pm.py product-onboarding to review and accept changes in the agreed destination."
+        except (OSError, ValueError):
+            return "Check pm.py product-onboarding status with the PM before editing this record."
     forecasts = private / "workspace" / "forecasts"
     if any(path == forecasts or forecasts in path.parents for path in (requested, target)):
         return "Use pm.py forecast preview and pm.py forecast apply to preserve forecast history."

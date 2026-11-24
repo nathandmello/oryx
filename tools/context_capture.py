@@ -358,10 +358,34 @@ def checked_area_text(private, area):
 
 def standing_area_home(private, entry, product, section, sources):
     """Resolve questions in their original home and leave existing evidence there on replay."""
-    area = records.area_brief_path(entry["product"], entry["product_area"])
+    group = entry.get("area_group")
+    area = records.area_brief_path(entry["product"], entry["product_area"], private=private, group=group)
     area_text = checked_area_text(private, area)
+    parent_name = layout.product(entry["product"])
+    parent_path = record_path(private, parent_name)
+    if parent_path.is_file() and parent_name not in upgrades.source_paths(private):
+        overview = task_context.read_document(Path(parent_name), parent_path)
+        shared = [subject for subject in task_context.shared_area_links(overview, date.today())
+                  if subject.endswith("/area/" + entry["product_area"])]
+        if shared and not (area_text and group):
+            raise ValueError("This name also refers to a shared area. Confirm the existing local brief and group "
+                             "or use its canonical subject: " + ", ".join(sorted(shared)))
     if area_text is None:
-        return product
+        parent = record_path(private, product)
+        if parent.is_file() and product not in upgrades.source_paths(private):
+            text = parent.read_text(encoding="utf-8")
+            tag = f"<!-- product-area:{entry['product_area']} -->"
+            established = any(tag in line and line.startswith(("- ", "| ")) for line in text.splitlines())
+            if established:
+                question = entry.get("answers", entry.get("question"))
+                body = records.section(text, target_section(text, entry, section)) or ""
+                if (group is None or isinstance(question, str) and
+                        f"- Unknown: {scoped_text(entry, literal(question))}" in body.splitlines()
+                        or contains_capture(text, parent, entry, section, sources, private)):
+                    return product
+        if group is None:
+            raise ValueError("Confirm how the team groups this product scope, then supply area_group for its own brief")
+        return area
     product = filing.area_parent(private, area)
     parent = record_path(private, product)
     parent_text = parent.read_text(encoding="utf-8")
@@ -394,7 +418,15 @@ def standing_area_home(private, entry, product, section, sources):
 
 def area_context(private, product, area):
     """Locate the dedicated brief and area entries without changing or copying any record."""
-    area_name = records.area_brief_path(product, area)
+    inherited = task_context.resolve(private, explicit={"product": product, "area": area})
+    if inherited["status"] == "ambiguous":
+        raise ValueError(" ".join(inherited["warnings"] + inherited["choices"]))
+    shared = inherited.get("shared_area")
+    if shared:
+        return {"subject": shared["subject"], "area_brief": shared["area_brief"],
+                "shared_area": shared, "product_briefs": records.product_briefs(private, product),
+                "inline_entries": [], "inherited_company": [row for row in inherited["entries"] if row["record"] == layout.COMPANY]}
+    area_name = records.area_brief_path(product, area, private=private)
     area_path = private / area_name
     exists = checked_area_text(private, area_name) is not None
     parents = records.product_briefs(private, product)
@@ -443,7 +475,6 @@ def area_context(private, product, area):
             matches.append({"record": rel.as_posix(), "entries": entries,
                             "sources": [dict(zip(records.SOURCE_COLUMNS, row)) for row in rows if row[0] in ids],
                             "source_errors": errors})
-    inherited = task_context.resolve(private, explicit={"product": product, "area": area})
     return {"subject": f"product/{product}/area/{area}", "area_brief": area_name if exists else None,
             "product_briefs": parents, "inline_entries": matches,
             "inherited_company": [row for row in inherited["entries"] if row["record"] == layout.COMPANY]}
@@ -500,7 +531,8 @@ def route_home(private, entry, scope, canonical, section):
     if scope in TOPICS:
         homes = {layout.entity(canonical)}
         if scope == "product" and "product_area" in entry:
-            homes.add(Path(layout.area(entry["product"], entry["product_area"])).parent)
+            homes.add(Path(records.area_brief_path(entry["product"], entry["product_area"], private=private,
+                                                   group=entry.get("area_group"))).parent)
         if owner not in homes:
             raise ValueError("Choose a record belonging to the declared context entity")
     if brief_path(record["path"]) and (record["path"] != canonical or not section):
@@ -655,7 +687,7 @@ def route(payload, private, remit=None, *, single_excerpt=False, descriptive_int
     initiative_products = {}
     entries = []
     for entry in payload["entries"]:
-        fields(entry, ("scope",), ("topic", "heading", "lead", "product", "product_area", "initiative", "subject",
+        fields(entry, ("scope",), ("shared_area", "topic", "heading", "lead", "product", "product_area", "area_group", "initiative", "subject",
                                     "record", "affects", "source", "location", "quote", "question", "answers",
                                     "interpretation", "uncertainty", "rule", "term", "decision", "record_decision", "supersedes", "risk"))
         scope = line(entry["scope"], "Scope")
@@ -665,6 +697,10 @@ def route(payload, private, remit=None, *, single_excerpt=False, descriptive_int
             raise ValueError("Use product for product or initiative scope")
         if scope != "initiative" and "initiative" in entry:
             raise ValueError("Use initiative only for initiative scope")
+        if "area_group" in entry:
+            if scope != "product" or "product_area" not in entry:
+                raise ValueError("Choose a product and its confirmed area before naming an area group")
+            layout.area(entry.get("product"), entry["product_area"], entry["area_group"])
         canonical, subject = None, None
         if scope == "product":
             canonical = product_path(entry.get("product"))
@@ -716,6 +752,8 @@ def route(payload, private, remit=None, *, single_excerpt=False, descriptive_int
             entry = dict(entry, candidates=blocked[intended])
         else:
             destination, section, disposition = route_home(private, entry, scope, canonical, section)
+            if disposition == "new-brief" and layout.brief_kind(destination) == "product-area-context":
+                section = target_section("<!-- pm: product-area-context -->\n", entry, section)
         if "lead" in entry and (scope == "pm" or not section
                                 or not records.valid_context_lead(line(entry["lead"], "Section lead"))):
             raise ValueError("Use a short prose lead for a typed context section")
@@ -734,6 +772,18 @@ def route(payload, private, remit=None, *, single_excerpt=False, descriptive_int
         if scope in {"pm", "stakeholder"} and not responsibilities:
             attention = scope
 
+        if "shared_area" in entry:
+            shared = subject_key(entry["shared_area"], ("product",))
+            if (scope != "product" or "/area/" not in shared or destination != product_path(entry["product"])
+                    or shared.split("/")[1] == entry["product"] or not section
+                    or entry.get("topic") == "examples" or metric_checks.is_claim(str(entry.get("quote", "")))
+                    or section in records.CONTEXT_TABLES or entry.keys() & {
+                        "question", "product_area", "rule", "term", "decision", "risk", "uncertainty", "interpretation"}):
+                raise ValueError("Link a verified area in another product from a sourced fact in this product overview")
+            _, home_product, _, home_area = shared.split("/")
+            home = records.area_brief_path(home_product, home_area, private=private)
+            if checked_area_text(private, home) is None:
+                raise ValueError("Confirm the existing canonical area brief before linking it from another product")
         if "question" in entry:
             if not section or entry.keys() & {"source", "location", "quote", "answers", "interpretation"}:
                 raise ValueError("An open question needs a context section")
@@ -773,9 +823,14 @@ def route(payload, private, remit=None, *, single_excerpt=False, descriptive_int
         destination = entry["destination"]
         if destination and destination != REMIT_PATH and entry["section"]:
             targets.setdefault(destination, []).append(entry)
+    destination_docs = {} if descriptive_intake and any("decision" in entry for entry in entries) else None
     for destination, group in targets.items():
         target = record_path(private, destination)
         text = target.read_text(encoding="utf-8") if target.is_file() else ""
+        if destination_docs is not None and text:
+            doc = task_context.read_document(Path(destination), target, text=text)
+            if doc:
+                destination_docs[destination] = doc
         leads = section_leads(text, group)
         for entry in group:
             heading = entry["section"]
@@ -784,8 +839,8 @@ def route(payload, private, remit=None, *, single_excerpt=False, descriptive_int
     verification = verify_excerpts(payload["sources"], entries, private, single_excerpt=single_excerpt)
     plan = {"sources": sources, "entries": entries, "source_checks": verification, "remit_configured": remit is not None,
             "remit_status": remit_status(remit)}
-    if not descriptive_intake:
-        risk_preview = evidence_reviews.preview(private, entries, sources)
+    if not descriptive_intake or destination_docs is not None:
+        risk_preview = evidence_reviews.preview(private, entries, sources, destination_docs=destination_docs)
         if risk_preview:
             plan["risk_preview"] = risk_preview
     if responses:
@@ -864,6 +919,8 @@ def render_entry(entry, identifier):
         result = f"- {label}: {scoped_text(entry, quote)} {cite}"
     else:
         result = f"- {label}: {scoped_text(entry, statement)} {cite}\n  > {quote}"
+    if "shared_area" in entry:
+        result += f"\n  Shared area: {entry['shared_area']}"
     if "uncertainty" in entry:
         result += f"\n  Open question at capture: {scoped_text(entry, literal(entry['uncertainty']))}"
     if "answers" in entry:
@@ -1016,7 +1073,7 @@ def apply_profile(root, private, target, selected, sources, lint):
     return True
 
 
-def apply(root, destination, plan, owner, lint, *, descriptive_intake=False):
+def apply(root, destination, plan, owner, lint, *, descriptive_intake=False, title=None):
     private = storage.private_root(root)
     target = record_path(private, destination)
     original = target.read_text(encoding="utf-8") if target.is_file() else None
@@ -1040,7 +1097,7 @@ def apply(root, destination, plan, owner, lint, *, descriptive_intake=False):
     if original is None:
         kind = "context-note"
         if selected[0]["disposition"] == "new-brief":
-            kind = f"{selected[0]['scope']}-context"
+            kind = layout.brief_kind(destination)
     else:
         kind = marker[1] if marker else None
     if kind not in records.CONTEXT_KINDS or records.context_location(kind, destination):
@@ -1054,7 +1111,13 @@ def apply(root, destination, plan, owner, lint, *, descriptive_intake=False):
         raise ValueError("Use the existing record's workflow, or select a typed context section")
     if original is None:
         parent = product_path(selected[0]["product"]) if kind == "initiative-context" else None
-        text = records.draft_text(root, kind, target, owner=owner, product_parent=parent)
+        text = records.draft_text(root, kind, target, title=title, owner=owner, product_parent=parent)
+        if kind == "product-area-context":
+            reason = selected[0].get("record", {}).get("reason") or "Maintain the confirmed scope's current product context."
+            trigger = "Review when the scope, its users, or supporting evidence changes."
+            contract = filing.area_contract(private, destination, None, "maintained-reference", reason, trigger)
+            text = text.replace("{{Area release, closed decision, new evidence, or changed product rules.}}", trigger)
+            text = filing.add_contract(text, private, target, contract)
         if kind == "context-note":
             definitions = [entry["record"] for entry in selected]
             if any(value != definitions[0] for value in definitions):
@@ -1073,9 +1136,13 @@ def apply(root, destination, plan, owner, lint, *, descriptive_intake=False):
     candidate = insert_entries(text, selected, plan["sources"], private, target, section_leads(text, selected))
     candidate = records.ordered_sections(candidate, order)
     with storage.writer_lock(private):
-        if not descriptive_intake:
-            documents = task_context.context_documents(private, override=(destination, candidate))
-            events = evidence_reviews.capture_events(private, documents, destination, selected, plan["sources"], responses)
+        if not descriptive_intake or any("decision" in entry for entry in selected):
+            if descriptive_intake:
+                documents = {destination: task_context.read_document(Path(destination), target, text=candidate)}
+            else:
+                documents = task_context.context_documents(private, override=(destination, candidate))
+            events = evidence_reviews.capture_events(private, documents, destination, selected, plan["sources"], responses,
+                                                    check_initiatives=not descriptive_intake)
             if events:
                 plan["risk_events"] = events
                 candidate = evidence_reviews.append(candidate, events)

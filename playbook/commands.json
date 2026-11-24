@@ -81,6 +81,16 @@
       "cli": ["area-context"],
       "example": ["checkout", "refunds"]
     },
+    "context product capture": {
+      "summary": "Walk through the current product and its confirmed scope with the PM.",
+      "guide": "playbook/product-context.md"
+    },
+    "context product show": {
+      "summary": "Show the product context review and available follow-ups.",
+      "effect": "read",
+      "cli": ["product-onboarding", "status"],
+      "example": []
+    },
     "context evidence capture": {
       "summary": "Route supplied evidence to its owning context record.",
       "guide": ".agents/skills/ingest-context/SKILL.md"

@@ -6,7 +6,7 @@ File reference material in `context/` and PM work in `workspace/` inside Studio.
 | --- | --- |
 | Company-wide facts, commitments, or exclusions | `context/company/overview.md` |
 | Standing product guidance | `context/products/<product>/overview.md` |
-| Standing guidance for one product area | A labelled entry in the product overview, or its maintained area overview |
+| Standing guidance for one product area | Its own overview at the confirmed [area path](#product-area-context) |
 | Reusable initiative guidance | `context/products/<product>/initiatives/<initiative>/overview.md`, linked to the owning product |
 | Transcript evidence for an initiative meeting | Original transcript at its provider. An authorised local export goes in `sources/` beside the owning initiative overview. |
 | Initiative meeting history readers revisit | A dated `event-history` context note beside the initiative overview |
@@ -83,9 +83,9 @@ With `pm.py new context-note`, add `--topic-question` and `--topic-peer` for the
 
 ## Product area context
 
-An area is a lasting part of one product. Keep product-wide rules in its overview. Keep initiative plans and delivery progress in the workspace.
-
-One area fact fits inline. Create `context/products/<product>/areas/<area>/overview.md` when readers independently need recurring area guidance and a specific change triggers review.
+Confirm the parent product. File reviewed findings in `context/products/<product>/<group>/<area>/overview.md`, using the team’s term, such as `plugins/salesforce/`.
+Reuse the existing home for `product/<product>/area/<area>`. Legacy `areas/` briefs and labelled inline entries remain readable.
+Confirm shared relationships before linking another product to an area. See the [product walkthrough](product-context.md).
 
 An initiative can concern zero, one, or several product areas. Record confirmed area subjects once on the registered initiative.
 For example, `product/checkout/area/refunds` identifies the refunds area of checkout.

@@ -263,14 +263,14 @@ def reported(doc, selected, sources, *, assess_plan=False):
                "targets": risk.get("targets", []), "classification": classification}
 
 
-def capture_events(private, documents, owner, selected, sources, responses):
+def capture_events(private, documents, owner, selected, sources, responses, *, check_initiatives=True):
     today = date.today()
     current = stored(documents.values(), strict_owner=owner)
     doc = documents[owner]
     peers = (d for d in documents.values() if compatible(scope_for(doc), scope_for(d)))
     rows = observations(peers, today)
     candidates = list(pair_candidates(rows, owner))
-    candidates.extend(reported(doc, selected, sources, assess_plan=needs_plan_review(private, doc)))
+    candidates.extend(reported(doc, selected, sources, assess_plan=check_initiatives and needs_plan_review(private, doc)))
     additions = []
     for row in candidates:
         if row["id"] not in current:
@@ -447,10 +447,12 @@ def for_initiative(private, product, item, *, reviews=None):
                (review["classification"] == "unreadable history" and not review["scope"].get("initiative")))))]
 
 
-def preview(private, prepared, sources):
+def preview(private, prepared, sources, *, destination_docs=None):
     """Review supplied claims before a destination or a write has been authorized."""
     import task_context
-    docs = task_context.context_documents(private) if private.is_dir() else {}
+    docs = destination_docs
+    if docs is None:
+        docs = task_context.context_documents(private) if private.is_dir() else {}
     existing = observations(docs.values(), date.today())
     pending = []
     findings = []
@@ -458,7 +460,7 @@ def preview(private, prepared, sources):
         target = row.get("destination")
         doc = docs.get(target, {"record": target, "product": row.get("product"), "area": row.get("product_area"),
                                 "initiative": row.get("initiative"), "text": ""})
-        for review in reported(doc, [row], sources, assess_plan=needs_plan_review(private, doc)):
+        for review in reported(doc, [row], sources, assess_plan=destination_docs is None and needs_plan_review(private, doc)):
             findings.append({"reason": review["reason"], "classification": review["classification"], "claims": review["claims"]})
         if not target or not row.get("source") or row.get("question"):
             continue

@@ -8,7 +8,7 @@ Use the [shared command menu](commands.md) to start the app:
 ```
 
 An incomplete Studio shows the current [onboarding](company-context.md) stage. Continue the walkthrough in your oryx conversation.
-You can update company context there while the next walkthrough is pending.
+The conversation guides the company, PM and [product](product-context.md) walkthroughs.
 Use **Check progress** to reopen the requested view after onboarding.
 
 Once ready, the app opens to Roadmap by default. Add `--screen tasks` or `--screen launch-checklists` to start there.

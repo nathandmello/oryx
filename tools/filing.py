@@ -29,6 +29,8 @@ def home(name):
 def area_parent(private, name):
     if not records.is_area_path(name):
         raise ValueError("Choose the standard product area overview path")
+    product, area, group = layout.area_identity(name)
+    records.area_brief_path(product, area, private=private, group=group)
     options = records.product_briefs(private, Path(name).parts[2])
     if len(options) != 1:
         raise ValueError("Establish the owning product overview before creating product area context")
@@ -81,7 +83,11 @@ def topic_directories(private, owner):
         return []
     reserved = {"sources", "secrets"}
     if len(owner.parts) == 3 and owner.parts[:2] == ("context", "products"):
-        reserved.add("areas")
+        reserved.update(("areas", "initiatives"))
+        for overview in root.glob("*/*/overview.md"):
+            relative = overview.relative_to(private)
+            if layout.area_identity(relative) and records.marked_area(overview):
+                reserved.add(relative.parts[3])
     return sorted(child.name for child in root.iterdir() if child.name not in reserved
                   and not child.name.startswith(".") and not child.is_symlink() and child.is_dir())
 
@@ -91,10 +97,18 @@ def topic_structure_errors(private):
     entities = set()
     for path in storage.inventory(private):
         relative = path.relative_to(private)
-        if layout.brief_kind(relative):
+        kind = layout.brief_kind(relative)
+        if kind and (kind != "product-area-context" or records.marked_area(path)):
             entities.add(layout.entity(relative))
     problems = []
     for owner in sorted(entities):
+        child = layout.area_identity(owner / "overview.md")
+        if child:
+            product, area, group = child
+            try:
+                records.area_brief_path(product, area, private=private, group=group)
+            except ValueError as exc:
+                problems.append(f"{owner}: {exc}")
         topics = topic_directories(private, owner)
         if len(topics) > layout.MAX_TOPICS:
             problems.append(f"{owner}: reuse at most {layout.MAX_TOPICS} topic folders")
@@ -240,6 +254,9 @@ def check_new(private, kind, name, title, retiring=()):
     owner = home(name)
     if kind == "context-note" and path.parent != private / owner:
         valid_topic(path.parent.name)
+        if owner.parts[:2] == ("context", "products") and len(owner.parts) == 3 and path.parent.is_dir():
+            if path.parent.name not in topic_directories(private, owner):
+                raise ValueError("Choose a topic outside the product's area groups")
     label = (title or path.stem.replace("-", " ")).strip().casefold()
     for other in storage.inventory(private):
         rel = other.relative_to(private)
