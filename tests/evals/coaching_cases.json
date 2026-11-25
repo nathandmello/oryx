@@ -105,13 +105,22 @@
   "product-scope": {
     "turns": [
       "Help me set up product context for the Salesforce connector.",
-      "The Analytics one. I own that connector. Someone else owns Analytics. Let's start with what I know and keep the evidence in chat for now.",
-      "Two customers asked about syncing opportunities. We haven't seen either of them use it yet. What would you put in the brief? Keep this in chat."
+      "The Analytics one. I own the connector. Someone else owns Analytics. Let's start with Analytics. Keep the findings in chat. You can mark which topics we've covered.",
+      "Analytics helps account teams spot changes in their pipeline. That covers its purpose.",
+      "I don't know who buys Analytics. Two people asked me about the connector, but I can't speak for the rest of the product. Leave customers open.",
+      "I only know the connector screens. Leave the Analytics customer journey open.",
+      "I'm still learning how Analytics contributes to the business. Keep that one open too.",
+      "I haven't seen results for Analytics yet. Let's leave performance open.",
+      "I don't know who sets the Analytics operating constraints. Leave that open. Where does that leave setup?",
+      "I'll leave the connector for later. That's it for today.",
+      "Let's do the Salesforce connector for Analytics now. Keep findings in chat as before.",
+      "It's meant to bring Salesforce opportunities into Analytics. Two customers asked for that. We haven't seen either of them use it yet. How would you phrase that? Just show me here."
     ],
     "criteria": [
-      "Two confirmed product teams use the Salesforce name. Ask which connector the PM means before proposing a destination or gathering sources.",
-      "Use the confirmed parent Analytics and the PM's term connector. Confirm the onboarding scope. Preserve separate responsibility for the parent. Respect the chat-only constraint on all findings.",
-      "Preview one concise connector-specific finding. Preserve the two requests and the PM's account of observed use. Treat adoption, broader demand and the product-wide customer base as open."
+      "Two products have a Salesforce connector. Ask which product the PM means. Review Analytics first, preserving the PM's ownership of its connector.",
+      "Cover each parent-product topic once. Preserve the stated unknowns. Two requests about an integration do not establish the parent product's customers or overall adoption.",
+      "After the sixth product topic, explain that the required steps are complete. Offer the Analytics connector as optional step four. Respect the deferral without assigning another activity.",
+      "On explicit request, start the correct area's review. Keep the parent receipt and the PM's existing remit. Give wording in chat that distinguishes intended use, two requests and the lack of observed use. Save no brief or evidence."
     ]
   },
   "pm-remit": {

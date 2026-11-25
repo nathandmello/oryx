@@ -125,7 +125,10 @@ def view(private, state, kind="company", *, show_pending=False):
         current = product_intake.scope(private)
         subject = state["plan"]["subject"] if state["plan"] else (
             None if current["selection_required"] else current["subject"])
-        home = layout.product(subject.split("/")[1]) if subject else None
+        if subject and "/area/" in subject:
+            home = product_intake.places(state["plan"])[3] if state["plan"] else None
+        else:
+            home = layout.product(subject.split("/")[1]) if subject else None
     phase = active_phase(state)
     if phase is None:
         if kind == "product":
@@ -142,10 +145,13 @@ def view(private, state, kind="company", *, show_pending=False):
     result = {"revision": state["revision"], "phase": phase, "next_action": next_steps[phase],
               "overview": home if home and (private / home).is_file() else None, "plan": state["plan"]}
     if kind == "product":
-        result.update(responsibilities=current["choices"], subject=subject)
+        result.update(responsibilities=current["responsibilities"], subject=subject)
         if state["plan"] and subject not in current["choices"]:
             result["next_action"] = "The saved plan's subject is outside the current remit. Check the change with the PM."
-        if "remit_problem" in current:
+        elif state["plan"] and current["stage"] in {"product", "area"} and subject != current["subject"]:
+            result["next_action"] = ("The saved plan covers a different step. Review any pending wording with the PM. "
+                                     "Discard it or defer it with consent, then finish that plan before starting the current step.")
+        if current["remit_problem"]:
             result["remit_problem"] = current["remit_problem"]
     if kind in ("pm", "product"):
         result.update(has_pending=pending is not None, gap_count=len(state["gaps"]),
@@ -169,7 +175,9 @@ def status(private, kind="company", *, gap=None, pending=False):
         return {"revision": state["revision"], "gap": state["gaps"][position]}
     if pending:
         return {"revision": state["revision"], "pending": result["pending"]}
-    result["walkthrough"] = onboarding_review.status(private)["walkthroughs"][kind]
+    journey = onboarding_review.status(private)
+    stage = "area" if kind == "product" and journey["stage"] == "area" else kind
+    result["walkthrough"] = journey["walkthroughs"][stage]
     return result
 
 
@@ -310,6 +318,10 @@ def entries_in_product_round(private, entries):
                if isinstance(entry, dict) and entry.get("scope") == "product"]
     if not targets:
         return False
+    journey = onboarding_review.status(private)
+    if journey["stage"] == "area" and any(area and f"product/{product}/area/{area}" == journey["product_scope"]["subject"]
+                                          for product, area in targets):
+        return True
     plan = read(private, "product")[1]["plan"]
     if not plan:
         return False
@@ -332,10 +344,14 @@ def check_capture(private, destination, plan):
 def product_capture_owns(private, destination):
     if not str(destination).startswith("context/products/"):
         return False
+    identity = layout.area_identity(destination)
+    if identity:
+        journey = onboarding_review.status(private)
+        if journey["stage"] == "area" and journey["product_scope"]["subject"] == f"product/{identity[0]}/area/{identity[1]}":
+            return True
     plan = read(private, "product")[1]["plan"]
     if not plan:
         return False
-    identity = layout.area_identity(destination)
     if identity:
         product, area, _, child = product_intake.places(plan)
         return child is not None and identity[:2] == (product, area)
@@ -568,10 +584,13 @@ def change(root, operation, payload, owner, lint, kind="company"):
                 capture.fields(data, (*GAP_FIELDS, "destination"))
                 if not state["approved"] or data["destination"] not in state["plan"]["destinations"]:
                     raise ValueError("Review the product question and its destination in an approved plan")
-                product_intake.check_plan(private, state["plan"])
                 data["subject"] = state["plan"]["subject"]
                 if operation == "defer" and state["pending"] and data["destination"] != state["pending"]["destination"]:
                     raise ValueError("Defer this question in the pending finding's destination")
+                if operation == "gap":
+                    _, area, parent, _ = product_intake.check_plan(private, state["plan"])
+                    if area and data["destination"] == parent:
+                        raise ValueError("Keep a new area question with its own brief")
             validate_gap(data, kind)
             existing = next((gap for gap in state["gaps"] if gap["question"] == data["question"]
                              and gap.get("destination") == data.get("destination")

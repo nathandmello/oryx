@@ -1,6 +1,7 @@
 """Route Studio work through the first unfinished guided walkthrough."""
 
 from pathlib import Path
+import re
 
 import company_onboarding
 import conversation
@@ -64,10 +65,60 @@ def status(private):
     if state["stage"] == "product" and state["stage_available"]:
         state["product_updates"] = (
             "Use playbook/product-context.md and pm.py product-onboarding status. Reuse the PM's confirmed remit. "
-            "For an area, cover its parent product and the owned scope in one pass. Keep their findings separate. "
+            "Review the whole product first. A PM who owns part of it can choose a separate area walkthrough afterwards. "
             "Leave unverified outcomes open. Ask before looking in a new source or saving a finding."
         )
     return state
+
+
+WALKTHROUGH_REQUEST = re.compile(
+    r"^(?:(?:please|let['’]s|(?:can|could) (?:we|you)|i(?: want| would like) to) )?"
+    r"(?:start|begin|resume|continue|pick up|revisit|pause|skip|defer|do) "
+    r"(?:(?:the|my|our|optional) )*(?P<target>[\w’' -]+?)"
+    r"(?: (?:now|later|for now))?[.!?]*$", re.I
+)
+
+
+def area_request(state, prompt):
+    """An explicit walkthrough request can resume an optional pass without intercepting ordinary product work."""
+    if not state["ready"]:
+        return None
+    active = state["stage"] == "area"
+    options = state.get("area_options", [])
+    if not (active or options or state.get("area_problem")):
+        return None
+    _, request = conversation.mode_request(prompt)
+    match = WALKTHROUGH_REQUEST.fullmatch(request.strip())
+    if not match:
+        return None
+    target = " ".join(match["target"].casefold().split())
+    generic = target in {"area walkthrough", "area setup", "area onboarding", "area context", "step 4", "step four"}
+    named = []
+    if not generic and not (active and target in {"setup", "onboarding", "walkthrough"}):
+        # A named request must start with a confirmed area identifier and end with a setup activity.
+        # This uses the PM's existing remit without reading private briefs for additional titles.
+        name, _, activity = target.replace("-", " ").rpartition(" ")
+        if activity not in {"walkthrough", "setup", "onboarding", "context"}:
+            return None
+        for subject in options:
+            slug = subject.rsplit("/", 1)[-1].replace("-", " ")
+            if name != slug and not name.startswith(slug + " "):
+                continue
+            label = name[len(slug):].split()
+            if len(label) <= 2 and not {"using", "with", "for", "and", "from"}.intersection(label):
+                named.append(subject)
+        if not named:
+            return None
+    if state.get("area_problem"):
+        return {"status": "optional_area_walkthrough", "onboarding": {
+            "stage": "repair", "next_action": "Review the saved area walkthrough with the PM before resuming it."}}
+    selection = {"stage": state["stage"], "revision": state["revision"],
+                 "parent": state.get("reviewed_product_subject"), "area_options": options}
+    if active and (not named or state["product_scope"]["subject"] in named):
+        selection.update(subject=state["product_scope"]["subject"], next_topic=state["walkthroughs"]["area"]["next_topic"])
+    if named:
+        selection["matching_areas"] = named
+    return {"status": "optional_area_walkthrough", "onboarding": selection}
 
 
 def attach_capture(private, state, kind):

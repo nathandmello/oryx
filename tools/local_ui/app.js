@@ -941,7 +941,7 @@ function setupScreen() {
   if (current.stage === "repair") {
     handoff = "Ask oryx to review your saved progress with you.";
   } else if (current.stage_available && current.stage === "product") {
-    handoff = "Continue in your oryx conversation. Start with what you know about the product or the part you own.";
+    handoff = "Continue in your oryx conversation. Start with what you know about the product as a whole.";
   } else if (!current.stage_available) {
     handoff = "You can keep your existing context up to date in your oryx conversation.";
   }

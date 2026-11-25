@@ -71,6 +71,7 @@ CONVERSATION_GUIDANCE = (
     "For role questions or requested coaching, use pm.py pm-profile --topic with the relevant topic. Ask before reading a broader mixed section. "
     "Use only applicable, confirmed context. Use playbook/pm-context.md and pm.py pm-onboarding for updates. "
     "For product or area context updates, use playbook/product-context.md and pm.py product-onboarding. "
+    "When the PM asks for an area walkthrough, check onboarding status and confirm their choice with onboarding select-area. "
     "Honor quiet mode, other active work, and deferral cues."
 )
 
@@ -95,13 +96,14 @@ def onboarding_guidance(setup):
     guide = f"playbook/{setup['stage']}-context.md"
     if setup["stage"] == "product":
         instructions += ("Start with the PM's confirmed remit. If the subject is unclear, ask where it fits. "
-                         "Use the team's own name for their scope. Link the parent brief and preserve each finding's scope. "
+                         "Review the parent product, including when the PM owns a particular part of it. "
+                         "At completion, follow the returned next action for any optional area review. "
                          "When the agreed sources include existing Studio briefs, use product-onboarding status --evidence "
                          "for the current topic. Check its source and limitations before asking the PM to repeat an answer. "
                          "Use product-onboarding to review wording and destination one finding at a time. "
                          "Use the subject in product_scope with review-topic, including null when the PM has left it open. ")
     return (
-        instructions + "Required Studio onboarding is active for this request. A guided pass through each framework comes before "
+        instructions + "Required Studio onboarding is active for this request. The company, PM and product walkthroughs come before "
         "product work, including read-only lookups, slash commands, quiet mode and expedited work. "
         "Keep the original request in this conversation. Acknowledge it briefly and guide setup yourself. "
         "Listen first. Use reviewed evidence and the PM's prior answers that apply to this topic. "
@@ -115,7 +117,7 @@ def onboarding_guidance(setup):
         "Run the setup tools yourself. Discuss the current topic using available context. When the PM has reviewed "
         "it, use onboarding review-topic to record their disposition. An open question counts as covered. "
         "Never infer a completed review from a file, an accepted fact, or silence. A pause leaves the topic current. "
-        "When all walkthroughs are complete, offer to return to the original request and check its prerequisites.\n"
+        "When the required walkthroughs are complete, offer to return to the original request and check its prerequisites.\n"
         + json.dumps(onboarding.required(setup), ensure_ascii=False)
     )
 
@@ -144,6 +146,17 @@ def prompt_context(private, cwd, payload):
                     pass  # The live conversation can still carry the original request.
             return {"hookSpecificOutput": {"hookEventName": "UserPromptSubmit",
                                            "additionalContext": onboarding_guidance(setup)}}
+        area = onboarding.area_request(setup, prompt)
+        if area:
+            if area["onboarding"]["stage"] == "repair":
+                guidance.append("Explain the area walkthrough needs attention. Agree on any repair first.")
+            else:
+                guidance.append(
+                    "Use playbook/product-context.md for the optional fourth step. Confirm the area if the request is ambiguous. "
+                    "Use the PM’s actual reply to select or pause with onboarding select-area. For the same active area, "
+                    "use product-onboarding status and continue at its current topic. Other work remains available.")
+            guidance.append(json.dumps(area, ensure_ascii=False))
+            return {"hookSpecificOutput": {"hookEventName": "UserPromptSubmit", "additionalContext": "\n".join(guidance)}}
         if saved.get("setup_stage"):
             guidance.append("The PM has gone through the required onboarding frameworks. "
                             "If the PM has a waiting request in this conversation, offer to resume it once. "
@@ -336,7 +349,7 @@ def edit_reason(root, private, requested, content):
             if setup["stage"] == "repair":
                 return setup["next_action"]
             if setup["stage"] == "product":
-                return "Use pm.py product-onboarding to review product or area context during the walkthrough."
+                return "Use pm.py product-onboarding to review the parent product before starting an area walkthrough."
             if pm.company_onboarding.product_capture_owns(private, relative):
                 return "Use pm.py product-onboarding to review and accept changes in the agreed destination."
         except (OSError, ValueError):

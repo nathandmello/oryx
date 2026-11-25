@@ -7,6 +7,7 @@ import unittest
 
 import test_pm
 import company_onboarding
+import context_capture
 import onboarding_review
 from onboarding_fixtures import review_current_topic, reviewed_studio
 
@@ -78,3 +79,25 @@ class OnboardingCommandTests(unittest.TestCase):
         self.assertEqual(activity["activity_check"]["status"], "clarify_if_unknown")
         self.assertIn("company outcome", activity["activity_check"]["question_if_unclear"])
         self.assertNotIn("activity_check", self.cli("task-context", "Show the roadmap."))
+
+    def test_product_handoff_offers_only_the_area_the_pm_shares(self):
+        parent = "product/payments"
+        owned = parent + "/area/refunds"
+        context_capture.write_remit(self.work, {
+            "status": "confirmed", "follow": [parent + "/area/ledger"],
+            "responsibilities": [{"subject": owned, "role": "shared", "goals": [],
+                                  "depends_on": [parent + "/area/settlement"]}],
+        })
+        while onboarding_review.status(self.work)["stage"] != "product":
+            review_current_topic(self.work)
+        state = self.cli("onboarding", "status")
+        while state["stage"] == "product":
+            state = self.cli("onboarding", "review-topic", data={
+                "stage": "product", "revision": state["revision"], "subject": parent,
+                "topic": state["walkthroughs"]["product"]["next_topic"]["id"],
+                "outcome": "open", "pm_reply": "Let's leave that open.",
+            })
+        self.assertTrue(state["ready"])
+        self.assertEqual(state["area_offers"], [owned])
+        self.assertIn("optional", state["next_action"])
+        self.assertNotIn("optional", self.cli("onboarding", "status")["next_action"])

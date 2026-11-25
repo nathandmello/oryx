@@ -742,7 +742,7 @@ def studio_setup(private):
     walkthrough = onboarding.status(private)
     setup = {"onboarding": walkthrough}
     stages = ("company",) if walkthrough["stage"] in {"company", "repair"} else ("company", "pm")
-    if walkthrough["stage"] in {"product", "ready"}:
+    if walkthrough["stage"] in {"product", "area", "ready"}:
         stages += ("product",)
     for kind in stages:
         try:
@@ -852,7 +852,7 @@ def build_parser():
     ui.add_argument("--key", help="Absolute path to the PM signing key or its agent-backed public key")
     ui.add_argument("--no-open", action="store_true", help="Print the local URL without launching a browser")
     setup = commands.add_parser("onboarding", help="Continue the current guided walkthrough")
-    setup.add_argument("operation", choices=("status", "select-product", "review-topic"))
+    setup.add_argument("operation", choices=("status", "select-product", "select-area", "review-topic"))
     company_setup = commands.add_parser("company-onboarding", help="Review or resume company context in Studio")
     company_setup.add_argument("operation", choices=company_onboarding.OPERATIONS)
     for kind, description in (("pm", "Review PM and stakeholder context in Studio"),
@@ -1019,15 +1019,18 @@ def check_command_setup(args):
         return None
     if args.command in SETUP_TOOLS:
         return None
+    if args.command == "task-context":
+        private = workspace.repo(ROOT, "workspace")
+        state = onboarding.status(private)
+        if not state["ready"]:
+            return onboarding.required(onboarding.for_request(private, state, args.prompt))
+        return onboarding.area_request(state, args.prompt)
     state = incomplete_setup()
     if not state:
         return None
     if args.command == "pm-profile" and state["stage"] in {"pm", "product"}:
         return None
-    if args.command == "task-context":
-        return state
-    if args.command == "route-context" and (args.write is None or onboarding.setup_destination(args.write)
-            or state["stage"] == "product" and state["stage_available"] and layout.brief_kind(args.write) == "product-area-context"):
+    if args.command == "route-context" and (args.write is None or onboarding.setup_destination(args.write)):
         if args.write and (Path(args.write).parts[:2] == ("context", "company") and args.write != layout.COMPANY or
                            company_onboarding.pm_destination(args.write) and state["stage"] != "product"):
             raise onboarding.SetupRequired(state)
@@ -1051,16 +1054,20 @@ def main() -> int:
         args = build_parser().parse_args(argv)
         setup = check_command_setup(args)
         if args.command == "task-context" and setup:
-            private = workspace.repo(ROOT, "workspace")
-            state = onboarding.for_request(private, setup, args.prompt)
-            print(json.dumps(onboarding.required(state), indent=2, ensure_ascii=False))
+            print(json.dumps(setup, indent=2, ensure_ascii=False))
             return 0
         if args.command == "onboarding":
+            transition = None
             if args.operation != "status":
                 prepare_private_write(ROOT)
-                operation = onboarding_review.select_product if args.operation == "select-product" else onboarding_review.review
-                operation(workspace.repo(ROOT, "workspace"), storage.json_input(sys.stdin.read()))
-            print(json.dumps(onboarding.status(workspace.repo(ROOT, "workspace")), indent=2, ensure_ascii=False))
+                operation = {"select-product": onboarding_review.select_product,
+                             "select-area": onboarding_review.select_area,
+                             "review-topic": onboarding_review.review}[args.operation]
+                transition = operation(workspace.repo(ROOT, "workspace"), storage.json_input(sys.stdin.read()))
+            state = onboarding.status(workspace.repo(ROOT, "workspace"))
+            if transition and state.get("revision") == transition["revision"] and state["ready"]:
+                state["next_action"] = transition["next_action"]
+            print(json.dumps(state, indent=2, ensure_ascii=False))
             return 0
         if args.command == "agent":
             agent_session.launch(ROOT, args.client)

@@ -3,8 +3,7 @@
 An ordinary request starts or resumes onboarding. Acknowledge it and keep it for after the walkthrough.
 With hooks disabled, run `python3 tools/pm.py onboarding status` yourself before starting PM work.
 
-Onboarding covers company, PM, then product context. Completion means the PM has reviewed each framework with oryx once.
-Continue with the [PM walkthrough](pm-context.md), then the [product walkthrough](product-context.md).
+Onboarding covers company, [PM and stakeholders](pm-context.md), then the [parent product](product-context.md). The hub opens after those three reviews.
 Use existing records to prepare each discussion. Saved context alone leaves the walkthrough pending.
 
 ## Start where the PM is
@@ -105,5 +104,5 @@ A company update can happen between walkthroughs or after onboarding. Keep the c
 If a founder brings a pilot call, check which open question it informs. Offer to review any business implication in their wording.
 Leave product-specific findings at the source until the PM agrees to capture them with the product. A company review only approves the company entry.
 
-Complete the [PM walkthrough](pm-context.md) next. After all three walkthroughs, check the evidence the requested activity needs.
+Complete the [PM walkthrough](pm-context.md) next. Area owners can choose a fourth walkthrough after reviewing their parent product.
 See [goal alignment](framework.md#goal-alignment) for strategy.

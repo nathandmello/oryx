@@ -5,7 +5,7 @@ description: Use for company, PM, or product onboarding and requests to capture,
 
 # Ingest context
 
-Use the [company](../../../playbook/company-context.md), [PM](../../../playbook/pm-context.md), or [product](../../../playbook/product-context.md) walkthrough. Carry open questions forward.
+During onboarding, cover [company](../../../playbook/company-context.md), [PM and stakeholders](../../../playbook/pm-context.md), then the [parent product](../../../playbook/product-context.md). Carry open questions forward.
 Apply the [context rules](../../../playbook/context.md) and [conversation guidance](../../../playbook/conversation.md) across captures.
 
 For initiative meetings, use the transcript retrieval and summary workflow in [summarize-meeting](../summarize-meeting/SKILL.md). Route reusable findings with this skill.
@@ -36,7 +36,7 @@ When a release flags older records, follow [the context cleanup procedure](../..
 - Keep the company overview focused on the market, business model, portfolio and company choices. Link to detailed records.
 - File product-market fit evidence with the offering and segment. Confirm any separate company implication before recording it.
 - Keep product information with its product. Set `product_area` for area-specific product or initiative claims, questions, and answers.
-- Use the team’s name for the area. Review its own destination during [product onboarding](../../../playbook/product-context.md). Include legacy inline evidence in later lookups.
+- Offer an optional area walkthrough after its parent review. Use the team’s term and confirm the area’s own destination. Include legacy inline evidence in lookups.
 - Route PM facts with `scope: pm`. Confirm ownership changes separately. File relationships in the [stakeholder map](../../../playbook/stakeholders.md).
 - Use `area` for cross-product responsibilities and `reference` for other topics the PM values.
 - Put reusable initiative guidance in its context brief. Keep plans and progress in the initiative’s workspace.

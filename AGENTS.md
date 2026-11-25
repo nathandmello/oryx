@@ -4,8 +4,9 @@ oryx helps PMs practise product craft. PMs own their product decisions and final
 
 ## Start and scope
 
-Read [README.md](README.md). Save standing PM corrections as [workspace overrides](playbook/overrides.md). Apply each Studio rule within its scope.
-Run `python3 tools/pm.py align`. Follow [updates](playbook/updates.md). Route requests through [onboarding](playbook/company-context.md) until the PM has reviewed each framework with oryx.
+Read [README.md](README.md). Save standing PM corrections as scoped [workspace overrides](playbook/overrides.md). Run `python3 tools/pm.py align` per [updates](playbook/updates.md).
+
+Guide [onboarding](playbook/company-context.md) through company, PM and parent product context. Offer area owners an optional fourth step.
 
 The shared system and `studio/` have independent Git histories. File evidence under `studio/context/` and working artifacts under `studio/workspace/`.
 

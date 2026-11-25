@@ -68,7 +68,15 @@ def supports_topic(topic, row, claim, query):
 
 
 def scope(private):
-    return onboarding_review.product_scope(private, onboarding_review.read(private)[1])
+    journey = onboarding_review.status(private)
+    current = journey.get("product_scope", {})
+    subjects, error = onboarding_review.confirmed_subjects(private)
+    responsibilities = [subject for subject in subjects if subject.startswith("product/")]
+    # An area responsibility permits learning its parent. It does not assign that product to the PM.
+    eligible = set(responsibilities) | {onboarding_review.parent_product(subject) for subject in responsibilities}
+    return {"stage": journey["stage"], "responsibilities": responsibilities, "choices": eligible,
+            "selection_required": current.get("selection_required", False),
+            "subject": current.get("subject", journey.get("reviewed_product_subject")), "remit_problem": error}
 
 
 def places(plan):
@@ -102,9 +110,14 @@ def check_plan(private, plan):
     current = scope(private)
     if plan["subject"] not in current["choices"]:
         raise ValueError("Confirm this product or qualified area in the PM remit before planning its capture")
-    stage = onboarding_review.status(private)["stage"]
-    if stage != "ready" and (stage != "product" or current["selection_required"] or plan["subject"] != current["subject"]):
-        raise ValueError("Use the subject confirmed for the current product walkthrough")
+    stage = current["stage"]
+    if stage != "ready" and (stage not in {"product", "area"} or current["selection_required"]
+                             or plan["subject"] != current["subject"]):
+        raise ValueError("Use the confirmed subject for this step. Review the parent product before starting the optional area walkthrough")
+    if stage == "ready" and area and not onboarding_review.product_reviewed(onboarding_review.read(private)[1], plan["subject"]):
+        raise ValueError("Review this area's parent product first. Select its parent with onboarding select-product.")
+    if area and not child:
+        raise ValueError("Choose the area's own brief as a destination for its capture plan")
     for path in plan["destinations"]:
         capture.record_path(private, path)
     if child:
@@ -126,6 +139,8 @@ def finding(private, plan, entry):
     product, area, parent, child = check_plan(private, plan)
     if entry.get("product") != product or ("product_area" in entry and (not area or entry["product_area"] != area)):
         raise ValueError("Review a finding about the product or area in the approved plan")
+    if area and "product_area" not in entry:
+        raise ValueError("Review a finding about the selected area in this plan. Product-wide findings need their own round.")
     destination = child if "product_area" in entry else parent
     if not destination or destination not in plan["destinations"]:
         raise ValueError("Get agreement on this finding's destination before gathering or filing it")
@@ -174,10 +189,10 @@ def recall(private):
 
     journey = onboarding_review.status(private)
     result = {"status": "no_active_topic", "subject": None, "topic": None, "evidence": None}
-    if journey["stage"] != "product" or not journey["stage_available"]:
+    if journey["stage"] not in {"product", "area"} or not journey["stage_available"]:
         return result
     current = journey["product_scope"]
-    topic = journey["walkthroughs"]["product"]["next_topic"]
+    topic = journey["walkthroughs"][journey["stage"]]["next_topic"]
     result.update(subject=current["subject"], topic=topic["id"])
     if current["selection_required"]:
         return dict(result, status="select_scope")
