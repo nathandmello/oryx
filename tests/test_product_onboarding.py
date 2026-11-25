@@ -25,13 +25,23 @@ class ProductOnboardingTests(unittest.TestCase):
     parent = "context/products/analytics/overview.md"
     area = "context/products/analytics/plugins/salesforce/overview.md"
 
-    def start(self, *subjects):
+    def start(self, *subjects, opt_in=True):
         while onboarding_review.status(self.work)["stage"] in {"company", "pm"}:
             review_current_topic(self.work)
         remit = {"status": "confirmed", "responsibilities": [
             {"subject": subject, "role": "owner", "goals": [], "depends_on": []}
             for subject in (subjects or (self.subject,))], "follow": []}
         context_capture.write_remit(self.work, remit)
+        if opt_in and self.subject in (subjects or (self.subject,)):
+            self.enter_area()
+
+    def enter_area(self):
+        while onboarding_review.status(self.work)["stage"] == "product":
+            review_current_topic(self.work)
+        state = onboarding_review.status(self.work)
+        return onboarding_review.select_area(self.work, {
+            "subject": self.subject, "revision": state["revision"], "pm_reply": "Let's review the Salesforce plugin.",
+        })
 
     def change(self, operation, **payload):
         payload.setdefault("revision", capture.read(self.work, "product")[1]["revision"])
@@ -51,7 +61,7 @@ class ProductOnboardingTests(unittest.TestCase):
         return self.change("propose", source_scope="PM discussion", sources=[source], entries=[dict(entry, **overrides)])
 
     def test_direct_creation_respects_the_planned_subject_across_folder_names(self):
-        self.start()
+        self.start(opt_in=False)
         while onboarding_review.status(self.work)["stage"] == "product":
             review_current_topic(self.work)
         records.create(self.root, "product-context", self.parent, "Analytics")
@@ -71,14 +81,74 @@ class ProductOnboardingTests(unittest.TestCase):
         self.change("accept")
         self.assertTrue((self.work / self.area).is_file())
 
-    def test_area_first_capture_creates_only_agreed_parent_and_area_after_review(self):
+    def test_selected_area_owns_its_generic_capture_even_before_a_plan(self):
         self.start()
+        sibling = layout.area(self.product, "reporting", "plugins")
+        self.assertTrue(capture.product_capture_owns(self.work, self.area))
+        self.assertFalse(capture.product_capture_owns(self.work, sibling))
+        for area, active in (("salesforce", True), ("reporting", False)):
+            entry = {"scope": "product", "product": self.product, "product_area": area}
+            self.assertEqual(capture.entries_in_product_round(self.work, [entry]), active)
+
+    def test_pausing_the_area_walkthrough_does_not_expand_its_approved_capture_plan(self):
+        self.start()
+        self.plan([self.parent, self.area])
+        self.change("approve")
+        self.propose()
+        checkpoint = self.work / capture.PRODUCT_FILE
+        approved = checkpoint.read_bytes()
+        onboarding_review.select_area(self.work, {"revision": onboarding_review.status(self.work)["revision"],
+                                      "subject": None, "pm_reply": "Let's pause the plugin walkthrough."})
+        self.assertEqual(onboarding_review.status(self.work)["stage"], "ready")
+        self.assertEqual(checkpoint.read_bytes(), approved)
+        self.change("discard")
+        with self.assertRaisesRegex(ValueError, "Product-wide findings need their own round"):
+            self.propose(parent=True, text="All Analytics users work at clinics.")
+        self.assertFalse((self.work / self.parent).exists())
+        self.assertFalse((self.work / self.area).exists())
+
+    def test_legacy_pending_child_can_be_deferred_while_parent_review_resumes(self):
+        self.start()
+        self.plan()
+        self.change("approve")
+        quote = "The connector is available to the pilot cohort."
+        self.propose(text=quote)
+        path = self.work / onboarding_review.FILE
+        mixed = json.loads(path.read_text())
+        mixed.pop("area_selection")
+        mixed.pop("area_history", None)
+        mixed["product_selection"] = self.subject
+        mixed["reviewed"]["product"] = {"purpose": "open"}
+        del mixed["completed"]["product"]
+        path.write_text(json.dumps(mixed))
+        self.assertEqual(onboarding_review.status(self.work)["product_scope"]["subject"], "product/analytics")
+        with self.assertRaisesRegex(ValueError, "parent product"):
+            self.change("accept")
+        self.change("defer", destination=self.area, question="Who joined the pilot?",
+                    why="Understand the cohort.", next_action="Review the approved roster.",
+                    resume_when="Pilot roster arrives")
+        self.change("finish")
+        self.plan([self.parent], subject="product/analytics")
+        gap = capture.read(self.work, "product")[1]["gaps"][0]
+        self.assertEqual((gap["subject"], gap["basis"]["quote"]), (self.subject, quote))
+        self.assertFalse((self.work / self.area).exists())
+
+    def test_area_capture_requires_parent_review_and_can_create_an_approved_parent_shell(self):
+        self.start(opt_in=False)
+        with self.assertRaisesRegex(ValueError, "parent product"):
+            self.plan()
+        state = capture.status(self.work, "product")
+        self.assertEqual(state["subject"], "product/analytics")
+        self.assertEqual(state["responsibilities"], [self.subject])
+        self.enter_area()
         with self.assertRaisesRegex(ValueError, "Include the missing parent"):
             self.plan([self.area])
         self.plan(titles={self.parent: "Acme Analytics", self.area: "Salesforce Plug-in"})
         with self.assertRaisesRegex(ValueError, "approve"):
             self.propose()
         self.change("approve")
+        with self.assertRaisesRegex(ValueError, "selected area"):
+            self.propose(parent=True)
         finding = self.propose()["pending"]
         self.assertEqual(finding["destination"], self.area)
         self.assertEqual(finding["creates_parent"], self.parent)
@@ -99,6 +169,21 @@ class ProductOnboardingTests(unittest.TestCase):
         self.assertEqual(pm.records.parent_reference(self.area, child), self.parent)
         self.assertEqual(context_capture.read_remit(self.work)["responsibilities"][0]["subject"], self.subject)
 
+    def test_ready_studio_requires_this_areas_parent_review_for_guided_capture(self):
+        self.start("product/other", self.subject, opt_in=False)
+        onboarding_review.select_product(self.work, {"revision": onboarding_review.status(self.work)["revision"],
+                                         "subject": "product/other", "pm_reply": "Let's cover the other product first."})
+        while onboarding_review.status(self.work)["stage"] == "product":
+            review_current_topic(self.work)
+        self.assertTrue(onboarding_review.status(self.work)["ready"])
+        with self.assertRaisesRegex(ValueError, "parent product first"):
+            self.plan()
+        onboarding_review.select_product(self.work, {"revision": onboarding_review.status(self.work)["revision"],
+                                         "subject": "product/analytics", "pm_reply": "Now let's cover Analytics."})
+        while onboarding_review.status(self.work)["stage"] == "product":
+            review_current_topic(self.work)
+        self.assertEqual(self.plan()["phase"], "plan")
+
     def test_defer_resolve_require_the_same_scope_and_reviewed_answer(self):
         self.start()
         self.plan()
@@ -109,7 +194,9 @@ class ProductOnboardingTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "pending finding"):
             self.change("defer", destination=self.parent, **gap)
         self.change("defer", destination=self.area, **gap)
-        self.change("gap", destination=self.parent, **gap)
+        with self.assertRaisesRegex(ValueError, "area question"):
+            self.change("gap", destination=self.parent, **gap)
+        self.change("gap", destination=self.area, **dict(gap, question="Who can grant pilot access?"))
         state = capture.status(self.work, "product")
         self.assertEqual(state["gap_count"], 2)
         self.assertNotIn("gaps", state)
@@ -120,7 +207,7 @@ class ProductOnboardingTests(unittest.TestCase):
         self.propose(text="Support team members use the connector pilot.", answers=gap["question"])
         self.change("resolve", question=gap["question"])
         state = capture.read(self.work, "product")[1]
-        self.assertEqual([g["destination"] for g in state["gaps"]], [self.parent])
+        self.assertEqual([g["question"] for g in state["gaps"]], ["Who can grant pilot access?"])
         self.assertIn("Support team members", (self.work / self.area).read_text())
 
     def test_cli_answers_a_legacy_area_question_in_its_approved_original_home(self):
@@ -191,12 +278,16 @@ class ProductOnboardingTests(unittest.TestCase):
         self.assertNotIn("Salesforce connector is", (self.work / capture.PRODUCT_FILE).read_text())
 
     def test_parent_write_and_area_retry_preserve_exact_evidence(self):
-        self.start()
-        self.plan()
+        self.start(opt_in=False)
+        self.plan([self.parent], subject="product/analytics")
         self.change("approve")
         self.propose(parent=True, text="The customers are independent clinic administrators.")
         self.change("accept")
         original_parent = (self.work / self.parent).read_bytes()
+        self.change("finish")
+        self.enter_area()
+        self.plan([self.area])
+        self.change("approve")
         self.propose()
         real_write = storage.replace_text
         def interrupt(path, *args):

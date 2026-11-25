@@ -24,7 +24,8 @@ Source access, agreement on wording, and confirmation of a decision are separate
 
 During [onboarding](company-context.md), acknowledge the request and resume the next unreviewed topic. Use what the PM already told you.
 They can leave any answer open. Quiet and expedite change the pace. A pause saves their place.
-Once all walkthroughs are complete, revisit the request and check the evidence it needs.
+
+The PM can resume their request after the parent product walkthrough. Offer confirmed area owners an optional fourth step.
 
 ## Start with the choice
 

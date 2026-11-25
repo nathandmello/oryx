@@ -1,83 +1,67 @@
 # Understand the product today
 
-After the [PM walkthrough](pm-context.md), pick up the product or part of a product the PM already described. Keep their original request for later.
+## Step 3. Review the parent product
 
-> You mentioned you own the Salesforce plugin for Analytics. We can start with the Analytics brief, then fill in where the plugin fits. Sound good?
+After [PM and stakeholder context](pm-context.md), start with the product in the PM’s confirmed remit. If they own a plugin, start with its parent.
 
-Use one short question when the relationship is unclear. “Healthcare” might describe a product, a customer segment, or work across several products.
+> You mentioned you own the Salesforce plugin for Analytics. What does Analytics help people do today?
 
-## Start from the remit
+Read `pm.py onboarding status`. Use the team’s terminology and preserve who owns what. Ask which parent they mean if a name is ambiguous.
+When several products qualify, record the PM’s choice with `onboarding select-product`. Supply the current revision, parent `subject`, and actual `pm_reply`.
+If the PM confirms they have no assigned product, use a null subject and review what applies.
 
-Read `pm.py onboarding status` and the PM’s [confirmed remit](context.md#pm-remit). Use the team’s terminology.
-For a product owner, review the product brief. For an area owner, cover the parent product and the area in one conversation.
-Establish enough about the parent to explain the area’s purpose, users, journey, and contribution. Keep ownership with its confirmed subject.
-
-When several subjects qualify, let the PM choose where to start. Record their choice with `onboarding select-product`.
-Supply the current onboarding revision, the selected remit `subject`, and their actual `pm_reply`.
-If they confirm they have no assigned product, use a null subject and leave inapplicable topics open for later.
-
-## Follow six questions
-
-Use these topics in order. Reflect what the PM or an authorised source already established. Explore one relevant detail at a time.
+Cover six topics at product level. Draw on what the PM already shared and explore one detail at a time.
 
 | Topic | What belongs here |
 | --- | --- |
 | Purpose | What the product enables today, why it exists, where it fits in the company, and existing direction or commitments. |
 | Customers | Who uses it, who buys or chooses it, the job they need done, their alternatives and desired outcomes. |
-| Experience | A real journey through the product, including access, capabilities, integrations, friction and where an area contributes. |
+| Experience | A real journey through the product, including access, capabilities, integrations and friction. |
 | Business value | How the product is intended to contribute, including distribution, retention, revenue, costs or value to an internal team. |
 | Performance | What happened, for whom and when. Check the metric definition, baseline, result, source and limitations. |
-| Operating environment | Market alternatives, team responsibilities, decision rights, dependencies, operating constraints and existing commitments. |
+| Operating environment | Market alternatives, team responsibilities, decision rights, dependencies, constraints and existing commitments. |
 
 A founder can describe an intended user and a hypothesis before launch. Attribute both. A reported customer interview establishes what that person said.
-Distinguish the expected business benefit from measured performance. Keep area results tied to their population. Preserve conflicting accounts with their sources.
+Keep expected business benefits distinct from measured performance. Preserve conflicting accounts with their sources. Offer a proportionate cross-check when it matters.
 
-When a claim matters, offer one cross-check. A customer account or usage report can help test a leadership claim.
+## Step 4. Offer an area walkthrough
 
-## Agree on capture
+Completing step 3 unlocks the hub, including when questions remain open. Check `area_offers` for confirmed areas under the reviewed product.
+If the PM owns one, offer the choice once at handoff. A whole-product owner can finish at step 3.
 
-Offer conversation, the PM’s own writing, or a bounded source check. Use their language for where useful material lives.
-Agree on the purpose, sources and destinations before inspecting material. Get fresh permission to expand the plan.
-Choose a reusable finding that answers the current question. Keep personal or chat-only details in the conversation.
+> That covers Analytics. Would you like to look at the Salesforce plugin now, or leave it for later?
 
-When reusing a Studio brief, include its exact Studio-relative path in the agreed sources.
-After approval, use `product-onboarding status --evidence` for one sourced passage relevant to the current topic.
-Check its scope, timeframe, qualifications and open reviews with the PM. A company observation needs separate evidence before applying it to one product.
-An empty result leaves the question open. Offer one relevant next source if it would help.
+Start an area only after the PM chooses it. Use `onboarding select-area` with the current revision, qualified `subject`, and actual `pm_reply`.
+A null subject records a skip or pause. Use `area_options` when the PM asks to return. Ordinary work stays available throughout step 4.
 
-Run `pm.py product-onboarding status` for the capture revision. Send the plan as JSON through `product-onboarding plan`. For example:
+Review the six topics for that area. Use the parent brief as background with permission. Ask what differs for the area’s users, journey, and contribution.
+Keep area results tied to their population. Confirm the team’s directory name and file area findings in their own brief.
+
+## Review and save findings
+
+Offer conversation, the PM’s own writing, or a bounded source check. Agree on purpose, sources and destinations before inspecting material.
+Get fresh permission to expand the plan. Keep chat-only details in the conversation.
+
+Run `pm.py product-onboarding status` for the capture revision. Send the plan through `product-onboarding plan`. A step 3 example follows.
 
 ```json
-{"revision":0,"subject":"product/analytics/area/salesforce","purpose":"Describe how operators use the Salesforce plugin.","sources":["PM conversation"],"destinations":["context/products/analytics/overview.md","context/products/analytics/plugins/salesforce/overview.md"]}
+{"revision":0,"subject":"product/analytics","purpose":"Describe Analytics today.","sources":["PM conversation"],"destinations":["context/products/analytics/overview.md"]}
 ```
 
-Show both homes, their parent link, and any brief that would be created. Optional plan `titles` map each new brief’s path to the team’s name. Use `approve` after agreement. Read the new revision after each operation.
+Show the proposed home and any brief to create. Optional plan `titles` preserve the team’s names. Use `approve` after agreement.
+In step 4, use the qualified area subject and its home, such as `context/products/analytics/plugins/salesforce/overview.md`.
 
-Use `propose` with the agreed source scope, one inspected source, and one [product entry](context.md#route-supplied-evidence).
-Set `product_area` for an area finding. A product-wide fact belongs in the parent brief.
+Name each reusable Studio brief by exact path in the agreed sources. Use `product-onboarding status --evidence` for one relevant passage.
+Review its scope, date, qualifications and open reviews. An empty result leaves the question open.
 
-For a decision already made, preview it with `route-context` inside the approved source and destination plan.
-Ask the PM to confirm the exact decision, owner, scope and source before using `--write`.
-An area decision needs an existing parent product brief. Capture the agreed parent context first when that brief is missing.
+Use `propose` with one inspected source and one [product entry](context.md#route-supplied-evidence). Set `product_area` for an area finding.
+Show wording, citation and destination. Accept approved wording, preview edits again, or discard the draft. Read the revision after each operation.
 
-If another product uses an existing area, verify the relationship with the PM.
-On a sourced finding for that product, use `shared_area` with the canonical subject, such as `product/analytics/area/salesforce`.
-Review that relationship in the receiving product’s brief. Later searches can follow it to the original area evidence.
+For an existing decision, preview it with `route-context` within the approved plan. Confirm the exact decision, owner, scope and source before using `--write`.
+An area decision needs an existing parent product brief. Confirm a shared area relationship before recording `shared_area` on its receiving product.
 
-> I’d save “Sales operators use the Salesforce plugin to export weekly pipeline reports” in the plugin brief. Does that capture it?
+Use `defer` or `gap` for an open question. Agree on its destination, consequence, next check and revisit cue.
+Use `resolve` after reviewing a sourced answer. Use `finish` to end a capture round.
 
-Show the wording, citation and destination. Accept their exact wording, re-propose an edit, or discard the draft if they decline retention.
-
-For an open question, agree on its destination, why it matters, the next check, and when to revisit it.
-Use `defer` or `gap` for that question. When the cue arrives, offer the agreed check. Use `resolve` after reviewing a sourced answer.
-Resume only the relevant pending finding or gap. Use `finish` to close a capture round.
-
-## Return to the work
-
-Use `onboarding review-topic` with the walkthrough revision, stage `product`, current topic, outcome, and actual PM reply.
-Include the exact `subject` from `product_scope` in the latest status, including null.
-A topic may be reviewed, open, or inapplicable. The six-topic pass can finish with unanswered questions.
-Check the next stage and scope on resume. Once ready, offer to return to the original request.
-
-Use [task context](context-search.md) to retrieve what that activity needs, including applicable parent commitments and scoped area evidence.
-A missing strategy objective may warrant a source check. A question about pilot performance needs the pilot’s evidence and metric definition.
+Record each topic with `onboarding review-topic`. Supply the walkthrough revision, current stage (`product` or `area`), topic, outcome and actual PM reply.
+Use the exact `product_scope.subject`, including null. Topics may be reviewed, open or inapplicable. When the PM brings work, retrieve its [task context](context-search.md).

@@ -51,7 +51,9 @@ If you’re a founder starting with an idea, your own account is enough to begin
 Next, oryx asks about your role, day-to-day responsibilities, expectations and aspirations. You can review one point at a time or leave it open.
 You can also map who you work with and how decisions happen. Oryx keeps the stakeholder map separate from your profile. [PM walkthrough](playbook/pm-context.md)
 
-Then oryx helps you describe the product as it works today. If you own a plugin or another part of it, you review the parent product and your part together. Findings go into separate briefs. After the six topics, oryx offers to resume your request and checks the evidence it needs. [Product walkthrough](playbook/product-context.md)
+Step 3 covers the product as it works today. If you own a plugin, you still start with its parent product. Once you’ve reviewed the six topics, you can use the hub with questions open.
+
+If you own part of that product, oryx offers an optional step 4 for your area. You can review it now, come back later, or skip it. Its findings go in a separate brief. [Product walkthrough](playbook/product-context.md)
 
 ## Make it yours
 

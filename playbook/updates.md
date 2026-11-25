@@ -4,6 +4,7 @@ Private format 2 applies.
 
 | Release | Change |
 | --- | --- |
+| 0.14.0 | Separates parent product setup from optional area setup. Update every client sharing a Studio before saving optional area progress. Briefs and citations keep their paths. An unfinished 0.13.0 combined review resumes at the parent. A completed one keeps the hub open. Review the parent separately before starting its optional area walkthrough. |
 | 0.13.0 | Adds the [product walkthrough](product-context.md) after the PM pass. Completed company and PM topics carry forward. Existing `areas/` briefs keep their paths and citations. Update clients sharing a Studio before writing briefs under team-specific folders. |
 | 0.12.0 | Adds [company](company-context.md) and [PM](pm-context.md) walkthroughs, including a [stakeholder map](stakeholders.md). Update shared Studio clients before saving a map. Existing records can supply evidence. That release held product work at the third stage. |
 | 0.11.1 | Updates [conversation guidance](conversation.md) to ground agreement in evidence. Capture and coaching keep omissions open and preserve confirmed limits. |

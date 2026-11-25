@@ -23,7 +23,7 @@ def review_current_topic(private):
     state = onboarding_review.status(private)
     stage = state["stage"]
     identifier = {}
-    if stage == "product":
+    if stage in {"product", "area"}:
         scope = state["product_scope"]
         if scope["selection_required"]:
             subject = scope["choices"][0] if scope["choices"] else None

@@ -19,13 +19,17 @@ class WalkthroughTests(unittest.TestCase):
         topic = status["walkthroughs"][stage]["next_topic"]["id"]
         values = {"revision": status["revision"], "stage": stage, "topic": topic,
                   "outcome": outcome, "pm_reply": "Leave that open for now."}
-        if stage == "product":
+        if stage in {"product", "area"}:
             values["subject"] = status["product_scope"]["subject"]
         return review.review(self.work, dict(values, **changes))
 
     def select(self, subject):
         return review.select_product(self.work, {"revision": review.status(self.work)["revision"],
                                      "subject": subject, "pm_reply": "Let's use this scope for the walkthrough."})
+
+    def area(self, subject):
+        return review.select_area(self.work, {"revision": review.status(self.work)["revision"], "subject": subject,
+                                              "pm_reply": "Let's review this part." if subject else "Another time."})
 
     def product_stage(self):
         while review.status(self.work)["stage"] in {"company", "pm"}:
@@ -79,20 +83,141 @@ class WalkthroughTests(unittest.TestCase):
         self.product_stage()
         scope = review.status(self.work)["product_scope"]
         self.assertTrue(scope["selection_required"])
-        self.assertCountEqual(scope["choices"], [first, second])
+        parent = "product/payments"
+        self.assertCountEqual(scope["choices"], [parent, second])
         with self.assertRaisesRegex(ValueError, "Confirm the product"):
-            self.select("product/payments")  # Owning Refunds gives no authority over its parent.
-        self.select(first)
+            self.select(first)
+        self.select(parent)
         covered = self.record("reviewed")
         self.assertEqual(covered["walkthroughs"]["product"]["next_topic"]["id"], "customers")
         self.assertEqual(self.select(second)["walkthroughs"]["product"]["reviewed"], {})
-        resumed = self.select(first)
+        resumed = self.select(parent)
         self.assertEqual(resumed["walkthroughs"]["product"], covered["walkthroughs"]["product"])
         while review.status(self.work)["stage"] == "product":
             result = self.record()
-        self.assertEqual(result["reviewed_product_subject"], first)
+        self.assertEqual(result["reviewed_product_subject"], parent)
         self.assertFalse(self.select(second)["ready"])
-        self.assertTrue(self.select(first)["ready"])
+        self.assertTrue(self.select(parent)["ready"])
+
+    def test_optional_areas_need_a_parent_pass_and_keep_independent_coverage(self):
+        parent = "product/payments"
+        alerts, refunds = parent + "/area/alerts", parent + "/area/refunds"
+        self.remit(alerts, refunds)
+        self.product_stage()
+        self.assertEqual(review.status(self.work)["product_scope"]["subject"], parent)
+        with self.assertRaisesRegex(ValueError, "Complete the parent"):
+            self.area(refunds)
+        self.assertFalse(review.product_reviewed(review.read(self.work)[1], alerts))
+        while review.status(self.work)["stage"] == "product":
+            ready = self.record()
+        self.assertTrue(ready["ready"])
+        self.assertEqual(ready["area_offers"], [alerts, refunds])
+        self.assertEqual(self.area(None)["area_offers"], [])
+        self.assertTrue(review.product_reviewed(review.read(self.work)[1], alerts))
+        active = self.area(refunds)
+        self.assertTrue(active["ready"])
+        self.assertEqual(active["stage"], "area")
+        self.assertEqual(active["product_scope"]["subject"], refunds)
+        self.assertEqual(active["walkthroughs"]["area"]["reviewed"], {})
+        self.assertEqual(active["walkthroughs"]["product"], ready["walkthroughs"]["product"])
+        with self.assertRaisesRegex(ValueError, "scope changed"):
+            self.record(subject=alerts)
+        self.record()
+        self.assertEqual(self.area(None)["stage"], "ready")
+        self.assertEqual(self.area(alerts)["walkthroughs"]["area"]["next_topic"]["id"], "purpose")
+        self.assertEqual(self.area(refunds)["walkthroughs"]["area"]["next_topic"]["id"], "customers")
+        with self.assertRaisesRegex(ValueError, "confirmed area"):
+            self.area("product/billing/area/refunds")
+        while review.status(self.work)["stage"] == "area":
+            self.record()
+        state = review.status(self.work)
+        self.assertEqual(state["reviewed_product_subject"], parent)
+        self.assertEqual(state["reviewed_areas"], [refunds])
+        self.assertEqual(state["area_options"], [alerts])
+        self.assertFalse(list((self.work / "context/products").glob("**/overview.md")))
+
+    def test_legacy_mixed_pass_never_attests_to_a_separate_area_or_parent_review(self):
+        parent, child = "product/payments", "product/payments/area/refunds"
+        self.remit(child)
+        self.product_stage()
+        path = self.work / review.FILE
+        for completed in (False, True):
+            state = json.loads(path.read_bytes())
+            state["product_selection"] = child
+            state["reviewed"]["product"] = {"purpose": "open"}
+            state["revision"] += 2
+            if completed:
+                state["completed"]["product"] = ["purpose"]
+            path.write_text(json.dumps(state))
+            original = path.read_bytes()
+            status = review.status(self.work)
+            self.assertEqual(path.read_bytes(), original)
+            if completed:
+                self.assertTrue(status["ready"])
+                self.assertEqual(status["legacy_product_subject"], child)
+                self.assertIsNone(status["reviewed_product_subject"])
+                self.assertEqual(status["area_options"], [])
+                with self.assertRaisesRegex(ValueError, "reviewed parent"):
+                    self.area(child)
+                status = self.select(parent)
+            else:
+                self.assertEqual(review.read(self.work)[1]["product_history"][child]["reviewed"], {"purpose": "open"})
+            self.assertEqual(status["stage"], "product")
+            self.assertEqual(status["product_scope"]["subject"], parent)
+            self.assertEqual(status["walkthroughs"]["product"]["reviewed"], {})
+            self.assertFalse(review.product_reviewed(review.read(self.work)[1], child))
+
+    def test_pausing_one_area_preserves_its_approved_source_plan(self):
+        first, other = "product/payments/area/refunds", "product/payments/area/reports"
+        self.remit(first, other)
+        self.product_stage()
+        while review.status(self.work)["stage"] == "product":
+            self.record()
+        self.area(first)
+        plan = {"revision": 0, "purpose": "Understand when merchants request refunds.",
+                "subject": first, "sources": ["PM discussion"],
+                "destinations": ["context/products/payments/overview.md",
+                                 "context/products/payments/components/refunds/overview.md"]}
+        company_onboarding.change(self.root, "plan", plan, "Fixture PM", pm.capture_errors, "product")
+        company_onboarding.change(self.root, "approve", {"revision": 1}, "Fixture PM", pm.capture_errors, "product")
+        capture = self.work / company_onboarding.PRODUCT_FILE
+        saved = capture.read_bytes()
+        self.assertTrue(self.area(None)["ready"])
+        with self.assertRaisesRegex(ValueError, "source plan"):
+            self.area(other)
+        self.assertEqual(self.area(first)["stage"], "area")
+        self.assertEqual(capture.read_bytes(), saved)
+
+    def test_optional_damage_leaves_completed_required_passes_available(self):
+        child = "product/payments/area/refunds"
+        self.remit(child)
+        self.product_stage()
+        while review.status(self.work)["stage"] == "product":
+            self.record()
+        path = self.work / review.FILE
+        required = json.loads(path.read_bytes())
+        for damage in (
+            {"area_history": {child: {"reviewed": [], "complete": False}}},
+            {"area_selection": ["invalid"]}, {"area_deferred": "invalid"},
+        ):
+            with self.subTest(damage=damage):
+                path.write_text(json.dumps(dict(required, **damage)))
+                damaged = path.read_bytes()
+                status = pm.onboarding.status(self.work)
+                self.assertTrue(status["ready"])
+                self.assertEqual(status["stage"], "ready")
+                self.assertEqual(status["reviewed_product_subject"], "product/payments")
+                self.assertTrue(status["area_problem"])
+                self.assertEqual(status["area_options"], [])
+                self.assertEqual(status["area_offers"], [])
+                with self.assertRaisesRegex(ValueError, "optional area"):
+                    self.area(child)
+                with self.assertRaisesRegex(ValueError, "optional area"):
+                    self.area(None)
+                self.assertEqual(path.read_bytes(), damaged)
+        required["completed"]["product"] = ["missing-topic"]
+        path.write_text(json.dumps(dict(required, **damage)))
+        self.assertEqual(pm.onboarding.status(self.work)["stage"], "repair")
 
     def test_single_remit_is_reused_and_moved_responsibility_requires_fresh_review(self):
         first, second = "product/payments", "product/lending"

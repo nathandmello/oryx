@@ -38,7 +38,7 @@ class ProductContextJourneyTests(unittest.TestCase):
             state = self.cli("onboarding", "review-topic", payload={
                 "revision": state["revision"], "stage": stage, "topic": topic,
                 "outcome": "open", "pm_reply": "We discussed it. Keep the rest open for now.",
-                **({"subject": state["product_scope"]["subject"]} if stage == "product" else {}),
+                **({"subject": state["product_scope"]["subject"]} if stage in {"product", "area"} else {}),
             })
         return seen
 
@@ -54,11 +54,19 @@ class ProductContextJourneyTests(unittest.TestCase):
         stage = route["onboarding"]
         self.assertEqual(stage["stage"], "product")
         self.assertTrue(stage["stage_available"])
+        parent = subject.split("/area/")[0] if subject else None
         if stage["product_scope"]["selection_required"]:
-            self.cli("onboarding", "select-product", payload={
-                "revision": stage["revision"], "subject": subject,
+            stage = self.cli("onboarding", "select-product", payload={
+                "revision": stage["revision"], "subject": parent,
                 "pm_reply": "Yes, that is my current scope." if subject else "I do not yet have an assigned product.",
             })
+        self.assertEqual(stage["product_scope"]["subject"], parent)
+
+    def select_area(self, subject, reply, error=None):
+        state = self.cli("onboarding", "status")
+        return self.cli("onboarding", "select-area", error=error, payload={
+            "revision": state["revision"], "subject": subject, "pm_reply": reply,
+        })
 
     def capture(self, operation, **fields):
         revision = self.cli("product-onboarding", "status")["revision"]
@@ -71,19 +79,46 @@ class ProductContextJourneyTests(unittest.TestCase):
                             entries=[dict(scope="product", product="analytics", topic=topic, quote=sentence,
                                           source=1, location="Current state discussion", **scope)])
 
-    def test_plugin_owner_captures_parent_and_plugin_then_can_use_them_in_a_fresh_session(self):
+    def test_plugin_owner_reviews_parent_then_opts_in_to_plugin_and_reuses_both(self):
         subject = "product/analytics/area/salesforce"
         self.reach_product(subject)
         profile = self.work / "context/pm/context.md"
         original = profile.read_bytes()
         product_fact = "Analytics helps support teams understand account activity."
         area_fact = "The Salesforce plugin syncs renewal records for the pilot accounts."
-        self.capture("plan", subject=subject, purpose="Record how the pilot works today.",
-                     sources=[self.source], destinations=[self.product, self.plugin])
+        self.select_area(subject, "Let's start with the plugin.", error="product")
+        before = self.cli("product-onboarding", "status")
+        self.cli("product-onboarding", "plan", error="FAIL", payload={
+            "revision": before["revision"], "subject": subject, "purpose": "Review the plugin first.",
+            "sources": [self.source], "destinations": [self.product, self.plugin],
+        })
+        self.assertEqual(self.cli("product-onboarding", "status"), before)
+        self.capture("plan", subject="product/analytics", purpose="Describe Analytics.",
+                     sources=[self.source], destinations=[self.product])
         self.capture("approve")
         self.propose(product_fact, "offer")
         self.assertFalse((self.work / self.product).is_file())
         self.capture("accept")
+        self.capture("finish")
+        self.cli("action", "portfolio", "roadmap", "show", error="onboarding_required")
+        self.assertEqual(len(self.cover("product")), 6)
+        ready = self.cli("onboarding", "status")
+        self.assertTrue(ready["ready"])
+        self.assertEqual(ready["reviewed_product_subject"], "product/analytics")
+        self.assertEqual(ready["area_options"], [subject])
+        self.assertFalse((self.work / self.plugin).exists())
+        parent_query = self.cli("task-context", "--product", "analytics", "What does Analytics help teams do?")
+        self.assertTrue(any(product_fact in row["text"] and row["record"] == self.product for row in parent_query["entries"]))
+        area = self.select_area(subject, "Now let's cover the Salesforce plugin.")
+        self.assertEqual(area["stage"], "area")
+        self.assertTrue(area["ready"])
+        self.assertEqual(area["product_scope"]["subject"], subject)
+        self.assertEqual(area["walkthroughs"]["product"], ready["walkthroughs"]["product"])
+        answer = self.cli("task-context", "--product", "analytics", "What does Analytics do for support teams?")
+        self.assertTrue(any(product_fact in row["text"] for row in answer["entries"]))
+        self.capture("plan", subject=subject, purpose="Describe the Salesforce pilot.",
+                     sources=[self.source], destinations=[self.plugin])
+        self.capture("approve")
         self.propose(area_fact, "offer", product_area="salesforce")
         self.assertFalse((self.work / self.plugin).is_file())
         self.capture("accept")
@@ -97,8 +132,7 @@ class ProductContextJourneyTests(unittest.TestCase):
         self.assertNotIn("Other private material", plugin)
         self.assertEqual(profile.read_bytes(), original)
         self.assertFalse((self.work / "context/products/analytics/areas/salesforce/overview.md").exists())
-        self.cli("action", "portfolio", "roadmap", "show", error="onboarding_required")
-        self.assertEqual(len(self.cover("product")), 6)
+        self.assertEqual(len(self.cover("area")), 6)
         self.assertTrue(self.cli("onboarding", "status")["ready"])
 
         for client in ("Codex", "Claude"):
@@ -122,6 +156,7 @@ class ProductContextJourneyTests(unittest.TestCase):
         self.capture("accept")
         self.capture("finish")
         self.assertEqual(len(self.cover("product")), 6)
+        self.assertEqual(self.cli("onboarding", "status")["area_options"], [])
         self.assertEqual([p.relative_to(self.work).as_posix() for p in
                           (self.work / "context/products").rglob("overview.md")], [self.product])
         query = self.cli("task-context", "--product", "analytics", "What evidence do we have about independent clinics?")
@@ -130,15 +165,38 @@ class ProductContextJourneyTests(unittest.TestCase):
     def test_unassigned_pm_can_leave_all_six_topics_open_without_creating_a_product(self):
         self.reach_product(None)
         self.assertEqual(len(self.cover("product")), 6)
-        self.assertTrue(self.cli("onboarding", "status")["ready"])
+        ready = self.cli("onboarding", "status")
+        self.assertTrue(ready["ready"])
+        self.assertEqual(ready["area_options"], [])
         self.assertFalse(list((self.work / "context/products").rglob("overview.md")))
+
+    def test_area_can_be_skipped_then_resumed_after_a_partial_pass(self):
+        subject = "product/analytics/area/salesforce"
+        self.reach_product(subject)
+        self.cover("product")
+        skipped = self.select_area(None, "Leave the plugin for another day.")
+        self.assertTrue(skipped["ready"])
+        self.assertNotIn(subject, skipped["area_offers"])
+        answer, _ = self.prompt("Codex", "later", "What does our Analytics product do today?")
+        self.assertNotIn("onboarding", answer)
+        started = self.select_area(subject, "Let's go through the plugin now.")
+        first = started["walkthroughs"]["area"]["next_topic"]["id"]
+        progress = self.cli("onboarding", "review-topic", payload={
+            "revision": started["revision"], "stage": "area", "subject": subject, "topic": first,
+            "outcome": "open", "pm_reply": "We haven't pinned this down yet.",
+        })
+        self.assertTrue(self.select_area(None, "I'll come back to the plugin later.")["ready"])
+        resumed = self.select_area(subject, "I'd like to continue with the plugin.")
+        self.assertEqual(resumed["walkthroughs"]["area"], progress["walkthroughs"]["area"])
+        self.assertEqual(resumed["walkthroughs"]["product"], skipped["walkthroughs"]["product"])
+        self.assertFalse((self.work / self.plugin).exists())
 
     def test_recording_existing_choices_requires_separate_consent_for_the_exact_product_or_area(self):
         subject = "product/analytics/area/salesforce"
         self.reach_product(subject)
         titles = {self.product: "Analytics Suite", self.plugin: "Salesforce Connector"}
-        self.capture("plan", subject=subject, purpose="Document existing pilot decisions.",
-                     sources=[self.source], destinations=[self.product, self.plugin], titles=titles)
+        self.capture("plan", subject="product/analytics", purpose="Document the existing product decision.",
+                     sources=[self.source], destinations=[self.product], titles={self.product: titles[self.product]})
         quote = "The product council chose the January pilot window."
         decision = dict(person="Product council", date="2026-01-07", question="When will we pilot?",
                         scope="Analytics pilot window", next_step="Share the approved pilot dates.")
@@ -161,6 +219,13 @@ class ProductContextJourneyTests(unittest.TestCase):
         self.capture("discard")
         for path in (self.product, self.plugin):
             if path == self.plugin:
+                self.capture("finish")
+                self.cover("product")
+                self.select_area(subject, "Review the existing connector decision too.")
+                self.capture("plan", subject=subject, purpose="Document the existing connector decision.",
+                             sources=[self.source], destinations=[self.plugin], titles={self.plugin: titles[self.plugin]})
+                self.capture("approve")
+                progress = self.cli("onboarding", "status")
                 quote = "The connector council chose read-only access for the trial."
                 entry = dict(entry, product_area="salesforce", quote=quote,
                              decision=dict(decision, person="Connector council", question="What access does the trial use?",
@@ -185,8 +250,7 @@ class ProductContextJourneyTests(unittest.TestCase):
         self.assertEqual(self.cli("onboarding", "status"), progress)
         self.assertNotIn(quote, (self.work / self.product).read_text())
         self.capture("finish")
-        self.cli("route-context", "--write", self.plugin, payload=confirmed, error="Approve the product source plan")
-        self.cover("product")
+        self.cover("area")
         self.capture("plan", subject=subject, purpose="Revisit the connector trial.",
                      sources=[self.source], destinations=[self.plugin])
         self.capture("approve")
@@ -246,6 +310,8 @@ class ProductContextJourneyTests(unittest.TestCase):
         original = parent.read_bytes(), other.read_bytes()
 
         self.reach_product(subject)
+        self.cover("product")
+        self.select_area(subject, "Update this existing Salesforce integration brief.")
         self.capture("plan", subject=subject, purpose="Update an existing integration brief.",
                      sources=[self.source], destinations=[previous])
         self.capture("approve")
@@ -253,7 +319,7 @@ class ProductContextJourneyTests(unittest.TestCase):
         self.propose(sentence, "offer", product_area="salesforce")
         self.capture("accept")
         self.capture("finish")
-        self.cover("product")
+        self.cover("area")
         self.assertEqual(records.work_state(old.read_text())[0]["ID"], old_id)
         self.assertIn("Private legacy introduction.", old.read_text())
         self.assertIn(sentence, old.read_text())

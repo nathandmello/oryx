@@ -290,15 +290,12 @@ class OnboardingHookTests(unittest.TestCase):
             review_current_topic(self.work)
         parent = layout.product("analytics")
         plugin = "context/products/analytics/plugins/salesforce/overview.md"
+        area = "product/analytics/area/salesforce"
         source = "Salesforce connector team interview"
-        self.cli("product-onboarding", "plan", payload={
-            "subject": "product/analytics/area/salesforce", "revision": 0, "purpose": "Review the connector workflow.",
-            "sources": [source], "destinations": [parent, plugin],
-        })
-        self.cli("product-onboarding", "approve", payload={"revision": 1})
         for client in ("Codex", "Claude"):
             pending, guidance = self.prompt(client, client, "Help me prepare a roadmap.")
             self.assertEqual(pending["onboarding"]["stage"], "product")
+            self.assertEqual(pending["onboarding"]["product_scope"]["subject"], "product/analytics")
             self.assertIn("playbook/product-context.md", guidance)
             self.assertNotIn(source, guidance)
             for path in (parent, plugin):
@@ -312,6 +309,34 @@ class OnboardingHookTests(unittest.TestCase):
                 self.assertFalse((self.work / path).exists())
         while onboarding_review.status(self.work)["stage"] == "product":
             review_current_topic(self.work)
+        ready = self.cli("onboarding", "status")
+        self.assertTrue(ready["ready"])
+        self.assertEqual(ready["area_options"], [area])
+        for client in ("Codex", "Claude"):
+            ordinary, _ = self.prompt(client, client, "Show the roadmap.")
+            self.assertNotIn("onboarding", ordinary)
+            optional, _ = self.prompt(client, client, "Let’s pick up the Salesforce plugin setup.")
+            self.assertEqual(optional["status"], "optional_area_walkthrough")
+            self.assertEqual(optional["onboarding"]["area_options"], [area])
+            self.assertEqual(optional["onboarding"]["matching_areas"], [area])
+            self.assertEqual(optional, self.cli("task-context", "Resume the Salesforce plugin walkthrough"))
+        self.assertEqual(self.cli("onboarding", "status")["revision"], ready["revision"])
+        self.cli("onboarding", "select-area", payload={
+            "subject": area, "revision": ready["revision"], "pm_reply": "Let's go through the connector."})
+        self.cli("product-onboarding", "plan", payload={
+            "subject": area, "revision": 0, "purpose": "Review the connector workflow.",
+            "sources": [source], "destinations": [parent, plugin],
+        })
+        self.cli("product-onboarding", "approve", payload={"revision": 1})
+        for client in ("Codex", "Claude"):
+            ordinary, _ = self.prompt(client, client, "Use the area context to review my roadmap.")
+            self.assertNotIn("onboarding", ordinary)
+            optional, guidance = self.prompt(client, client, "Continue the walkthrough.")
+            self.assertEqual(optional["status"], "optional_area_walkthrough")
+            self.assertEqual(optional["onboarding"]["subject"], area)
+            self.assertEqual(optional["onboarding"]["next_topic"]["id"], "purpose")
+            self.assertNotIn(source, guidance)
+            self.assertNotIn("onboarding", self.prompt(client, client, "Resume the Unknown plugin walkthrough.")[0])
         note = self.work / "context/products/analytics/plugins/salesforce/support.md"
         self.assertIn("product-onboarding", hook.edit_reason(self.root, self.work, note, ""))
         alternate = self.work / "context/products/analytics/extensions/salesforce/support.md"
@@ -323,6 +348,11 @@ class OnboardingHookTests(unittest.TestCase):
                "resume_when": "When the cohort export arrives.", "destination": plugin}
         self.cli("product-onboarding", "gap", payload={"revision": 2, **gap})
         self.cli("product-onboarding", "finish", payload={"revision": 3})
+        self.assertIn("product-onboarding", hook.edit_reason(self.root, self.work, note, ""))
+        progress = self.cli("onboarding", "status")
+        paused = self.cli("onboarding", "select-area", payload={
+            "subject": None, "revision": progress["revision"], "pm_reply": "Let's leave the plugin walkthrough here."})
+        self.assertEqual(paused["area_offers"], [])
         self.assertIn("route-context", hook.edit_reason(self.root, self.work, note, ""))
         for client in ("Codex", "Claude"):
             prompts = [
@@ -334,3 +364,20 @@ class OnboardingHookTests(unittest.TestCase):
                 result, guidance = self.prompt(client, client + prompt, prompt)
                 self.assertEqual("product_followup" in result["conversation"], expected)
                 self.assertNotIn(gap["question"], guidance)
+
+    def test_corrupt_optional_review_leaves_the_hub_open(self):
+        while not onboarding_review.status(self.work)["ready"]:
+            review_current_topic(self.work)
+        checkpoint = self.work / onboarding_review.FILE
+        saved = json.loads(checkpoint.read_bytes())
+        saved["area_history"] = "Unreadable optional state"
+        checkpoint.write_text(json.dumps(saved))
+        before = checkpoint.read_bytes()
+        for client in ("Codex", "Claude"):
+            task, _ = self.prompt(client, client, "Show the roadmap.")
+            self.assertNotIn("onboarding", task)
+            repair, _ = self.prompt(client, client, "Resume area setup.")
+            self.assertEqual(repair["status"], "optional_area_walkthrough")
+            self.assertEqual(repair["onboarding"]["stage"], "repair")
+            self.assertNotIn(saved["area_history"], str(repair))
+        self.assertEqual(checkpoint.read_bytes(), before)

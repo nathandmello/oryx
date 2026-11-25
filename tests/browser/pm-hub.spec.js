@@ -120,6 +120,11 @@ test("an empty Studio opens its agent walkthrough from a task deep link", async 
   await button(page, "Check progress").click();
   await expect(page.getByRole("heading", { name: "PM context" })).toBeVisible();
   await expect(page.getByText(frameworks.pm[0].question, { exact: true })).toBeVisible();
+  const area = "product/analytics/area/salesforce";
+  execFileSync(python, [path.join(hub.root, "tools", "pm.py"), "set-remit"], {
+    cwd: hub.root, input: JSON.stringify({ status: "confirmed", follow: [],
+      responsibilities: [{ subject: area, role: "owner", goals: [], depends_on: [] }] }),
+  });
   for (const topic of frameworks.pm) {
     progress = hub.cli(["onboarding", "review-topic"], {
       revision: progress.revision, stage: "pm", topic: topic.id,
@@ -137,9 +142,7 @@ test("an empty Studio opens its agent walkthrough from a task deep link", async 
   await button(page, "Check progress").click();
   await expect(page.getByText("Ask oryx to review your saved progress with you.")).toBeVisible();
   fs.writeFileSync(checkpoint, validProgress);
-  progress = hub.cli(["onboarding", "select-product"], {
-    revision: progress.revision, subject: null, pm_reply: "I don't have an assigned product yet.",
-  });
+  expect(progress.product_scope.subject).toBe("product/analytics");
   for (const topic of frameworks.product) {
     await button(page, "Check progress").click();
     await expect(page.getByText(progress.prompt, { exact: true })).toBeVisible();
@@ -153,6 +156,13 @@ test("an empty Studio opens its agent walkthrough from a task deep link", async 
   await button(page, "Check progress").click();
   await expect(page.getByRole("heading", { name: "Tasks", exact: true })).toBeVisible();
   expect(new URL(page.url()).searchParams.get("screen")).toBe("tasks");
+  progress = hub.cli(["onboarding", "select-area"], {
+    revision: progress.revision, subject: area, pm_reply: "Let's walk through the plugin now.",
+  });
+  expect(progress.stage).toBe("area");
+  await page.reload();
+  await expect(page.getByRole("heading", { name: "Tasks", exact: true })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Continue onboarding" })).toHaveCount(0);
 });
 
 test("compare and sign a cycle, filter the board, and approve a drag change", async ({ hub, page }) => {

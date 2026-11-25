@@ -245,10 +245,22 @@ def audit(run, baseline, turn):
               "only_authorized_changes": changed <= allowed, "expected_write": expected}
     if case == "product-scope":
         journey = json.loads(hub_command(hub, "onboarding", "status"))
-        subject = journey["product_scope"]["subject"]
+        parent = "product/analytics"
+        child = f"{parent}/area/salesforce"
+        topics = ("purpose", "customers", "experience", "business-value", "performance", "environment")
+        covered = {topic: "reviewed" if topic == "purpose" else "open" for topic in topics[:max(0, turn - 2)]}
         checks["only_authorized_changes"] = changed == ({"workspace/onboarding/review.json"} if turn >= 2 else set())
-        checks["confirmed_subject"] = subject == ("product/analytics/area/salesforce" if turn >= 2 else None)
-        checks["capture_is_chat_only"] = journey["stage"] == "product" and not journey["walkthroughs"]["product"]["reviewed"]
+        checks["parent_product_review"] = journey["walkthroughs"]["product"]["reviewed"] == covered
+        checks["required_setup_complete"] = journey["ready"] == (turn >= 8)
+        if turn < 8:
+            checks["confirmed_subject"] = (journey["stage"] == "product"
+                                           and journey["product_scope"]["subject"] == (None if turn == 1 else parent))
+        elif turn <= 9:
+            checks["no_automatic_area"] = journey["stage"] == "ready" and journey["reviewed_product_subject"] == parent
+            checks["optional_offer"] = journey["area_offers"] == ([child] if turn == 8 else [])
+            checks["area_can_resume"] = child in journey["area_options"]
+        else:
+            checks["chosen_area"] = journey["stage"] == "area" and journey["product_scope"]["subject"] == child
     if case == "pm-walkthrough":
         checks.update(pm_walkthrough_checks(run, turn, changed, current))
     if case == "company-first":

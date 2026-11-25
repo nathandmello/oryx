@@ -53,8 +53,18 @@ class ProductRecallTests(unittest.TestCase):
                    "| S2 | Future results | 2099-05-01 | 2099-05-02 |")
         target.write_text(context_capture.edit_section(content, "Sources", sources))
 
+    def enter_area(self):
+        while onboarding_review.status(self.work)["stage"] == "product":
+            review_current_topic(self.work)
+        return onboarding_review.select_area(self.work, {
+            "subject": self.subject, "revision": onboarding_review.status(self.work)["revision"],
+            "pm_reply": "Let's review our Salesforce plugin.",
+        })
+
     def topic(self, target):
-        while onboarding_review.status(self.work)["walkthroughs"]["product"]["next_topic"]["id"] != target:
+        if onboarding_review.status(self.work)["stage"] == "product":
+            self.enter_area()
+        while onboarding_review.status(self.work)["walkthroughs"]["area"]["next_topic"]["id"] != target:
             review_current_topic(self.work)
 
     def test_public_recall_reuses_reviewed_words_and_qualifications_without_saving(self):
@@ -105,6 +115,19 @@ class ProductRecallTests(unittest.TestCase):
         self.assertEqual(result["subject"], self.subject)
         self.assertEqual(result["evidence"]["scope"], "product/analytics")
 
+    def test_product_step_never_retrieves_its_owners_area_as_parent_evidence(self):
+        while onboarding_review.status(self.work)["walkthroughs"]["product"]["next_topic"]["id"] != "customers":
+            review_current_topic(self.work)
+        area_claim = "The plugin’s customers are clinic administrators."
+        self.populate(self.child, "Area users and workflow", f"- Fact: {area_claim} [S1]")
+        self.change("plan", sources=[self.child], destinations=[self.parent], subject="product/analytics",
+                    purpose="Review customers of the parent product.")
+        self.change("approve")
+        with patch.object(task_context, "read_document", side_effect=AssertionError("Area read while reviewing parent")):
+            result = product_intake.recall(self.work)
+        self.assertEqual(result["status"], "open")
+        self.assertEqual(result["subject"], "product/analytics")
+
     def test_recall_preserves_active_reviews_in_approved_briefs(self):
         self.topic("customers")
         quote = "The plugin’s customers are clinic administrators."
@@ -136,11 +159,11 @@ class ProductRecallTests(unittest.TestCase):
         child.write_text(child.read_text() + "\n## " + evidence_reviews.HEADING + "\n\nMissing review events.\n")
         self.assertEqual(read_evidence()["evidence_status"], "under review")
 
-    def test_approved_source_only_area_must_still_have_one_home_at_recall(self):
+    def test_approved_area_must_still_have_one_home_at_recall(self):
         self.topic("customers")
         self.populate(self.child, "Area users and workflow", "- Fact: The plugin’s customers are clinic administrators. [S1]")
-        self.change("plan", sources=[self.child], destinations=[self.parent],
-                    purpose="Check the existing area before reviewing the parent.", subject=self.subject)
+        self.change("plan", sources=[self.child], destinations=[self.child],
+                    purpose="Review what we know about the area.", subject=self.subject)
         self.change("approve")
         self.assertEqual(product_intake.recall(self.work)["status"], "candidate")
         duplicate = self.work / layout.area("analytics", "salesforce", "extensions")
@@ -152,6 +175,7 @@ class ProductRecallTests(unittest.TestCase):
                 product_intake.recall(self.work)
 
     def test_recall_needs_a_relevant_claim_even_with_a_matching_heading_or_keyword(self):
+        self.enter_area()
         self.plan(self.child)
         self.change("approve")
         self.populate(self.child, "Area scope and ownership", "- Fact: The product team chose a new meeting room. [S1]")
