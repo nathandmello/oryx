@@ -10,7 +10,7 @@ For registered initiatives, use these paths relative to the private repository:
 
 | Work | Location |
 | --- | --- |
-| Product's signed initiative register | `workspace/backlogs/<product>/initiatives.json` |
+| Product initiative register | `workspace/backlogs/<product>/initiatives.json` |
 | Discovery and Initiative Briefs | `workspace/initiatives/<product>/<initiative>/` |
 | PM tasks and launch checkpoints | `tasks.json` and `launch-checklist.json` beside the initiative briefs |
 | Metric-linked experiment drafts | `workspace/experiments/<product>/<initiative>/experiment.<metric-id>.draft.json` |

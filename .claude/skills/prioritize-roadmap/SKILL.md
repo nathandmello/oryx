@@ -1,6 +1,6 @@
 ---
 name: prioritize-roadmap
-description: Help the PM compare investments and choose trade-offs, or display a roadmap from signed selections.
+description: Help the PM compare investments and choose trade-offs, or display a roadmap from approved selections.
 ---
 
 # Prioritize the roadmap
@@ -31,7 +31,7 @@ If company context calls a market an opportunity, carry that wording forward unt
 ## Record the decision
 
 Propose the cycle with its approved option IDs. For each selected initiative, propose a `decision` with action `plan`, rank, horizon, effort, and trade-off.
-Use `initiative propose` to validate the proposal. Generate the roadmap after the PM signs the selections.
+Use `initiative propose` to validate the proposal. Generate the roadmap after the PM approves the selections.
 
 Before delivery starts, propose `unplan` to release capacity and return the same approved initiative to the candidate pool.
 The PM can review the release and revised selections in one proposal.

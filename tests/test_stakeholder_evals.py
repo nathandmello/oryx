@@ -1,4 +1,4 @@
-"""Evaluator controls use toy rows. No release fixture or answer is installed with the Hub."""
+"""Exercise the offline study with fictional cases and observations."""
 from copy import deepcopy
 import json
 from pathlib import Path
@@ -151,26 +151,74 @@ class StakeholderEvaluationTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError,"No first useful"):
             gate.timeline(events,None,1000)
 
-    def test_detached_observer_signature_fails_on_changed_evidence(self):
+    def test_plain_source_reviews_match_frozen_labels_and_explain_disagreements(self):
         with TemporaryDirectory() as temp:
             root = Path(temp)
-            (root/"keys").mkdir()
-            key = root/"private.key"
-            pub = root/"keys/observer.pem"
-            artifact = root/"observer.json"
-            artifact.write_text('{"observed": true}')
-            subprocess.run(["openssl","genpkey","-algorithm","EC","-pkeyopt","ec_paramgen_curve:P-256",
-                            "-out",str(key)],check=True,capture_output=True)
-            subprocess.run(["openssl","pkey","-in",str(key),"-pubout","-out",str(pub)],check=True,capture_output=True)
-            subprocess.run(["openssl","dgst","-sha256","-sign",str(key),"-out",str(root/"observer.json.observer.sig"),
-                            str(artifact)],check=True,capture_output=True)
-            keys = {"observer":corpus.digest(pub.read_bytes())}
-            gate.verify_signature(root,"observer.json","observer",keys)
-            artifact.write_text('{"observed": false}')
-            with self.assertRaisesRegex(ValueError,"signature"):
-                gate.verify_signature(root,"observer.json","observer",keys)
+            key = toy_corpus()[2]["key"]
+            case = root/"case"
+            case.mkdir()
+            (case/"key.json").write_bytes(corpus.data(key))
+            cases = {"case": {"split": "heldout", "files": {"key.json": corpus.digest(corpus.data(key))}}}
+            reviews = {
+                "reader-a": dict(key, rationale="Speaker identifies this need."),
+                "reader-b": dict(key, required=[], rationale="Speaker might be quoting someone else."),
+            }
+            reg = {"source_reviews": {}}
+            for role, review in reviews.items():
+                raw = corpus.data({"case": review})
+                (root/(role+"-source.json")).write_bytes(raw)
+                reg["source_reviews"][role] = corpus.digest(raw)
+            record = dict(key=key, evidence_rationale="The speaker describes their own request.", source_disagreements={})
 
-    def test_gate_cannot_pass_empty_or_self_reported_results(self):
+            def resolve():
+                raw = corpus.data({"case": record})
+                (root/"resolved.json").write_bytes(raw)
+                reg["source_adjudication"] = {"path": "resolved.json", "sha256": corpus.digest(raw)}
+                return gate.load_source_labels(root, cases, root, reg)
+
+            with self.assertRaisesRegex(ValueError, "Unresolved source-label disagreement"):
+                resolve()
+            record["source_disagreements"]["reader-b"] = "The speaker confirms this is their request."
+            self.assertEqual(resolve(), {"case": key})
+            (root/"reader-a-source.json").write_text("{}")
+            with self.assertRaisesRegex(ValueError, "reader-a-source.json"):
+                resolve()
+
+    def test_plain_blind_reviews_match_observations_and_explain_disagreements(self):
+        with TemporaryDirectory() as temp:
+            root = Path(temp)
+            pin = "c"*64
+
+            def save(name, value):
+                raw = corpus.data(value)
+                (root/name).write_bytes(raw)
+                return {"path": name, "sha256": corpus.digest(raw)}
+
+            evidence = save("transcript.json", ["Who made that decision?"])
+            observer = save("observer.json", {"registration": pin, "blind_map": {"anon": "trial"},
+                                             "semantics": {"trial": {"transcript": evidence}}})
+            grade = dict(findings=[], critical=[], assertions={}, rubric={})
+            first = dict(grade, evidence=evidence, rationale="The source establishes no decision.")
+            second = dict(first, findings=[finding("unknown", "ask")], rationale="The reader identified a question.")
+            blind = {
+                role: save(role+"-blind.json", {"registration": pin, "cases": {"anon": review}})["sha256"]
+                for role, review in (("reader-a", first), ("reader-b", second))
+            }
+            final = dict(registration=pin, observer_sha256=observer["sha256"], blind_reviews=blind,
+                         semantics={"trial": grade})
+            save("adjudication.json", final)
+            with self.assertRaisesRegex(ValueError, "adjudication"):
+                gate.reviewed_outputs(root, pin)
+
+            grade["disagreement_rationale"] = "The question seeks the source of a decision."
+            save("adjudication.json", final)
+            _, resolved = gate.reviewed_outputs(root, pin)
+            self.assertEqual(resolved["semantics"]["trial"], grade)
+            save("reader-b-blind.json", {})
+            with self.assertRaisesRegex(ValueError, "reader-b-blind.json"):
+                gate.reviewed_outputs(root, pin)
+
+    def test_scorer_reports_incomplete_for_self_reported_results(self):
         with TemporaryDirectory() as temp:
             root = Path(temp)
             frozen = root/"frozen"
@@ -178,15 +226,21 @@ class StakeholderEvaluationTests(unittest.TestCase):
             rows.write_text("".join(json.dumps(i)+"\n" for i in toy_corpus()))
             pin = corpus.freeze(rows,frozen)
             registration = root/"registration.json"
-            registration.write_text('{"decision":"PASS","checks":{"protected":true}}')
+            registration.write_text('{"status":"meets-thresholds","checks":{"protected":true}}')
             args = [sys.executable,"-B",str(EVALS/"stakeholder_release.py"),str(frozen),pin,
                     str(root),corpus.digest(registration.read_bytes())]
             proc = subprocess.run(args,capture_output=True,text=True)
             self.assertEqual(proc.returncode,1)
-            self.assertEqual(json.loads(proc.stdout)["decision"],"HOLD")
+            self.assertEqual(json.loads(proc.stdout)["status"],"incomplete")
 
+    def test_scorer_exit_code_reflects_completed_study_thresholds(self):
+        args = ["stakeholder_release.py", "frozen", "manifest-digest", "evidence", "study-digest"]
+        for status, code in (("meets-thresholds", 0), ("below-thresholds", 1)):
+            with self.subTest(status=status), patch.object(sys, "argv", args), patch("builtins.print"), \
+                    patch.object(gate, "score_study", return_value={"status": status}):
+                self.assertEqual(gate.main(), code)
 
-    def test_critical_integrity_and_file_effect_hold_even_with_valid_signed_shape(self):
+    def test_observed_file_effects_and_unsupported_claims_fail_their_checks(self):
         with TemporaryDirectory() as temp:
             root = Path(temp)
             def store(name, value):
@@ -278,7 +332,15 @@ class StakeholderEvaluationTests(unittest.TestCase):
             adapters = {arm:{"client":arm.removeprefix("oryx-"),"client_version":"1","hooks_sha256":"a"*64,
                              "revision":candidate} for arm in gate.CLIENTS}
             reg = dict(setups=arms,harness=harness,client_adapters=adapters,candidate=candidate,reference=reference)
-            gate.validate_setups(root, reg)
+            budgets = {"first": 10, "complete": 20}
+            calibration = {"codex_budgets_ms": budgets, "trace_refs": [harness], "design_rationale": "Toy calibration."}
+            (root/"calibration.json").write_bytes(corpus.data(calibration))
+            reg.update(protocol=gate.PROTOCOL, comparison_mode=gate.COMPARISON_MODE, manifest_sha256="b"*64,
+                       calibration={"path": "calibration.json", "sha256": corpus.digest(corpus.data(calibration))},
+                       codex_budgets_ms=budgets, timeout_ms=30, per_artifact_claim_cap=2,
+                       schedule_rule="alternate-hub-first-by-original-and-repeat", reference_pairing="cyclic-next-repeat",
+                       consequential_dimensions=dict.fromkeys(gate.WORKFLOWS, gate.DIMENSIONS))
+            gate.registration(root, reg, reg["manifest_sha256"])
             for arm, change in ((gate.ARMS[0],{"mode":"protected-native"}), (gate.ARMS[1],{"model_revision":"2"}),
                                 (gate.CONTROL,{"subscriber":True}), (gate.NATIVE,{"settings":{}})):
                 bad = deepcopy(reg)

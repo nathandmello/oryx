@@ -7,6 +7,7 @@ import shutil
 import subprocess
 import sys
 
+from initiative_store import APPROVAL_HOME
 import session_journal
 import workspace
 
@@ -20,6 +21,17 @@ def launch(root, client, *, context_statusline=False):
     binary = shutil.which(client)
     if not binary:
         raise ValueError(f"Install {client} before starting a protected session")
+    approvals = private / APPROVAL_HOME
+    if approvals.resolve() != approvals or approvals.exists() and not approvals.is_dir():
+        raise ValueError("Use a regular Studio directory for PM approval receipts")
+    if not approvals.exists():
+        if os.environ.get("PM_HUB_SHARED_GROUP"):
+            raise ValueError("Provision the shared PM approval directory before starting the agent")
+        if session_journal.read_only_mount(private):
+            raise ValueError("Provision the PM approval directory before launching an agent from read-only Studio")
+        approvals.mkdir(mode=0o700, exist_ok=True)
+    if approvals.resolve() != approvals or not approvals.is_dir():
+        raise ValueError("The PM approval directory must exist before starting the protected agent")
     journals = session_journal.protected_home(private)
     journal = None
     if journals is not None and not session_journal.read_only_mount(journals):
@@ -35,6 +47,8 @@ def launch(root, client, *, context_statusline=False):
         profile = ('(version 1)(allow default)(deny file-write* '
                    f'(require-all (subpath {core_path}) (require-not (subpath {work_path}))))'
                    f'(deny file-write-unlink (literal {work_path}))')
+        approval_path = json.dumps(str(approvals), ensure_ascii=False)
+        profile += f"(deny file-write* (subpath {approval_path}))"
         if journals is not None:
             journals_path = json.dumps(str(journals), ensure_ascii=False)
         if journal:
@@ -50,6 +64,7 @@ def launch(root, client, *, context_statusline=False):
         command = ["bwrap", "--die-with-parent", "--unshare-pid", "--bind", "/", "/",
                    "--dev", "/dev", "--proc", "/proc", "--ro-bind", str(root), str(root),
                    "--bind", str(private), str(private)]
+        command.extend(["--ro-bind", str(approvals), str(approvals)])
         # Expose a verified checkout directory only. A failed identity check leaves the empty mask in place.
         if journals is not None:
             command.extend(["--perms", "0700", "--tmpfs", str(journals)])

@@ -28,8 +28,6 @@ Update upgrade guidance when installation steps change. Describe the effect on e
 Linux tests the proposed merge tree. Native-sensitive changes also exercise macOS relocation, upgrade and restore.
 Update the path selector when introducing a new platform dependency. Drafts defer tests until ready. Description edits refresh review evidence.
 
-For stakeholder or continuity changes, attach the [signed study receipt](stakeholder-qualification.md).
-
 Open the PR ready for review. Codex runs code and security reviews on the PR head.
 After a fix, request fresh reviews for that head if the integration has not started them automatically.
 The agent monitors the Codex summary and checks. It reruns the lightweight review job when both results arrive.

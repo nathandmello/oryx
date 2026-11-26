@@ -6,17 +6,15 @@ import json
 import subprocess
 import sys
 import unittest
-from unittest.mock import patch
 
 import test_opportunities
-import initiative_store
 import metric_checks
 
 
 class MetricRegistryTests(unittest.TestCase):
     Fixture = test_opportunities.InitiativeTests
     setUp = Fixture.setUp
-    make_key = Fixture.make_key
+    write_legacy_register = Fixture.write_legacy_register
     cli = Fixture.cli
     preview = Fixture.preview
     apply = Fixture.apply
@@ -350,7 +348,7 @@ class MetricRegistryTests(unittest.TestCase):
         self.assertTrue(any("population differs" in issue for issue in invalid))
         self.assertTrue(any("unit" in issue for issue in invalid))
 
-    def test_signed_snapshot_survives_a_definition_change(self):
+    def test_approved_snapshot_survives_a_definition_change(self):
         self.submit(self.setup_event(), self.capture(), {"type": "metric", "metric": "logo-churn"})
         before = self.ledger.read_bytes()
         trace = json.loads(self.cli("initiative", "show", "example"))
@@ -375,9 +373,7 @@ class MetricRegistryTests(unittest.TestCase):
         old = {"type": "metric", "metric": "customer-loss", "name": "Paid customer churn", "unit": "percent",
                "definition": "Customers lost divided by all customers", "source": "Prior signed finance definition"}
         payload["events"].append(old)
-        with patch.dict("os.environ", self.env):
-            signature = initiative_store.sign(self.root, payload, str(self.key))
-        self.ledger.write_text(json.dumps({"record": payload, "signature": signature}) + "\n")
+        self.write_legacy_register(payload)
         before = self.ledger.read_bytes()
         self.preview(dict(self.target(), metric="customer-loss"), error="under a new metric ID")
         self.assertEqual(self.ledger.read_bytes(), before)

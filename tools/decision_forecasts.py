@@ -124,7 +124,7 @@ def validate_record(private, data):
         raise ValueError("Invalid archived decision scope, evidence or date")
     if ref.get("kind") == "registered":
         if optional:
-            raise ValueError("Read signed decision evidence from its verified entry")
+            raise ValueError("Read approved decision evidence from its verified entry")
         fields(ref, ("kind", "product", "initiative", "ordinal", "digest"))
         entry = authority["entry"]
         if (type(ref["ordinal"]) is not int or ref["ordinal"] < 1 or not isinstance(entry, dict)
@@ -135,7 +135,7 @@ def validate_record(private, data):
                 or authority["record"] != layout.initiative_register(ref["product"])
                 or ref["initiative"].partition("/")[0] != authority["artifact_id"]
                 or ref["digest"] != fingerprint(entry)):
-            raise ValueError("Invalid archived signed decision identity")
+            raise ValueError("Invalid archived approved decision identity")
         initiative_events.validate_event(entry, approved=True)
     elif ref.get("kind") == "context":
         fields(ref, ("kind", "record", "artifact_id", "digest"))
@@ -334,7 +334,7 @@ def add_commands(subparsers):
     source = decisions.add_mutually_exclusive_group(required=True)
     source.add_argument("--product")
     source.add_argument("--context")
-    decisions.add_argument("--initiative", help="Filter signed decisions by their registered initiative ID")
+    decisions.add_argument("--initiative", help="Filter approved decisions by their registered initiative ID")
     operations.add_parser("preview", help="Review a new forecast, probability revision or binary resolution from stdin")
     operations.add_parser("apply", help="Save the exact forecast preview confirmed by the PM")
     listing = operations.add_parser("list", help="Read private forecasts and their dated history")

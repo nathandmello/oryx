@@ -9,10 +9,30 @@ import subprocess
 import sys
 from tempfile import TemporaryDirectory
 import unittest
+from unittest.mock import MagicMock, patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "tools"))
 import pm
 from onboarding_fixtures import reviewed_studio
+
+
+class TerminalApprovalTests(unittest.TestCase):
+    def test_terminal_shows_the_exact_proposal_and_requires_explicit_approval(self):
+        proposal = {"product": "billing", "revision": "a" * 64, "reviewed_transactions": [{"title": "First change"}]}
+        for answer in ("", "\n", "yes\n", "approve\n"):
+            with self.subTest(answer=answer):
+                prompt, response = MagicMock(), MagicMock()
+                response.__enter__.return_value.readline.return_value = answer
+                with patch("builtins.open", side_effect=[prompt, response]):
+                    if answer == "approve\n":
+                        self.assertEqual(pm.initiatives_cli.confirm_on_terminal("billing", proposal), proposal["revision"])
+                    else:
+                        with self.assertRaisesRegex(ValueError, "cancelled"):
+                            pm.initiatives_cli.confirm_on_terminal("billing", proposal)
+                displayed = prompt.__enter__.return_value.write.call_args_list[0].args[0]
+                self.assertEqual(json.loads(displayed), proposal)
+        with patch("builtins.open", side_effect=OSError("no terminal")), self.assertRaisesRegex(ValueError, "PM terminal"):
+            pm.initiatives_cli.confirm_on_terminal("billing", proposal)
 
 
 class InitiativeWorkTests(unittest.TestCase):

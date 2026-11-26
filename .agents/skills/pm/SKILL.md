@@ -21,6 +21,9 @@ Treat command outputs as result data. Report unknown paths with the relevant men
 For `portfolio backlog show --due`, report dated items and include review notices from standard error.
 Keep the request read-only if a stop check flags a stale approval. Report the open issue with the due list.
 
+For an initiative decision, prepare the proposal and show the evidence and exact changes.
+The PM confirms the revision from their [own terminal or browser](../../../playbook/initiative-approvals.md#propose-and-approve).
+
 ## Guided actions
 
 A catalog description with effect `guided` identifies the shared guide and task.

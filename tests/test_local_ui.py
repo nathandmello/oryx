@@ -1,4 +1,4 @@
-"""Exercise the loopback interface against disposable signed PM workspaces."""
+"""Exercise the loopback interface against disposable PM workspaces."""
 
 import json
 import os
@@ -6,6 +6,7 @@ import subprocess
 import sys
 from threading import Thread
 import unittest
+from unittest.mock import patch
 from urllib.error import HTTPError
 from urllib.parse import parse_qs, urlsplit
 from urllib.request import Request, urlopen
@@ -20,12 +21,9 @@ class LocalUITests(unittest.TestCase):
         self.fixture = test_opportunities.InitiativeTests()
         self.addCleanup(self.fixture.doCleanups)
         self.fixture.setUp()
-        self.addCleanup(self.restore_signers)
-        self.signers = os.environ.get("PM_HUB_ALLOWED_SIGNERS")
-        os.environ["PM_HUB_ALLOWED_SIGNERS"] = self.fixture.env["PM_HUB_ALLOWED_SIGNERS"]
         self.approve = False
         self.reviewed = []
-        app = local_ui.App(self.fixture.root, self.fixture.key, pm.prepare_private_write,
+        app = local_ui.App(self.fixture.root, pm.prepare_private_write,
                            pm.run_initiative_work, self.confirm)
         self.server = local_ui.make_server(app)
         self.addCleanup(self.server.server_close)
@@ -33,12 +31,6 @@ class LocalUITests(unittest.TestCase):
         self.thread.start()
         self.addCleanup(self.thread.join)
         self.addCleanup(self.server.shutdown)
-
-    def restore_signers(self):
-        if self.signers is None:
-            os.environ.pop("PM_HUB_ALLOWED_SIGNERS", None)
-        else:
-            os.environ["PM_HUB_ALLOWED_SIGNERS"] = self.signers
 
     def confirm(self, root, review):
         self.assertEqual(root, self.fixture.root)
@@ -152,7 +144,7 @@ class LocalUITests(unittest.TestCase):
         fixture = self.fixture
         self.approve_candidate()
         fixture.submit(fixture.cycle(), fixture.plan())
-        signed = fixture.ledger.read_bytes()
+        register = fixture.ledger.read_bytes()
         old = fixture.root / "private"
         fixture.work.rename(old)
         pages = old / "workspace/.views"
@@ -203,9 +195,9 @@ class LocalUITests(unittest.TestCase):
         self.call("roadmap-export", export, failure="view changed")
         cli = json.loads(fixture.cli("roadmap", "--product", "example"))
         self.assertEqual(cli, [{"title": "Renewal delays", "x-score": 17}])
-        self.assertEqual(fixture.ledger.read_bytes(), signed)
+        self.assertEqual(fixture.ledger.read_bytes(), register)
 
-    def test_roadmap_cycle_and_reorder_need_the_reviewed_signature(self):
+    def test_roadmap_cycle_and_reorder_need_exact_pm_approval(self):
         self.approve_candidate()
         fixture = self.fixture
         board = self.call("roadmap", {"product": "example"})
@@ -228,16 +220,23 @@ class LocalUITests(unittest.TestCase):
         self.assertEqual(fixture.ledger.read_bytes(), original)
         comparison = self.call("comparison", {"product": "example", "cycle": cycle})
         self.assertEqual(review["documents"][0]["text"], comparison["text"])
-        self.assertFalse(comparison["signed"])
+        self.assertFalse(comparison["approved"])
+        self.assertTrue(self.call("catalog", {})["can_approve"])
+        self.call("approve", {"id": review["revision"]}, failure="Review a current proposal")
+        with patch.dict(os.environ, {"PM_HUB_PROTECTED_ROOT": str(fixture.root)}):
+            self.assertFalse(self.call("catalog", {})["can_approve"])
+            self.call("approve", {"id": review["id"]}, failure="own terminal")
+        self.assertEqual(self.reviewed, [])
         self.assertTrue(self.call("approve", {"id": review["id"]})["cancelled"])
         self.assertEqual(fixture.ledger.read_bytes(), original)
 
         self.approve = True
         self.call("approve", {"id": review["id"]})
         self.assertEqual(self.reviewed[-1], review)
+        self.call("approve", {"id": review["id"]}, failure="Review a current proposal")
         board = self.call("roadmap", {"product": "example"})
         self.assertEqual(board["rows"], json.loads(fixture.cli("roadmap", "--product", "example")))
-        self.assertTrue(self.call("comparison", {"product": "example", "cycle": cycle})["signed"])
+        self.assertTrue(self.call("comparison", {"product": "example", "cycle": cycle})["approved"])
 
         edit = {"mode": "edit", "product": "example", "cycle": cycle, "revision": board["revision"],
                 "order": {"now": [], "next": [fixture.i], "later": []}, "effort": {},
@@ -247,6 +246,24 @@ class LocalUITests(unittest.TestCase):
         self.call("approve", {"id": review["id"]})
         self.assertEqual(json.loads(fixture.cli("roadmap"))[0]["horizon"], "next")
         self.call("roadmap-preview", edit, failure="The roadmap changed")
+        board = self.call("roadmap", {"product": "example"})
+        release = {**edit, "revision": board["revision"], "order": {"now": [], "next": [], "later": []}}
+        review = self.call("roadmap-preview", release)
+        self.assertEqual([event["action"] for event in review["changes"]], ["unplan"])
+        document = fixture.work / review["documents"][0]["path"]
+        accepted_text = document.read_bytes()
+        register = fixture.ledger.read_bytes()
+
+        def edit_during_confirmation(root, displayed):
+            self.assertEqual(displayed, review)
+            document.write_bytes(accepted_text.replace(b"on-time renewal rate", b"annual renewal rate"))
+            return True
+
+        with patch.object(self.server.app, "confirm", edit_during_confirmation):
+            self.call("approve", {"id": review["id"]}, failure="comparison changed")
+        self.assertEqual(fixture.ledger.read_bytes(), register)
+        self.call("approve", {"id": review["id"]}, failure="Review a current proposal")
+        document.write_bytes(accepted_text)
         self.assertIn("PASS", fixture.cli("check"))
 
 

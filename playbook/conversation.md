@@ -80,7 +80,7 @@ Offer once to record an explicitly stated decision with confidence and an observ
 Clarify the event, probability, resolution date, and confirming evidence for a forecast.
 Keep event probability, decision confidence, and hypothesis confidence distinct.
 Preserve the owner's decision and rationale in the [owning workflow](initiative-approvals.md).
-The PM signs registered changes and chooses whether to reopen.
+The PM approves registered changes and chooses whether to reopen.
 Use the [forecast workflow](decision-forecasts.md) with their confirmation.
 
 When the PM closes the week, run the [weekly review](decision-review.md) for up to five findings and one next check.

@@ -159,7 +159,7 @@ def registry_observation_issues(item, label, definition, issues):
 
 
 def reading_issues(item, definition, observed_on):
-    """Check declared evidence against the signed definition and observation date."""
+    """Check declared evidence against the approved definition and observation date."""
     issues = []
     cutoff = observed_on if type(observed_on) is date else day(observed_on)
     reading = observation(item, "reading", issues, through=cutoff)

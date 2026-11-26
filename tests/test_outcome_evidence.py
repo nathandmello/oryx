@@ -1,12 +1,10 @@
-"""Check guardrails, evidence eligibility and corrections through signed PM proposals."""
+"""Check guardrails, evidence eligibility and corrections through approved PM proposals."""
 
 from datetime import date, timedelta
 import json
 from unittest import TestCase
-from unittest.mock import patch
 
 import test_outcome_reviews
-import initiative_store
 
 
 class OutcomeEvidenceTests(TestCase):
@@ -156,7 +154,7 @@ class OutcomeEvidenceTests(TestCase):
                             end=self.flow.tomorrow, basis="week")
         h.preview(week, error="bound changed during this window")
 
-    def test_registry_reading_cannot_bypass_signed_period_denominator_or_original_revision(self):
+    def test_registry_reading_cannot_bypass_approved_period_denominator_or_original_revision(self):
         h = self.h
         reg = "logo-churn"
         request = {"approved_by": "Pilot Finance", "source": "Fictional pilot metrics agreement",
@@ -203,9 +201,7 @@ class OutcomeEvidenceTests(TestCase):
                 event.pop("evidence_review")
         legacy = next(event for event in record["events"] if event["type"] == "measurement")
         record["events"].insert(-1, {**legacy, "measurement": "second-unchecked-claim"})
-        with patch.dict("os.environ", h.env):
-            signature = initiative_store.sign(h.root, record, str(h.key))
-        h.ledger.write_text(json.dumps({"record": record, "signature": signature}))
+        h.write_legacy_register(record)
         before = h.ledger.read_bytes()
         view = h.trace()["initiative"]
         self.assertEqual(view["outcome_review"]["status"], "closed")

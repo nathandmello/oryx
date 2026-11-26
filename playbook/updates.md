@@ -26,11 +26,11 @@ Release 0.3.5 adds [context section leads](filing.md#when-a-section-earns-its-pl
 
 `playbook/release.json` reports format 1 for older updaters. The private format is in `playbook/workspace-format.json`.
 
-Check [signed prototype compatibility](initiative-approvals.md#existing-private-work).
+Update every client sharing a Studio before using the new initiative approvals. Earlier clients cannot read them.
+Keep the public verification file for [existing signed registers](initiative-approvals.md#existing-private-work).
 
-Update all clients before sharing new transactions or discovery approvals with custom sections. Existing format-2 signatures remain readable.
 Verify historical readiness and thresholds against dated sources.
-For an active discovery approved before source binding, review the plan and sources together. Sign a fresh `start-discovery` before concluding.
+For discovery predating source review, obtain fresh PM approval for the plan and sources with `start-discovery`.
 
 ## What runs
 

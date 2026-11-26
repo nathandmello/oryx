@@ -1,4 +1,4 @@
-"""Verify initiative area relationships through the signed register and both portfolio views."""
+"""Verify initiative area relationships through the initiative register and both portfolio views."""
 
 import csv
 from io import StringIO
@@ -156,11 +156,11 @@ class InitiativeAreaTests(unittest.TestCase):
         h.cli("new", "product-context", second_context)
         setup = {**h.setup_event(), "product_context": second_context}
         proposal = json.loads(h.cli("initiative", "propose", "second", value=[setup]))
-        h.cli("initiative", "apply", "second", "--key", str(h.key), value=proposal)
+        h.cli("initiative", "apply", "second", "--approve", proposal["revision"], value=proposal)
         second_id = json.loads(h.cli("initiative", "show", "second"))["context"]["product"]["id"] + "/renewal"
         proposal = json.loads(h.cli("initiative", "propose", "second",
                                     value=[{**h.capture(second_id), "areas": [foreign_subject]}]))
-        h.cli("initiative", "apply", "second", "--key", str(h.key), value=proposal)
+        h.cli("initiative", "apply", "second", "--approve", proposal["revision"], value=proposal)
         self.assertEqual([row["id"] for row in json.loads(h.cli("backlog", "--area", self.inline))], [h.i])
         rows = json.loads(h.cli("backlog", "--product", "second", "--area", "renewals"))
         self.assertEqual([row["id"] for row in rows], [second_id])

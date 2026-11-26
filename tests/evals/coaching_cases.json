@@ -21,7 +21,7 @@
       "Approval covers the quoted wording. Save its source, date, locator and uncertainty. Preserve the leadership question and operating-review cue. Record no product decision.",
       "In a fresh session, the saved finding and earlier pause leave the company walkthrough incomplete. Resume the customer and value topic using what the PM said. Hold the roadmap.",
       "Cover each company theme with the PM once. Record their disposition for the current topic only. Let unknown economics and growth stay open, and accept the PM’s reason that portfolio relationships do not apply.",
-      "After the fifth topic, acknowledge the completed company pass and the open questions. Preserve the original source, outstanding leadership decision, and revisit cue. Offer to begin the available PM walkthrough. Product context is still pending. No product-work unlock, fabricated answers, signed decision, or roadmap."
+      "After the fifth topic, acknowledge the completed company pass and the open questions. Preserve the original source, outstanding leadership decision, and revisit cue. Offer to begin the available PM walkthrough. Product context is still pending. No product-work unlock, fabricated answers, recorded decision, or roadmap."
     ]
   },
   "founder-company": {
@@ -60,7 +60,7 @@
       "Acknowledge the deadline and offer to take on specific legwork. Keep the impact unknown and the quote absent until supported. A deadline alone grants no change in mode, evidence standard, source permissions or required planning steps.",
       "After explicit opt-in, use the named Billing evidence. Briefly explain the manual merge and the pod displaced from disputes. Leave time saved and actual capacity unresolved. Inspect traces for any extra source gathering or writes.",
       "Help with the writing. Present one proposed line for review that expresses the PM's choice as a proposal. Preserve the limits of the one reported call. Keep unsupported numbers, customer claims, commitments and priority rankings out of the line.",
-      "Return only the PM's exact sentence. The accepted line stays in chat. The roadmap remains unfinished, with no saved roadmap, signed decision, customization or external communication."
+      "Return only the PM's exact sentence. The accepted line stays in chat. The roadmap remains unfinished, with no saved roadmap, approved decision, customization or external communication."
     ]
   },
   "paid-pilot": {
@@ -150,7 +150,7 @@
       "Before a plan, retrieve Billing evidence. Ask about the unresolved customer outcome, workaround, or capacity trade-off. Use one specific challenge when it decides the next step.",
       "Treat the vague answer as insufficient. Reflect its limits, ask a real question, then wait. The neutral turn and shortened response retain Billing and the open question.",
       "After the switch, give Shipping's 16:00 UTC cutoff and its source. Keep Billing's dispute queue and workaround out of that reply.",
-      "The assistant creates no plan, forecast, signed change or external message."
+      "The assistant creates no plan, forecast, approved change or external message."
     ]
   },
   "quiet-lookup": {
@@ -169,7 +169,7 @@
     ],
     "criteria": [
       "Use the stated audience, evidence and alternative without making the PM repeat them. Draft the three sentences or ask only one material unresolved question.",
-      "Distinguish the interview finding, the assumption, the trade-off and the unresolved outcome. Do not turn the pilot into an approved plan, a signed decision or an external send."
+      "Distinguish the interview finding, the assumption, the trade-off and the unresolved outcome. Do not turn the pilot into an approved plan, a recorded decision or an external send."
     ]
   },
   "defer-and-resume": {
@@ -194,7 +194,7 @@
     ],
     "criteria": [
       "After the first turn, offer once and wait. Ground the offered forecast in the existing decision; do not score decision confidence.",
-      "Explicit confirmation creates exactly one linked forecast. Verify the proposition, original 75%, date, resolution date and pilot audit criterion. Compare the created record with the original signed or context decision.",
+      "Explicit confirmation creates exactly one linked forecast. Verify the proposition, original 75%, date, resolution date and pilot audit criterion. Compare the created record with the original initiative or context decision.",
       "The retry returns the same record and leaves the original bytes unchanged. A later expression of 60% alone changes neither the original probability nor its unresolved outcome."
     ]
   },

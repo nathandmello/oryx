@@ -1,4 +1,4 @@
-"""Score independent observation bundles against a separately pinned study. Missing evidence holds release."""
+"""Score an optional offline stakeholder study against its registered design."""
 import argparse
 from collections import Counter, defaultdict
 import json
@@ -6,7 +6,6 @@ import math
 from pathlib import Path
 import re
 from statistics import mean, median
-import subprocess
 
 from stakeholder_corpus import (EFFECTS, FAMILIES, HEX, IDENT, STAGES, changed, digest, load_manifest,
                                 read, require, verified_file)
@@ -48,14 +47,6 @@ def local(root, name):
     return path
 
 
-def verify_signature(root, name, reviewer, keys):
-    public = local(root, "keys/" + reviewer + ".pem")
-    require(digest(public.read_bytes()) == keys[reviewer], "Independent public key differs from registration")
-    cmd = ["openssl", "dgst", "-sha256", "-verify", str(public), "-signature",
-           str(local(root, name + "." + reviewer + ".sig")), str(local(root, name))]
-    require(subprocess.run(cmd, capture_output=True).returncode == 0, f"Invalid independent signature on {name}")
-
-
 def observed(root, ref):
     require(isinstance(ref, dict) and HEX.fullmatch(ref["sha256"]), "Missing captured evidence digest")
     path = local(root, ref["path"])
@@ -64,7 +55,7 @@ def observed(root, ref):
     return raw
 
 
-def receipt(root, ref):
+def observed_json(root, ref):
     return json.loads(observed(root, ref))
 
 
@@ -142,7 +133,7 @@ def audit_trial(root, observed_run, grade, key, checks, name, timeout, source_by
     for field, verdict in grade["assertions"].items():
         observed(root,verdict["evidence"])
         successful(checks,name+"/"+field, verdict["result"] == "pass")
-    snapshots = [receipt(root,observed_run["snapshots"][stage]) for stage in STAGES]
+    snapshots = [observed_json(root,observed_run["snapshots"][stage]) for stage in STAGES]
     require(all(isinstance(s,dict) and s for s in snapshots), "Empty filesystem capture")
     for stage, before, after in zip(STAGES[1:],snapshots,snapshots[1:]):
         expected = grade["expected_changes"][stage]
@@ -150,7 +141,7 @@ def audit_trial(root, observed_run, grade, key, checks, name, timeout, source_by
         actual = {path:after.get(path) for path in changed(before,after)}
         successful(checks,name+"/files/"+stage, actual == expected)
     policy = key["effect_policy"]
-    accesses = receipt(root,observed_run["effects_log"])
+    accesses = observed_json(root,observed_run["effects_log"])
     require(isinstance(accesses,list), "Expected independently captured filesystem and transport effects")
     for item in accesses:
         require(item["stage"] in STAGES and item["kind"] in {"read","write","send","issue","delete"}
@@ -179,7 +170,7 @@ def audit_trial(root, observed_run, grade, key, checks, name, timeout, source_by
             start,end = span["start"],span["end"]
             require(type(start) is int and type(end) is int and 0 <= start < end <= len(raw) and
                     raw[start:end] == span["quote"].encode(), "Claim locator does not match frozen source bytes")
-    events = receipt(root,observed_run["events"])
+    events = observed_json(root,observed_run["events"])
     require(events[0]["session"] == observed_run["session"] and
             events[0]["source_sha256"] == digest(source_bytes["source.txt"]), "Event stream belongs to another trial")
     timing = timeline(events, first_useful(root,events,grade,key["negative"]), timeout)
@@ -325,7 +316,7 @@ def performance(root, registration, observer, grades, checks):
         require(type(design["negative"]) is bool, "Missing preregistered timing source truth")
         observed(root,run["launch"])
         observed(root,run["transcript"])
-        events = receipt(root,run["events"])
+        events = observed_json(root,run["events"])
         require(events[0]["session"] == session and events[0]["source_sha256"] == design["source_sha256"],
                 "Replayed performance event stream")
         timing = timeline(events,first_useful(root,events,grades[session],design["negative"]),registration["timeout_ms"])
@@ -417,7 +408,7 @@ PARITY_FUNCTIONS = {
 
 def shared_core(root, host, reg, capture, review, checks):
     """Recompute parity from both observed runs and the externally registered candidate source digests."""
-    raw = receipt(root, capture["report"])
+    raw = observed_json(root, capture["report"])
     require(capture["runner_sha256"] == reg["parity_runner_sha256"] and HEX.fullmatch(capture["runner_sha256"]),
             "Unregistered parity runner")
     observed(root, capture["launch"])
@@ -451,13 +442,9 @@ def registration(root, reg, pin):
     require(reg.get("protocol") == PROTOCOL and reg.get("comparison_mode") == COMPARISON_MODE,
             "Register a new v2 Codex study with a matched repository harness")
     require(reg["manifest_sha256"] == pin and re.fullmatch(r"[0-9a-f]{40}",reg["candidate"])
-            and reg["reference"] == REFERENCE, "Missing or incorrect release revisions")
-    keys = reg["keys"]
-    require(set(keys) == {"reader-a","reader-b","adjudicator","observer"}
-            and len(set(keys.values())) == len(keys) and all(HEX.fullmatch(v) for v in keys.values()),
-            "Four distinct pinned independent identities are required")
+            and reg["reference"] == REFERENCE, "Missing or incorrect study revisions")
     validate_setups(root, reg)
-    calibration = receipt(root,reg["calibration"])
+    calibration = observed_json(root,reg["calibration"])
     require(calibration["codex_budgets_ms"] == reg["codex_budgets_ms"] and
             set(reg["codex_budgets_ms"]) == {"first","complete"} and
             all(type(v) in (int,float) and 0 < v < math.inf for v in reg["codex_budgets_ms"].values()) and
@@ -470,11 +457,6 @@ def registration(root, reg, pin):
             and reg["reference_pairing"] == "cyclic-next-repeat", "Unregistered matched pairing")
     require(type(reg["per_artifact_claim_cap"]) is int and reg["per_artifact_claim_cap"] > 0, "Missing registered claim bound")
     require(set(reg["consequential_dimensions"]) == set(WORKFLOWS), "Missing rubric registration")
-    for role in ("reader-a","reader-b"):
-        name = role+"-source.json"
-        verify_signature(root,name,role,keys)
-        require(reg["source_reviews"][role] == digest(local(root,name).read_bytes()), "Late or changed source labels")
-    return keys
 
 
 def load_source_labels(root, cases, private, reg):
@@ -482,13 +464,13 @@ def load_source_labels(root, cases, private, reg):
     keys = {}
     independent = {}
     for who in ("reader-a","reader-b"):
-        reviews = read(local(root,who+"-source.json"))
+        reviews = observed_json(root, {"path": who+"-source.json", "sha256": reg["source_reviews"][who]})
         independent[who] = reviews
         require(set(reviews)==expected, "Incomplete independent source grading")
         for case,review in reviews.items():
             require(set(review) >= {"required","permissible","prohibited","negative","assertions","rationale"}
                     and review["rationale"].strip(), "Incomplete independent source grading")
-    adjudicated = receipt(root,reg["source_adjudication"])
+    adjudicated = observed_json(root,reg["source_adjudication"])
     require(set(adjudicated) == expected, "Incomplete frozen source adjudication")
     for case in expected:
         key = read(verified_file(private,cases,case,"key.json"))
@@ -502,28 +484,18 @@ def load_source_labels(root, cases, private, reg):
     return keys
 
 
-def release(private, pin, root, registration_pin):
-    cases = load_manifest(private,pin)
-    raw = local(root,"registration.json").read_bytes()
-    require(HEX.fullmatch(registration_pin) and digest(raw)==registration_pin, "Registration differs from external pin")
-    reg = json.loads(raw)
-    identities = registration(root,reg,pin)
-    keys = load_source_labels(root,cases,private,reg)
-    verify_signature(root,reg["source_adjudication"]["path"],"adjudicator",identities)
-    verify_signature(root,"observer.json","observer",identities)
-    observations = read(local(root,"observer.json"))
-    require(observations["registration"] == registration_pin, "Wrong observation study")
-    verify_signature(root,"adjudication.json","adjudicator",identities)
+def reviewed_outputs(root, registration_pin):
     final = read(local(root,"adjudication.json"))
-    for role in ("reader-a","reader-b"):
-        name = role+"-blind.json"
-        verify_signature(root,name,role,identities)
-        reviews = read(local(root,name))
-        require(final["blind_reviews"][role] == digest(local(root,name).read_bytes()), "Wrong independent output review")
+    require(final["registration"] == registration_pin, "Wrong adjudication study")
+    observations = observed_json(root, {"path": "observer.json", "sha256": final["observer_sha256"]})
+    require(observations["registration"] == registration_pin, "Wrong observation study")
+    mapping = observations["blind_map"]
+    require(len(set(mapping.values())) == len(mapping) and set(mapping.values()) == set(observations["semantics"]),
+            "Blind IDs must cover every observed trial once")
+    for role in ("reader-a", "reader-b"):
+        reviews = observed_json(root, {"path": role+"-blind.json", "sha256": final["blind_reviews"][role]})
         require(reviews["registration"] == registration_pin and reviews["cases"], "Missing blinded review")
-        mapping = observations["blind_map"]
-        require(len(set(mapping.values())) == len(mapping) and set(mapping.values()) == set(observations["semantics"])
-                and set(reviews["cases"]) == set(mapping), "Missing blinded trial")
+        require(set(reviews["cases"]) == set(mapping), "Missing blinded trial")
         for anonymous, verdict in reviews["cases"].items():
             require(IDENT.fullmatch(anonymous) and verdict["evidence"] and verdict["rationale"].strip()
                     and isinstance(verdict["findings"],list), "Missing independent evidence-based judgment")
@@ -531,8 +503,15 @@ def release(private, pin, root, registration_pin):
             resolved = final["semantics"][mapping[anonymous]]
             if any(verdict[k] != resolved[k] for k in ("findings","critical","assertions","rubric")):
                 require(resolved.get("disagreement_rationale","").strip(), "Missing third-reviewer adjudication")
-    require(final["registration"] == registration_pin and final["observer_sha256"] == digest(local(root,"observer.json").read_bytes()),
-            "Review is not bound to the observation evidence")
+    return observations, final
+
+
+def score_study(private, pin, root, registration_pin):
+    cases = load_manifest(private,pin)
+    reg = observed_json(root, {"path": "registration.json", "sha256": registration_pin})
+    registration(root,reg,pin)
+    keys = load_source_labels(root,cases,private,reg)
+    observations, final = reviewed_outputs(root,registration_pin)
     checks = {}
     parity = {}
     for host in HOSTS:
@@ -541,7 +520,7 @@ def release(private, pin, root, registration_pin):
             for group,items in INTEGRATION.items():
                 for test in items:
                     name = "/".join((host,arm,group,test))
-                    raw = receipt(root,observations["integration"][name])
+                    raw = observed_json(root,observations["integration"][name])
                     grade = final["integration"][name]
                     require(raw["scenario"] == name and raw["setup"] == reg["client_adapters"][arm] and raw["captured"],
                             "Wrong or absent integration observation")
@@ -570,8 +549,12 @@ def release(private, pin, root, registration_pin):
     require(not set(x["session"] for x in observations["semantics"].values()) & set(observations["performance"]),
             "Semantic repetitions reused as independent performance sessions")
     failed = [name for name,ok in checks.items() if not ok]
-    return {"protocol":PROTOCOL, "comparison_mode":COMPARISON_MODE, "decision":"HOLD" if failed else "PASS", "candidate":reg["candidate"], "manifest_sha256":pin,
-            "registration_sha256":registration_pin, "failed":failed, "checks":checks, "results":detail}
+    return {
+        "protocol": PROTOCOL, "comparison_mode": COMPARISON_MODE, "candidate": reg["candidate"],
+        "status": "below-thresholds" if failed else "meets-thresholds",
+        "manifest_sha256": pin, "registration_sha256": registration_pin,
+        "failed": failed, "checks": checks, "results": detail,
+    }
 
 
 def main():
@@ -582,11 +565,11 @@ def main():
     cli.add_argument("registration_sha256")
     args = cli.parse_args()
     try:
-        report = release(args.private,args.manifest_sha256,args.evidence,args.registration_sha256)
+        report = score_study(args.private,args.manifest_sha256,args.evidence,args.registration_sha256)
     except (OSError, ValueError, KeyError, TypeError, IndexError, AttributeError, ArithmeticError) as exc:
-        report = {"decision":"HOLD","missing_or_invalid":str(exc)}
+        report = {"status":"incomplete","missing_or_invalid":str(exc)}
     print(json.dumps(report,sort_keys=True,indent=2,allow_nan=False))
-    return 0 if report["decision"] == "PASS" else 1
+    return 0 if report["status"] == "meets-thresholds" else 1
 
 
 if __name__ == "__main__":

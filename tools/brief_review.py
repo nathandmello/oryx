@@ -33,7 +33,7 @@ STATUS = re.compile(
     r"(?:team|pm|owner|stakeholders?|leadership)|(?:to be|will be|yet to be) "
     r"(?:defined|determined|confirmed|discussed|reviewed|decided|completed|provided|added))"
 )
-# A duration alone describes when. The signed review_on is the authoritative checkpoint.
+# A duration alone describes when. The approved review_on is the authoritative checkpoint.
 DURATION_ONLY = re.compile(
     r"(?:(?:for|over|within|in|during|the|next|this|expected|duration|timebox|is|tbd|planned|of) )*"
     r"(?:[a-z0-9]+ )?(?:business |working )?(?:days?|weeks?|months?|hours?|sprints?|quarters?)"

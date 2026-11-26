@@ -41,9 +41,7 @@ class LaunchCompatibilityTests(unittest.TestCase):
         h = self.h
         envelope = json.loads(h.ledger.read_bytes())
         envelope['record']['events'].append(self.ship)
-        with patch.dict(os.environ, h.env):
-            envelope['signature'] = test_opportunities.pm.initiative_store.sign(h.root, envelope['record'], h.key)
-        h.ledger.write_text(json.dumps(envelope))
+        h.write_legacy_register(envelope["record"])
         before = h.ledger.read_bytes()
         trace = json.loads(h.cli('action', 'initiative', 'record', 'show', 'example', h.i))['initiative']
         self.assertEqual(trace['decisions'][-1], self.ship)
@@ -79,7 +77,7 @@ class LaunchCompatibilityTests(unittest.TestCase):
         self.assertEqual(json.loads(check_file.read_bytes())['legacy_original'].encode(), old_check.encode())
         self.assertIn('PASS', self.h.cli('check'))
 
-    def test_unchanged_review_can_be_signed_the_following_day(self):
+    def test_unchanged_review_can_be_approved_the_following_day(self):
         h = self.h
         proposal = h.preview(h.ship_without_checklist())
         store = test_opportunities.pm.initiative_store
@@ -90,26 +88,28 @@ class LaunchCompatibilityTests(unittest.TestCase):
                 return date.today() + timedelta(days=1)
 
         with patch.dict(os.environ, h.env), patch.object(store.launch_readiness, 'date', FollowingDay):
-            store.apply(h.root, 'example', proposal, h.key)
+            store.apply(h.root, 'example', proposal, approved_revision=proposal['revision'])
         self.assertEqual(h.trace()['initiative']['decisions'][-1]['readiness']['reviewed_on'], h.today)
 
-    def test_change_during_signature_never_publishes_the_old_snapshot(self):
+    def test_change_during_approval_never_publishes_the_old_snapshot(self):
         h = self.h
         store = test_opportunities.pm.initiative_store
-        from_original = store.sign
+        prepare = store.prepare
         proposal = h.preview(h.ship_without_checklist())
         before = h.ledger.read_bytes()
         target = h.work / 'workspace/initiatives/example/renewal/launch-checklist.json'
 
-        def delayed_sign(root, payload, key):
-            signature = from_original(root, payload, key)
-            target.parent.mkdir(parents=True, exist_ok=True)
-            target.write_text(json.dumps({'version': 1, 'product': 'example', 'initiative': 'renewal', 'checkpoints': {}}))
-            return signature
+        def change_after_validation(*args, **kwargs):
+            result = prepare(*args, **kwargs)
+            if not target.exists():
+                target.parent.mkdir(parents=True, exist_ok=True)
+                target.write_text(json.dumps({'version': 1, 'product': 'example', 'initiative': 'renewal',
+                                              'checkpoints': {}}))
+            return result
 
-        with patch.dict(os.environ, h.env), patch.object(store, 'sign', delayed_sign):
+        with patch.dict(os.environ, h.env), patch.object(store, 'prepare', change_after_validation):
             with self.assertRaisesRegex(ValueError, 'while approval was pending'):
-                store.apply(h.root, 'example', proposal, h.key)
+                store.apply(h.root, 'example', proposal, approved_revision=proposal['revision'])
         self.assertEqual(h.ledger.read_bytes(), before)
         self.assertEqual(h.trace()['initiative']['phase'], 'delivery')
 

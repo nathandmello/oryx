@@ -53,9 +53,9 @@ Studio settings override corresponding core settings, including core product def
 Keep core identity, filing, evidence, and approval sections intact.
 If an update removes a saved anchor, new drafts flag the fallback position near Work state. Studio keeps the requested anchor.
 
-New records inherit current prompts. Existing drafts and signed files retain their original bytes.
+New records inherit current prompts. Existing drafts and approved files retain their original bytes.
 
-Discovery sign-off includes additional sections in the reviewed plan. Revising one requires a new sign-off.
+Discovery approval covers additional sections in the reviewed plan. If a section changes, review the revised plan with the PM.
 Use the findings section for results collected during the timebox. Brief answer sections containing a literal starter
 ask the PM to complete it before review. The browser’s planning cycle form includes product-specific comparison sections.
 
@@ -85,8 +85,8 @@ Use null to clear a value. Hiding, relabelling, or reordering a column preserves
 Clear or convert incompatible data explicitly when changing a field type. Apply related edits together.
 
 Settings and values share one atomic private file, `studio/customizations/settings.json`.
-Custom fields travel with their initiative across cycles. Signed planning decisions retain their existing approval path.
-Put the figures behind a decision in its signed comparison when you need their historical values.
+Custom fields travel with their initiative across cycles. The PM reviews planning decisions through the usual approval workflow.
+Put the figures behind a decision in its approved comparison when you need their historical values.
 
 Select a named view in the browser or pass `--view review` to `pm.py roadmap`.
 Use `--view core` for the original columns and layout.
@@ -109,7 +109,7 @@ In the browser, **Download custom view** exports the current cycle and area filt
 Choose the view and area before entering Present. A changed export definition or page requires a refresh.
 
 Open the exported file separately. Export again for fresh data. Keep sensitive exports private.
-The signed app never loads the workspace page's code.
+Custom page code runs only when someone opens the exported file.
 
 ## Updates and feedback
 

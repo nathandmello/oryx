@@ -20,7 +20,7 @@ When time is tight, ask for expedite mode. Oryx takes on more legwork and keeps 
 | When capacity changes | “We can fit one of these two initiatives. Show me what we give up with each choice.” | A planning comparison you can discuss. You approve changes to the roadmap. |
 | After launch | “We expected fewer support tickets. Compare the result with our forecast. What should we revisit?” | A review that keeps the original prediction alongside what happened. |
 
-The local browser app lets you present the roadmap, review priorities, and work through launch checks. It reads the same records you use in the terminal. [Browser guide](playbook/local-ui.md)
+The local browser app lets you present the roadmap, review priorities, and work through launch checks. It shares records with the terminal. Review and confirm roadmap changes in either interface. [Browser guide](playbook/local-ui.md) · [Initiative approvals](playbook/initiative-approvals.md)
 
 ![The oryx roadmap for fictional Atlas Workspace, with guided setup in Now, weekly digests in Next, and report exports in Later.](playbook/images/roadmap.png)
 
@@ -65,7 +65,7 @@ You can enable [private session transcripts](playbook/session-continuity.md) and
 
 ## Placement
 
-**Core** is the shared software. **Studio** is your own Git repository inside `studio/`. A protected session gives your agent write access to Studio and read access to core. Core updates and your work have separate Git histories.
+**Core** is the shared software. **Studio** is your own Git repository inside `studio/`. A protected session lets your agent edit private drafts and read the core software and your initiative approval receipts. Core updates and your work have separate Git histories.
 
 | Location | What lives there |
 | --- | --- |

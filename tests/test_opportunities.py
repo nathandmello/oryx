@@ -1,4 +1,4 @@
-"""Exercise signed initiative relationships and generated views through pm.py."""
+"""Exercise reviewed initiative relationships and generated views through pm.py."""
 
 import csv
 from datetime import date, timedelta
@@ -41,10 +41,8 @@ class InitiativeTests(unittest.TestCase):
                 target.parent.mkdir(parents=True, exist_ok=True)
                 shutil.copyfile(source, target)
         subprocess.run(["git", "init", "--quiet", "--initial-branch=main", str(self.root)], check=True)
-        self.key = self.make_key("pm-key")
-        signers = self.parent / "signers"
-        signers.write_text("pm-hub-pm " + self.key.with_suffix(".pub").read_text())
-        self.env = dict(os.environ, PM_HUB_ALLOWED_SIGNERS=str(signers))
+        self.env = os.environ.copy()
+        self.env.pop("PM_HUB_ALLOWED_SIGNERS", None)
         self.env.pop("PM_HUB_SHARED_GROUP", None)
         self.work = self.root / "studio"
         self.ledger = self.work / "workspace/backlogs/example/initiatives.json"
@@ -55,12 +53,21 @@ class InitiativeTests(unittest.TestCase):
         self.product_id = records.work_state((self.work / self.product_context).read_text())[0]["ID"]
         self.i = f"{self.product_id}/renewal"
 
-    def make_key(self, filename):
-        key = self.parent / filename
+    def write_legacy_register(self, record):
+        """Reproduce a historical OpenSSH register and its original public trust configuration."""
+        (self.work / ".oryx-approvals" / "example.json").unlink(missing_ok=True)
+        key = self.parent / "legacy-key"
         subprocess.run(["ssh-keygen", "-q", "-t", "ed25519", "-N", "", "-f", str(key)], check=True)
-        return key
+        signers = self.parent / "legacy-signers"
+        signers.write_text("pm-hub-pm " + key.with_suffix(".pub").read_text())
+        self.env["PM_HUB_ALLOWED_SIGNERS"] = str(signers)
+        contents = json.dumps(record, sort_keys=True, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+        signature = subprocess.check_output(["ssh-keygen", "-Y", "sign", "-f", str(key), "-n", "pm-hub-initiatives"],
+                                            input=contents, stderr=subprocess.DEVNULL).decode("ascii")
+        self.ledger.write_text(json.dumps({"record": record, "signature": signature}) + "\n")
+        key.unlink()
 
-    def test_initiative_work_resolves_signed_initiatives_without_changing_the_register(self):
+    def test_initiative_work_resolves_approved_initiatives_without_changing_the_register(self):
         self.submit(self.setup_event())
         self.submit(self.capture())
         self.submit(self.capture(f"{self.product_id}/sources", "Follow billing handoffs", "Planning notes, item 9"))
@@ -89,14 +96,14 @@ class InitiativeTests(unittest.TestCase):
         output = self.cli("initiative", "propose", "example", value=events, error=error)
         return json.loads(output) if error is None else output
 
-    def apply(self, proposal, key=None, error=None):
+    def apply(self, proposal, *, error=None):
         before = self.ledger.read_bytes() if self.ledger.exists() else None
         confirmations = []
         for identifier in proposal.get("intake_reviews", {}):
             confirmations.extend(("--confirm-distinct", identifier))
-        self.cli("initiative", "apply", "example", "--key", str(key or self.key), *confirmations,
+        self.cli("initiative", "apply", "example", "--approve", proposal["revision"], *confirmations,
                  value=proposal, error=error)
-        if error:
+        if error is not None:
             self.assertEqual(self.ledger.read_bytes() if self.ledger.exists() else None, before)
 
     def submit(self, *events):
@@ -201,7 +208,7 @@ class InitiativeTests(unittest.TestCase):
     def trace(self):
         return json.loads(self.cli("initiative", "show", "example", self.i))
 
-    def test_filing_preview_preserves_a_signed_brief(self):
+    def test_filing_preview_preserves_an_approved_brief(self):
         self.submit(self.setup_event(), self.capture(), self.describe(), self.metric(), self.decision("evaluate"))
         self.submit(self.decision("prepare-brief"))
         self.brief_ready()
@@ -211,7 +218,7 @@ class InitiativeTests(unittest.TestCase):
         text = path.read_text().replace("Send account reminders.\n", "Send account reminders.\nReview the pilot result.\n")
         plan = {"id": "brief-format-review", "reason": "Improve the proposed briefing language.",
                 "changes": [{"path": self.brief, "before": hashlib.sha256(original).hexdigest(), "text": text}]}
-        self.cli("align", "--preview-plan", value=plan, error="binds signed evidence")
+        self.cli("align", "--preview-plan", value=plan, error="binds approved evidence")
         self.assertEqual(path.read_bytes(), original)
 
     def test_one_id_through_discovery_delivery_and_measured_outcomes(self):
@@ -289,7 +296,7 @@ class InitiativeTests(unittest.TestCase):
         self.assertEqual(report["context"]["product"]["id"], self.product_id)
         self.cli("check")
 
-    def test_metric_creates_one_named_draft_and_preserves_edits_until_signed(self):
+    def test_metric_creates_one_named_draft_and_preserves_edits_until_approved(self):
         metric = "renewal-rate"
         approval = {"type": "approve-experiment", "initiative": self.i, "metric": metric}
         hypothesis, plan, result, _ = self.evidence()
@@ -410,6 +417,9 @@ class InitiativeTests(unittest.TestCase):
         proposal = self.preview(self.setup_event(), self.capture(), self.metric())
         self.apply(proposal, error="mode 2750")
         provision(self.ledger.parent, 0o2750)
+        approvals = self.work / ".oryx-approvals"
+        approvals.mkdir(exist_ok=True)
+        provision(approvals, 0o2750)
         self.apply(proposal)
         self.assertEqual(stat.S_IMODE(self.ledger.stat().st_mode), 0o640)
         before = self.ledger.read_bytes()
@@ -433,9 +443,7 @@ class InitiativeTests(unittest.TestCase):
         self.submit(self.setup_event(), {**self.capture(), "observed_on": past}, self.metric(), hypothesis)
         envelope = json.loads(self.ledger.read_text())
         envelope["record"]["events"].extend([{**plan, "planned_on": past}, {**result, "observed_on": past}])
-        with patch.dict(os.environ, self.env):
-            envelope["signature"] = pm.initiative_store.sign(self.root, envelope["record"], self.key)
-        self.ledger.write_text(json.dumps(envelope))
+        self.write_legacy_register(envelope["record"])
         self.assertEqual(self.trace()["initiative"]["results"][result["result"]]["observed_on"], past)
         self.submit(self.target())
         self.assertEqual(self.trace()["initiative"]["experiments"][plan["experiment"]]["planned_on"], past)
@@ -520,7 +528,7 @@ class InitiativeTests(unittest.TestCase):
         setup = {**self.setup_event(), "product_context": other_context}
         changes = [setup, self.capture(other_id), self.metric(), self.target(other_id)]
         proposal = json.loads(self.cli("initiative", "propose", "service", value=changes))
-        self.cli("initiative", "apply", "service", "--key", str(self.key), value=proposal)
+        self.cli("initiative", "apply", "service", "--approve", proposal["revision"], value=proposal)
 
         first = self.trace()["initiative"]
         other = json.loads(self.cli("initiative", "show", "service", other_id))["initiative"]
@@ -543,7 +551,7 @@ class InitiativeTests(unittest.TestCase):
         self.assertEqual({row["id"] for row in json.loads(self.cli("backlog"))}, {self.i, other_id})
         self.cli("check")
 
-    def test_ignored_drafts_cannot_be_created_by_hand_or_by_a_signed_target(self):
+    def test_ignored_drafts_cannot_be_created_by_hand_or_by_an_approved_target(self):
         self.submit(self.setup_event(), self.capture(), self.metric())
         path = "workspace/experiments/example/renewal/experiment.renewal-rate.draft.json"
         with (self.work / ".git/info/exclude").open("a") as output:
@@ -552,12 +560,100 @@ class InitiativeTests(unittest.TestCase):
         self.apply(self.preview(self.target()), error="private repository ignores")
         self.assertFalse((self.work / path).exists())
 
-    def test_signatures_and_stale_reviews_fail_closed(self):
+    def test_interrupted_publication_retries_only_the_exact_reviewed_batch(self):
+        self.submit(self.setup_event(), self.capture())
+        before = self.ledger.read_bytes()
+        proposal = self.preview(self.describe())
+        other = self.preview(self.describe(problem="Renewal notices reach the wrong team"))
+        store = pm.initiative_store
+        replace = store.storage.replace_text
+
+        def interrupt_register_write(target, *args, **kwargs):
+            if target == self.ledger:
+                raise OSError("Interrupted register write")
+            return replace(target, *args, **kwargs)
+
+        with patch.object(store.storage, "replace_text", interrupt_register_write):
+            with self.assertRaisesRegex((ValueError, OSError), "Interrupted register write"):
+                store.apply(self.root, "example", proposal, approved_revision=proposal["revision"])
+        self.assertEqual(self.ledger.read_bytes(), before)
+        self.apply(other, error="does not match the reviewed revision")
+        self.assertEqual(self.ledger.read_bytes(), before)
+        self.ledger.write_bytes(before.replace(b"Renewal delays", b"Changed title"))
+        self.apply(proposal, error="does not match the reviewed revision")
+        self.ledger.write_bytes(before)
+        self.apply(proposal)
+        saved = json.loads(self.ledger.read_bytes())["record"]["events"]
+        self.assertEqual(saved, json.loads(before)["record"]["events"] + proposal["reviewed_transactions"])
+        next_proposal = self.preview(self.metric())
+        with patch.object(store.storage, "replace_text", interrupt_register_write):
+            with self.assertRaisesRegex((ValueError, OSError), "Interrupted register write"):
+                store.apply(self.root, "example", next_proposal, approved_revision=next_proposal["revision"])
+        self.assertIn(next_proposal["revision"], self.cli("initiative", "recover", "example"))
+        recovered = self.ledger.read_bytes()
+        self.assertEqual(json.loads(recovered)["record"]["events"], saved + next_proposal["reviewed_transactions"])
+        self.cli("initiative", "recover", "example")
+        self.assertEqual(self.ledger.read_bytes(), recovered)
+        self.cli("check")
+
+    def test_existing_approval_requires_its_receipt_and_blocks_protected_agent_apply(self):
+        self.submit(self.setup_event(), self.capture())
+        original = self.ledger.read_bytes()
+        proposal = self.preview(self.describe())
+        self.env["PM_HUB_PROTECTED_ROOT"] = str(self.root)
+        self.apply(proposal, error="protected")
+        self.assertEqual(self.ledger.read_bytes(), original)
+        del self.env["PM_HUB_PROTECTED_ROOT"]
+        receipt = self.work / ".oryx-approvals" / "example.json"
+        saved = receipt.read_bytes()
+        receipt.unlink()
+        self.cli("initiative", "show", "example", error="missing PM approval receipt")
+        self.apply(proposal, error="missing PM approval receipt")
+        self.assertFalse(receipt.exists())
+        receipt.write_bytes(saved)
+        self.assertEqual(self.ledger.read_bytes(), original)
+        self.apply(proposal)
+
+    def test_verified_legacy_history_carries_forward_without_private_signing_material(self):
+        initial = self.preview(self.setup_event(), self.capture())
+        record = {"version": 1, "product": "example", "events": initial["reviewed_transactions"]}
+        self.ledger.parent.mkdir(parents=True, exist_ok=True)
+        self.write_legacy_register(record)
+        original = self.ledger.read_bytes()
+        signers = self.env.pop("PM_HUB_ALLOWED_SIGNERS")
+        self.cli("initiative", "show", "example", error="PM_HUB_ALLOWED_SIGNERS")
+        self.env["PM_HUB_ALLOWED_SIGNERS"] = signers
+        self.ledger.write_bytes(original.replace(b"Renewal delays", b"Changed title"))
+        self.cli("initiative", "show", "example", error="signature")
+        self.ledger.write_bytes(original)
+        self.assertEqual(self.trace()["initiative"]["id"], self.i)
+        self.assertEqual(self.ledger.read_bytes(), original)
+
+        proposal = self.preview(self.describe())
+        self.apply(proposal)
+        current = self.ledger.read_bytes()
+        envelope = json.loads(current)
+        self.assertEqual(envelope["record"]["events"][:-1], record["events"])
+        legacy, approved = envelope["approvals"]
+        self.assertEqual(legacy["signature"], json.loads(original)["signature"])
+        self.assertEqual(legacy["through"], len(record["events"]))
+        self.assertEqual(approved["owner"], "Fixture PM")
+        self.assertEqual(approved["revision"], proposal["revision"])
+        self.assertEqual(approved["through"], len(envelope["record"]["events"]))
+        self.assertTrue(approved["approved_at"])
+        self.ledger.write_bytes(original)
+        self.cli("initiative", "show", "example", error="does not match the reviewed revision")
+        self.ledger.write_bytes(current)
+        del self.env["PM_HUB_ALLOWED_SIGNERS"]
+        Path(signers).unlink()
+        self.assertEqual(self.trace()["initiative"]["description"]["problem"], self.describe()["problem"])
+        self.cli("check")
+
+    def test_explicit_approval_and_stale_reviews(self):
         proposal = self.preview(self.setup_event(), self.capture(), self.describe(),
                                 self.decision("evaluate"),
                                 self.decision("prepare-brief"))
-        wrong_key = self.make_key("wrong-key")
-        self.apply(proposal, key=wrong_key, error="signature does not match")
+        self.cli("initiative", "apply", "example", "--approve", "0" * 64, value=proposal, error="revision")
         self.assertFalse(self.ledger.exists())
         self.apply(proposal)
         self.apply(proposal, error="one setup")
@@ -583,8 +679,8 @@ class InitiativeTests(unittest.TestCase):
         self.assertEqual(json.loads(self.cli("roadmap")), [])
         signed_text = self.ledger.read_text()
         self.ledger.write_text(signed_text.replace("Renewal delays", "Direct write attempt"))
-        self.cli("backlog", error="signature does not match")
-        self.cli("check", error="signature does not match")
+        self.cli("backlog", error="does not match the reviewed revision")
+        self.cli("check", error="does not match the reviewed revision")
         self.ledger.write_text(signed_text)
         self.cli("check")
 
@@ -647,7 +743,7 @@ class InitiativeTests(unittest.TestCase):
         restored = self.cli("backlog", *due, capture_result=True)
         self.assertEqual((restored.stdout, restored.stderr), (outputs["json"], ""))
         self.ledger.write_bytes(signed.replace(b"Renewal delays", b"Direct write attempt"))
-        self.cli("backlog", *due, error="signature does not match")
+        self.cli("backlog", *due, error="does not match the reviewed revision")
 
     def test_duplicates_backlog_limits_and_review_triggers(self):
         self.new("discovery-brief", self.discovery, error="Register the initiative")
@@ -707,14 +803,12 @@ class InitiativeTests(unittest.TestCase):
         old = self.decision("evaluate", evaluation="Review the value of earlier reminders.")
         envelope = json.loads(self.ledger.read_text())
         envelope["record"]["events"].append(old)
-        with patch.dict(os.environ, self.env):
-            envelope["signature"] = pm.initiative_store.sign(self.root, envelope["record"], self.key)
-        self.ledger.write_text(json.dumps(envelope))
+        self.write_legacy_register(envelope["record"])
         self.assertEqual(self.trace()["initiative"]["decisions"], [old])
         self.submit(self.decision("evaluate"))
         self.assertEqual(self.trace()["initiative"]["decisions"][0], old)
 
-    def test_changing_a_teams_working_fields_preserves_the_signed_plan(self):
+    def test_changing_a_teams_working_fields_preserves_the_approved_plan(self):
         self.submit(self.setup_event(), self.capture(), self.describe(), self.metric(), self.target(),
                     self.decision("evaluate"), self.decision("prepare-brief"))
         self.brief_ready()
@@ -858,13 +952,17 @@ class InitiativeTests(unittest.TestCase):
                 config = json.loads((self.root / config_path).read_text())
                 command = config["hooks"]["PreToolUse"][0]["hooks"][0]
                 args = command["command"] if "args" not in command else [command["command"], *command["args"]]
-                payload = {"hook_event_name": "PreToolUse", "cwd": str(self.work),
-                           "tool_name": "apply_patch", "tool_input": {
-                               "command": "*** Begin Patch\n*** Update File: workspace/backlogs/example/initiatives.json\n*** End Patch"}}
-                result = subprocess.run(args, shell=isinstance(args, str), cwd=self.work, env=self.env,
-                                        input=json.dumps(payload), capture_output=True, text=True)
-                self.assertEqual(result.returncode, 0, result.stderr)
-                self.assertEqual(json.loads(result.stdout)["hookSpecificOutput"]["permissionDecision"], "deny")
+                for path in ("workspace/backlogs/example/initiatives.json", ".oryx-approvals/example.json"):
+                    with self.subTest(path=path):
+                        payload = {"hook_event_name": "PreToolUse", "cwd": str(self.work),
+                                   "tool_name": "apply_patch", "tool_input": {
+                                       "command": f"*** Begin Patch\n*** Update File: {path}\n*** End Patch"}}
+                        result = subprocess.run(args, shell=isinstance(args, str), cwd=self.work, env=self.env,
+                                                input=json.dumps(payload), capture_output=True, text=True)
+                        self.assertEqual(result.returncode, 0, result.stderr)
+                        guidance = json.loads(result.stdout)["hookSpecificOutput"]
+                        self.assertEqual(guidance["permissionDecision"], "deny")
+                        self.assertIn("initiative propose", guidance["permissionDecisionReason"])
         self.cli("check")
 
     def test_urgent_delivery_still_requires_explicit_evidence_and_approval(self):
@@ -933,8 +1031,6 @@ class InitiativeTests(unittest.TestCase):
         reference = pm.initiative_store.doc_reference(self.root, self.planning, "prioritization")
         envelope = json.loads(self.ledger.read_text())
         envelope["record"]["events"].append({**cycle, "references": reference})
-        with patch.dict(os.environ, self.env):
-            envelope["signature"] = pm.initiative_store.sign(self.root, envelope["record"], self.key)
-        self.ledger.write_text(json.dumps(envelope))
+        self.write_legacy_register(envelope["record"])
         self.assertEqual(json.loads(self.cli("initiative", "show", "example"))["cycles"], ["quarter-two"])
         self.cli("check")

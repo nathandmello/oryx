@@ -1,7 +1,6 @@
-"""Serve an isolated oryx installation with fictional records and a local signing key."""
+"""Serve an isolated oryx installation with fictional PM records."""
 
 import json
-import os
 from pathlib import Path
 import sys
 
@@ -32,21 +31,19 @@ def main():
         fixture.submit(fixture.setup_event(), fixture.metric())
         add_candidate(fixture, fixture.i, "Renewal delays", [area])
         add_candidate(fixture, f"{fixture.product_id}/exports", "Export turnaround")
-        os.environ["PM_HUB_ALLOWED_SIGNERS"] = fixture.env["PM_HUB_ALLOWED_SIGNERS"]
         confirmations = 0
 
         def confirm(root, review):
             # The browser tests cancel the first approval and confirm subsequent attempts.
-            # Existing OpenSSH signing and verification still run with the fixture key.
             nonlocal confirmations
             confirmations += 1
             return confirmations > 1
 
-        app = local_ui.App(fixture.root, fixture.key, pm.prepare_private_write, pm.run_initiative_work, confirm)
+        app = local_ui.App(fixture.root, pm.prepare_private_write, pm.run_initiative_work, confirm)
         with local_ui.make_server(app) as server:
             print(json.dumps({
                 "url": f"{server.origin}/#{server.token}", "root": str(fixture.root),
-                "signers": os.environ["PM_HUB_ALLOWED_SIGNERS"], "fixtureKey": str(fixture.key), "today": fixture.today,
+                "today": fixture.today,
             }), flush=True)
             server.serve_forever()
     except KeyboardInterrupt:

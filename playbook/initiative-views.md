@@ -1,15 +1,15 @@
 # Backlog and roadmap views
 
-Generate both views from the signed product register. Each row uses the same initiative ID. Run `initiative show PRODUCT ID` for its evidence, metrics, decisions, and delivery references.
+Generate both views from the product register. Each row uses the same initiative ID. Run `initiative show PRODUCT ID` for its evidence, metrics, decisions, and delivery references.
 
 ## Read the views
 
 The default backlog shows inbox, under consideration, in discovery, defining, and candidate initiatives. Use `--phase` for one status or `--all-phases` to search historical and committed work.
 
-Use `--due` for dated reviews across phases. Release measurements leave the reminder active until the PM signs an outcome review.
+Use `--due` for dated reviews across phases. Release measurements leave the reminder active until the PM approves an outcome review.
 A dated follow-up sets the next reminder. Closure clears it. Review event-triggered deferrals when their named event occurs.
 
-The due list keeps signed reminders visible when an approval needs review.
+The due list keeps dated reminders visible when an approval needs review.
 The command reports review issues on standard error for the selected product or area.
 Check these notices even when no rows are due. Use `initiative show PRODUCT ID` to inspect the affected approval.
 Advancing the initiative still requires current evidence and PM approval.
@@ -21,7 +21,7 @@ The next closure cites the measurements that reopened the review.
 For an area view, use `--product PRODUCT --area AREA`. Both views read the area's qualified subject from the initiative.
 An initiative can appear in several area views. Product-wide initiatives appear in the unfiltered product view.
 
-The roadmap shows signed selections by planning cycle, horizon, and rank. Its comparison lives at `workspace/roadmaps/<product>/<cycle>.md` inside the private repository. The cycle dates bound the planning period. An initiative's delivery record supplies its implementation reference.
+The roadmap shows approved selections by planning cycle, horizon, and rank. Its comparison lives at `workspace/roadmaps/<product>/<cycle>.md` inside the private repository. The cycle dates bound the planning period. An initiative's delivery record supplies its implementation reference.
 Use the linked comparison to see the alternatives, obligations, and capacity constraints behind each selection.
 
 ```sh
@@ -42,12 +42,12 @@ Compare the affected users and their problem. A new source can describe an exist
 The proposal shows up to five matches from the product history. A paraphrase can fall outside that list.
 Inspect plausible initiatives with `initiative show PRODUCT ID`.
 If the underlying problem matches, propose a `signal` on that ID. If ownership is unclear, keep the proposal open.
-For a distinct problem, the PM confirms the new ID when signing.
+For a distinct problem, the PM confirms the new ID when approving the proposal.
 
 ## Review new evidence
 
 A signal recorded after approval puts the initiative in `backlog --due` for triage. The roadmap shows the review.
-Read `signal_reviews` in the preview or initiative trace for the source and signed approval.
+Read `signal_reviews` in the preview or initiative trace for the source and the decision it affects.
 
 Submit `review-signal` with the exact `signal` source locator and the affected `claim`. Inspect `initiative schema` for the fields.
 Mark a routine signal with `assess`. Link material or uncertain evidence to an approved claim and state `residual_risk`.
@@ -59,7 +59,7 @@ Revising leaves the review open. Reopening returns work to consideration for a n
 ## Close a release review
 
 Read `initiative show PRODUCT ID` for the evidence trail. Follow [the guardrail and correction procedure](outcome-evidence.md) when preparing the PM's assessment.
-In this example, the signed measurement `release-cohort` records the share of new administrators who finished their first import.
+In this example, the recorded measurement `release-cohort` records the share of new administrators who finished their first import.
 
 ```json
 [{
@@ -92,6 +92,6 @@ If evidence is pending, give `follow_up` an `on` date and an `action`. The due v
 | Now, Next, and Later group ideas by horizon | `horizon` | [Atlassian Jira product roadmap template](https://www.atlassian.com/software/jira/templates/product-roadmap) |
 | A period groups ordered work, estimates, status, and links | `cycle`, `rank`, `effort`, `unit`, `phase`, `delivery` | [Atlassian Confluence product roadmap template](https://www.atlassian.com/software/confluence/templates/product-roadmap/) |
 
-The supplied *Product Backlog & Discovery Workflow*, sections 1 and 7, informs problem, audience, source, and revisit fields. The [backlog template](../templates/views/backlog.json) reserves rank for signed selections.
+The supplied *Product Backlog & Discovery Workflow*, sections 1 and 7, informs problem, audience, source, and revisit fields. The [backlog template](../templates/views/backlog.json) reserves rank for approved selections.
 The supplied *Product Strategy Mindset*, section 7, frames the roadmap around outcomes and horizons. The *Product Prioritization — PM Handbook*, section 4, informs trade-offs and capacity decisions.
 The [roadmap template](../templates/views/roadmap.json) links each selection to its planning record and metric IDs.

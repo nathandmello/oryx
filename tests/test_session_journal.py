@@ -427,6 +427,7 @@ class JournalTests(unittest.TestCase):
             exec_client.assert_not_called()
 
     def test_immutable_state_mount_only_masks_existing_verified_namespaces(self):
+        (self.studio / agent_session.APPROVAL_HOME).mkdir()
         state = Path(os.environ["XDG_STATE_HOME"])
         state.mkdir(mode=0o700)
         base = state / "oryx" / "journals"

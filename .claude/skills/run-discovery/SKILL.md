@@ -16,4 +16,4 @@ Load the step for the current decision:
 | Frame the investigation or revise a timebox | [Plan the investigation](plan.md) |
 | Run an authorized timebox or conclude it | [Investigate and conclude](investigate.md) |
 
-Save the checkpoint in the editable work record. If a signature binds the Discovery Brief, preserve its reviewed bytes.
+Save the checkpoint in the editable work record. Preserve the reviewed sections of an approved Discovery Brief.

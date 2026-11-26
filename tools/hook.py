@@ -53,7 +53,7 @@ CAPTURE_GUIDANCE = (
     "For intake, discovery, initiative briefs, or prioritization, read playbook/opportunities.md. "
     "Read the current records using pm.py initiative show. Use initiative propose for proposed changes. "
     "Find metric-linked experiment drafts with initiative show. Leave unknown fields empty. "
-    "Only the PM signs and applies changes with the protected signing key. "
+    "The PM reviews and approves the exact changes before they are applied. "
     "If task hooks are unavailable, run pm.py task-context for each task and after scope changes. "
     "Use playbook/numbers.md for material quantitative claims, including claims from the PM or a trusted source. "
     "For initiative tasks or launch checklists, read .agents/skills/manage-initiative-work/SKILL.md. "
@@ -486,9 +486,10 @@ def edit_reason(root, private, requested, content):
     target = requested.resolve()
     if any(target.is_relative_to(root / name) for name in pm.storage.PRIVATE_ROOTS if name != private.name.casefold()):
         return "This is the retired private root. File PM work under studio/workspace/ and reference material under studio/context/."
-    if any(private in path.parents and pm.opportunities.path_kind(path.relative_to(private)) == "register"
+    if any(path.is_relative_to(private / pm.initiative_store.APPROVAL_HOME)
+           or private in path.parents and pm.opportunities.path_kind(path.relative_to(private)) == "register"
            for path in (requested, target)):
-        return "Use pm.py initiative propose for register changes. The PM signs and applies the proposal."
+        return "Use pm.py initiative propose for register changes. The PM reviews and approves the proposal."
     if private / pm.company_onboarding.FILE in (requested, target):
         return "Use pm.py company-onboarding to preserve the approved source scope and reviewed items."
     if private / pm.company_onboarding.PM_FILE in (requested, target):

@@ -778,12 +778,12 @@ def resolve_current(private, prompt, cwd, previous, explicit, explain, include_h
                     areas.update(item_areas)
                 if through >= date.today():
                     if assessment and initiative:
-                        # Keep signed targets separate from actual observations. The initiative view verifies readings and corrections.
+                        # Keep approved targets separate from actual observations. The initiative view verifies readings and corrections.
                         lookup = ["initiative", "show", product, item["id"]]
                         targets = outcome_context.target_preview(item, product)
                     signed_reviews.extend({**r, "initiative": item["id"]} for r in initiative_views.signal_reviews(private, item))
                 elif item.get("_signal_reviews"):
-                    result["warnings"].append(f"{item['id']}: verify the signed evidence history for the requested date.")
+                    result["warnings"].append(f"{item['id']}: verify the approved evidence history for the requested date.")
         except (OSError, ValueError) as exc:
             result["warnings"].append(f"Could not verify the registered initiative scope: {exc}")
     if initiative:

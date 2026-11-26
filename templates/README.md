@@ -20,13 +20,13 @@ Create only the artifact needed for the current work. Templates guide thought; t
 | [Initiative Brief](initiative-brief.md) | Investment case, scope, launch, and success measures | `workspace/initiatives/<product>/<initiative>/initiative-brief.md` |
 | [Launch checklist](launch-checklist.json) | Starter checkpoints for launch readiness and follow-through | `workspace/initiatives/<product>/<initiative>/launch-checklist.json` |
 | [Prioritization](prioritization.md) | Comparison of approved candidates for a planning cycle | `workspace/roadmaps/<product>/<cycle>.md` |
-| [Roadmap](roadmap.md) | Narrative roadmap for work outside the signed initiative register | `workspace/roadmaps/` |
+| [Roadmap](roadmap.md) | Narrative roadmap for work outside the initiative register | `workspace/roadmaps/` |
 
 The [PM walkthrough](../playbook/pm-context.md) helps you build your profile in `context/pm/context.md`. You can also write it yourself.
 
 Use the [context section rules](../playbook/filing.md#when-a-section-earns-its-place) to choose headings. Give each substantive section a lead that explains when it applies.
 
-Registered initiatives share one signed product register. Generate their live backlog and roadmap with the [view templates](../playbook/initiative-views.md).
+Registered initiatives share one product register. Generate their live backlog and roadmap with the [view templates](../playbook/initiative-views.md).
 For other working plans, use Scope, Evidence, and Next action in that order. State specific evidence gaps. Link applicable context.
 
 ## Create a draft
@@ -53,7 +53,7 @@ python3 tools/pm.py new product-area-context context/products/example/plugins/sa
   --trigger "The plugin changes its export permissions."
 ```
 
-Create registered briefs after capture. The command fills the Parent initiative section from the signed register. For the fictional product `checkout` and initiative `refund-delays`, run:
+Create registered briefs after capture. The command fills the Parent initiative section from the register. For the fictional product `checkout` and initiative `refund-delays`, run:
 
 ```sh
 python3 tools/pm.py new discovery-brief workspace/initiatives/checkout/refund-delays/discovery-brief.md

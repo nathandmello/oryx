@@ -416,7 +416,7 @@ function roadmapScreen() {
     !state.edit && !state.presenting && !!cycle && button("Present", togglePresentation),
   ));
   if (!products.length) {
-    app.append(node("div", { class: "panel empty" }, "Set up a signed product initiative register to open its roadmap."));
+    app.append(node("div", { class: "panel empty" }, "Register a product to open its roadmap."));
     return;
   }
   const subjects = [...new Set(rows.flatMap(row => row.areas))].sort();
@@ -491,7 +491,10 @@ function togglePresentation() {
 
 function showRoadmapReview(proposal, onSaved = () => {}) {
   const review = node("div", { class: "stack" },
-    node("p", { class: "muted" }, "Review the proposed changes. Approval opens a confirmation window on this computer."),
+    state.catalog.can_approve
+      ? node("p", { class: "muted" }, "Review the proposed changes. Approval opens a confirmation window on this computer.")
+      : node("p", { class: "muted" }, "For approval, run ", node("code", {}, "python3 tools/pm.py ui"),
+        " in your own terminal and review the changes there."),
     node("div", { class: "review-list" }, proposal.changes.map(change => {
       const title = change.type === "cycle" ? "Create " + change.cycle : proposal.titles[change.initiative];
       const summary = change.type === "cycle"
@@ -502,7 +505,6 @@ function showRoadmapReview(proposal, onSaved = () => {}) {
         change.reason && node("p", { class: "muted small" }, change.reason + " · " + change.source));
     })),
     proposal.documents.map(doc => node("details", {}, node("summary", {}, doc.path), node("pre", {}, doc.text))),
-    !state.catalog.signing && node("p", { class: "muted" }, "Start oryx with a local signing key to approve changes."),
   );
   const dialog = modal("Review roadmap proposal", review, [button("Approve on this computer", event => attempt(event, async () => {
     alert("Confirm the proposal in the oryx desktop window.", false, dialog);
@@ -518,8 +520,8 @@ function showRoadmapReview(proposal, onSaved = () => {}) {
     if (created) state.cycle = created.cycle;
     await loadBoard();
     render();
-    alert("The signed roadmap is up to date.");
-  }), "primary", { disabled: !state.catalog.signing })]);
+    alert("Roadmap changes approved and saved.");
+  }), "primary", { disabled: !state.catalog.can_approve })]);
 }
 
 async function newCycleDialog() {
@@ -594,7 +596,7 @@ async function newCycleDialog() {
   const loadExisting = button("Load existing comparison", event => attempt(event, async () => {
     if (!id.reportValidity()) return;
     const result = await api("comparison", { product, cycle: id.value });
-    if (result.signed) throw new Error("This cycle already exists. Open its board to change placements.");
+    if (result.approved) throw new Error("This cycle already exists. Open its board to change placements.");
     if (!result.text) throw new Error("No saved comparison for that cycle ID.");
     comparisonRevision = result.revision;
     loadedId = id.value;

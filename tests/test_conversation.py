@@ -437,7 +437,7 @@ class SignedCheckpointTests(unittest.TestCase):
             path = hub.work / hub.brief
             before = path.read_bytes()
             hub.cli("conversation", "checkpoint", "preview", hub.brief,
-                    value={"mode": "quiet"}, error="signed review binds this file")
+                    value={"mode": "quiet"}, error="approved review binds this file")
             self.assertEqual(path.read_bytes(), before)
         finally:
             hub.doCleanups()

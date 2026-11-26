@@ -69,7 +69,7 @@ def next_review(item, decision):
     return scheduled
 
 
-def signed_claim_reason(snapshot):
+def approved_claim_reason(snapshot):
     event = {"type": "decision", "reason": snapshot["reason"], "on": snapshot["on"]}
     if decision_rationale(event):
         return event["reason"].partition(RATIONALE_MARK)[0]
@@ -98,11 +98,11 @@ def signal_claims(private, basis):
             pass
     for field in ("scope", "obligation", "reason"):
         if approval[field]:
-            claims.append({"text": signed_claim_reason(approval) if field == "reason" else approval[field],
-                           "authority": "PM-signed " + approval["action"],
+            claims.append({"text": approved_claim_reason(approval) if field == "reason" else approval[field],
+                           "authority": "PM-approved " + approval["action"],
                            "source": approval["source"]})
     if selection:
-        claims.append({"text": signed_claim_reason(selection), "authority": "PM-signed plan",
+        claims.append({"text": approved_claim_reason(selection), "authority": "PM-approved plan",
                        "source": selection["source"], "record": selection["comparison"]["path"],
                        "revision": selection["comparison"]["sha256"]})
     return claims
@@ -287,7 +287,7 @@ def trace(product, register, identifier=None, *, private):
                       context_risks=evidence_reviews.for_initiative(private, product, item))
     if item["phase"] == "shipped":
         ship = next(event for event in reversed(item["decisions"]) if event["action"] == "ship")
-        initiative["launch_review"] = ("Recorded in the signed ship decision." if "readiness" in ship
+        initiative["launch_review"] = ("Recorded in the approved ship decision." if "readiness" in ship
                                        else "Readiness was not recorded in this historical ship decision.")
         initiative["guardrail_results"] = outcome_evidence.guardrail_summary(item, date.today().isoformat())
         initiative["outcome_risks"] = outcome_risks(item)

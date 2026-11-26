@@ -32,7 +32,5 @@ jobs:
           persist-credentials: false
       - name: Verify candidate, publish, and reconcile Latest
         env:
-          ORYX_STUDY_REVIEWER_PUBLIC_KEY: ${{ vars.ORYX_STUDY_REVIEWER_PUBLIC_KEY }}
-          ORYX_STUDY_PINS: ${{ vars.ORYX_STUDY_PINS }}
           GH_TOKEN: ${{ github.token }}
         run: python3 tools/publish_release.py

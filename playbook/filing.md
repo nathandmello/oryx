@@ -12,7 +12,7 @@ File reference material in `context/` and PM work in `workspace/` inside Studio.
 | Initiative meeting history readers revisit | A dated `event-history` context note beside the initiative overview |
 | PM background, preferences, responsibilities, or interests | `context/pm/context.md` |
 | Priorities, plans, progress, or tests | The applicable work type under `workspace/`, such as `workspace/experiments/` |
-| Proposed investments, sources, and lifecycle decisions | Signed `workspace/backlogs/<product>/initiatives.json` |
+| Proposed investments, sources, and lifecycle decisions | `workspace/backlogs/<product>/initiatives.json` |
 | Formal discovery or proposed investment | `discovery-brief.md` or `initiative-brief.md` under `workspace/initiatives/<product>/<initiative>/` |
 | PM delivery work and launch readiness | [Initiative tasks and checkpoints](initiative-work.md) beside the briefs |
 | Test for an initiative metric | `workspace/experiments/<product>/<initiative>/experiment.<metric-id>.draft.json` during drafting |

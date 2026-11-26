@@ -1,24 +1,23 @@
-# Run the stakeholder study
+# Run the optional stakeholder study
 
-Use three isolated accounts or machines for operators, reviewers, and the evidence recorder. Keep the candidate and reference in separate workspaces. Only the recorder can write observation bundles. Keep answer keys, prior runs, reviewer private keys, and other Studios outside every client mount. A shared Unix account cannot enforce this boundary.
+Use this offline study to compare how two hubs handle the same PM requests. Give each hub a separate workspace. Keep reference answers, prior runs, and other Studios outside client access. Record observations outside the workspaces.
 
 ## Register before collection
 
 Use fictional material or lawfully reusable public professional records. Record the source URL, license and discussion ID for public inputs. Remove unnecessary personal data. Use fictional PM requests and seeds when appropriate. Group mirrors, extracts and related sessions under one original. Keep provenance in the private manifest.
 
-Include at least 12 development and 48 independent held-out originals across six families. Freeze source bytes, requests, dates, scoped grants, equivalent native seed records, PM responses and proposed source keys.
+Include at least 12 development and 48 independent held-out originals across six families. Freeze source bytes, requests, dates, scoped grants, equivalent native seed records, PM responses and expected findings.
 
 ```sh
-python3 -B tests/evals/stakeholder_corpus.py freeze /study/originals.jsonl /study/frozen
+MANIFEST_PIN=$(python3 -B tests/evals/stakeholder_corpus.py freeze /study/originals.jsonl /study/frozen)
 python3 -B tests/evals/stakeholder_corpus.py packet /study/frozen "$MANIFEST_PIN" "$CASE" /operator/inbox
 ```
 
-Distribute the manifest pin separately. Use each hub’s normal provisioning surface. Keep seed instructions and response scripts with the operator.
-
+Keep the manifest digest with the study design. Provision each hub through its usual setup. Keep seed instructions and response scripts with the operator.
 
 Mount only authorized source bytes and the seeded hub. Submit the verbatim request. Never send the case ID, family, rubric, or expected destination.
 
-Two readers label each source independently before seeing output. Record required meanings, permissible alternatives, prohibited propositions, speaker or intermediary, exact evidence, uncertainty, scope and legitimate silence. Adjudicate disagreements against the source. Freeze the resolved keys, signed reviews and rubric before collecting outputs.
+Two readers label each source independently before seeing output. Record required meanings, permissible alternatives, prohibited propositions, speaker or intermediary, exact evidence, uncertainty, scope and legitimate silence. Adjudicate disagreements against the source. Save both source reviews, the resolved labels and the rubric before collecting outputs.
 
 Calibrate budgets, sample sizes, claim bounds, operating points, rubric dimensions and stopping rules on development data. Freeze them before collection. Preserve earlier attempts. Use a fresh confirmation set after holdout-informed changes.
 
@@ -26,7 +25,7 @@ Even perfect outcomes need 59 nonempty paired originals per family for the defic
 
 ## Run the Codex study
 
-Register `oryx-stakeholder-study/v2` before collection. Freeze new registrations, scorer and evidence pins. Preserve historical studies and signed reports.
+Register `oryx-stakeholder-study/v2` before collection. Record the registration file’s SHA-256 digest as `REGISTRATION_PIN`. Keep the scorer revision with the results.
 
 Use one pinned Codex repository harness for both hubs. Load each hub's instructions and tools from its checkout. Verify both routes with positive development cases. Pin the harness bytes, client version, model revision, tools and settings.
 
@@ -42,7 +41,7 @@ python3 tools/pm.py agent codex
 
 Exercise both client adapters for installation, privacy and cross-client recovery on Linux, macOS and WSL2. Record shell and hook fixtures as such. Collect native capture and protected launch evidence on each supported host. Claude contributes integration evidence without generating graded model answers.
 
-On each host, run the approved parity fixture against the reviewed checkout. Record the launch and complete output independently.
+On each host, run the parity fixture against the study checkout. Record the launch and complete output independently.
 
 ```sh
 python3 tests/test_client_core_parity.py --capture
@@ -58,8 +57,7 @@ python3 -B tests/evals/stakeholder_corpus.py snapshot /run/observed-volumes /rec
 
 Use independent monotonic event capture from PM submission. Mark grounded first results, warranted questions, or correct completed abstentions. Record common-work completion, elapsed human and model time, PM turns, and approval or handoff overhead. Include failed completions and timeouts. Time all four deployments on at least 100 independent matched originals in each warm and cold stratum.
 
-## Grade and decide
-
+## Grade the observations
 
 Randomize opaque output IDs. Remove hub identities and launch metadata from judge copies. Keep exact source spans, quotations, and observable actions. Both judges code every material finding, including duplicates and false positives.
 
@@ -71,4 +69,4 @@ Grade consequential coaching dimensions against the PM's purpose. Check critical
 python3 -B tests/evals/stakeholder_release.py /study/frozen "$MANIFEST_PIN" /recorder/evidence "$REGISTRATION_PIN"
 ```
 
-A missing, failed or inconclusive gate holds release. The scorer emits counts, bounds, failures and timing details for complete bundles. Keep evidence private. Publish the authorized reviewer receipt. [Bundle format](stakeholder-evidence.md)
+Read the `status` field. A complete study reports `meets-thresholds` or `below-thresholds`, with counts, confidence bounds, timing and individual checks. An `incomplete` study identifies missing or invalid evidence. The command exits with 0 for `meets-thresholds` and 1 for `below-thresholds` or `incomplete`. Keep the evidence private. [Bundle format](stakeholder-evidence.md)

@@ -1,6 +1,6 @@
 # Initiative tasks and launch checklists
 
-Use the product and initiative slugs from the signed register or the product-owned initiative overview. Each initiative has two JSON lists beside its briefs.
+Use the product and initiative slugs from the initiative register or the product-owned initiative overview. Each initiative has two JSON lists beside its briefs.
 Carry existing tasks into the list when the PM confirms the records and their status.
 
 | Record | Purpose | Completion |
@@ -37,7 +37,7 @@ Include upstream and launch phases. The view shows readiness after both phases c
 ### Evidence changes
 
 Saved material edits retain previous evidence and blockers in each list. Previewing an edit leaves the records untouched.
-A task's second completion retains its withdrawal. Recheck the affected checkpoint before signing.
+A task's second completion retains its withdrawal. Recheck the affected checkpoint before approving the launch.
 
 By default, verification relies on every linked task. To cite independent evidence, set `verification.basis_tasks` to matching task IDs or `[]`.
 Name the independent source in `verification.evidence`. A linked task with changed evidence needs a fresh verification statement.
@@ -57,17 +57,17 @@ Use the PM’s stated reason and approving authority for each outstanding ID in 
 ```
 
 Changes to a scoped advisory or its cited context evidence require a fresh proposal.
-Advisories inform the PM’s judgment. Only outstanding readiness IDs require a signed exception.
-The PM signs the [reviewed decision](initiative-approvals.md#propose-and-approve).
-Use `/pm initiative record show` to read the signed evidence after launch. Downstream changes continue separately.
+Advisories inform the PM’s judgment. Only outstanding readiness IDs require PM approval for an exception.
+The PM approves the [reviewed decision](initiative-approvals.md#propose-and-approve).
+Use `/pm initiative record show` to read the evidence the PM reviewed after launch. Downstream changes continue separately.
 
 ### Existing records
 
 Existing version-1 lists remain readable. Preview the first edit, then save it to start a version-2 history.
 The new list preserves the exact prior text in `legacy_original`. To recover it, extract that UTF-8 string into a separate file.
-Verify the recovered copy against your private backup before restoring it. Update each client before sharing new lists or signed ship decisions.
+Verify the recovered copy against your private backup before restoring it. Update each client before sharing new lists or launch approvals.
 
-Recheck linked verifications without a recorded task basis. Earlier signed releases retain their original evidence gaps.
+Recheck linked verifications without a recorded task basis. Earlier launch decisions retain their original evidence gaps.
 History starts with known records. External withdrawals need a saved update and source.
 
 ## Use the commands

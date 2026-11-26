@@ -53,6 +53,7 @@ HISTORICAL_GUIDES = {
         "52debca1c0ad41ce800410473bdb3c086a573de6007969e24bb6b8b7b5b721ab",  # 0.4–0.10
     },
     "workspace/README.md": {
+        "6dc26aeece177d56ba256c1f11d0a2a3ec9fecf8566f785b66584fb7402df318",  # 0.11–0.14
         "0b0f605fd0e237e41a23e5d5072d92f6bdebe462bd183c6c05c8d0ae927cd4b8",  # 0.3.0
         "c0966b4c8e9d7d8ca09d1aadbdb8b30bfdc53f9efb93c262a44ddd6be5aeb6f5",  # 0.3.1–0.3.5
         "6849d694f2016e721d65f922fabea90e58a8adcd85f2e07a71b7ed365d96a5cc",  # 0.4.0

@@ -14,7 +14,7 @@ Use the [conversation guide](../../../playbook/conversation.md) when a metric ch
 3. Confirm the cutoff and set `reporting_window` when the definition specifies a fixed basis.
 4. Resolve differences that can change a decision. Confirm the owner, effective date, and approval source.
 5. Preview the definition with `pm.py metric set`. Apply the confirmed change with `--write`.
-6. Use `metric show` to verify the resulting reference. Identify any comparisons or signed targets that need review.
+6. Use `metric show` to verify the resulting reference. Identify any comparisons or approved targets that need review.
 
 Use `company.<metric>` for an official company calculation. Record what-if assumptions under `scenario.<name>` and cite the original revision with `based_on`.
 Link to the registry from working records. Preserve source definitions when reporting third-party figures.
