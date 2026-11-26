@@ -30,7 +30,24 @@ class ReleaseQualificationTests(unittest.TestCase):
         self.head, self.manifest, self.study = "a"*40, "1"*64, "2"*64
         self.repo, self.version = "fixture/oryx", "0.14.0"
         self.expected_pins = dict(zip(qual.PINS, (self.manifest, self.study, "3"*64, "4"*64)))
-        self.report = {"decision": "PASS", "checks": dict.fromkeys(qual.required_gates(), True), "results": {"native": 1}, "failed": [],
+        proof = {host: {"host": host, "candidate": self.head, "matched": True, "runner_sha256": "5"*64,
+                        "capture_sha256": sha256(host.encode()).hexdigest()} for host in ("linux", "macos", "wsl2")}
+        candidate = "oryx-codex-harness"
+        performance = {"codex_budgets_ms":{"first":10, "complete":20}}
+        for group in ("warm", "cold"):
+            performance[f"{group}/turns"] = {"n":100,"median":0,"upper":0}
+            for metric in ("first", "complete"):
+                for percentile in ("p50","p95"):
+                    performance[f"{group}/{metric}/{percentile}"] = {
+                        "n":100, "matched_upper_ratio":1, "native_absolute_upper_ms":2, "subscriber_upper_ratio":1}
+        results = {
+            "shared_core":proof, "performance":performance,
+            "extraction":{f"{candidate}/{f}":{"precision_lower95":.99,"recall_lower95":.99}
+                          for f in ("overall",*qual.FAMILIES)},
+            "comparison":{f:{"lower95":.99,"deficit_lower95":-.04} for f in qual.FAMILIES},
+            "coaching":{f"{candidate}/{w}":{"lower95":.99} for w in qual.WORKFLOWS}}
+        self.report = {"protocol": qual.PROTOCOL, "comparison_mode": qual.COMPARISON_MODE, "decision": "PASS",
+                       "checks": dict.fromkeys(qual.required_gates(), True), "results": results, "failed": [],
                        "candidate": self.head, "manifest_sha256": self.manifest, "registration_sha256": self.study}
         self.data = (json.dumps(self.report) + "\n").encode()
         self.artifact = sha256(self.data).hexdigest()
@@ -67,6 +84,12 @@ class ReleaseQualificationTests(unittest.TestCase):
                 qual.verify(self.section(dict(self.receipt, **{key:val})), *self.expected)
         with self.assertRaises(ValueError):
             qual.verify(self.pr["body"], *self.expected, artifact=sha256(self.data.rstrip()).hexdigest())
+        old = dict(self.receipt, schema="oryx-stakeholder-qualification/v2")
+        del old["protocol"], old["comparison_mode"]
+        old_signature = subprocess.check_output(["openssl", "dgst", "-sha256", "-sign", str(self.signing)],
+                                                input=qual.canonical(old))
+        with patch.object(self, "signature", base64.b64encode(old_signature).decode()), self.assertRaises(ValueError):
+            qual.verify(self.section(old), *self.expected)
         for value in ("PASS", json.dumps(self.report), self.pr["body"]*2):
             with self.assertRaises(ValueError):
                 qual.verify(value, *self.expected)
@@ -100,7 +123,8 @@ class ReleaseQualificationTests(unittest.TestCase):
                 release_review.publication(self.pr, "main", "b"*40, self.api)
 
     def test_scoped_changes_and_fail_closed_shared_diffs(self):
-        for path in ("tools/session_journal.py", "tools/offer_queue.py", "tests/evals/stakeholder_release.py",
+        for path in ("tools/session_journal.py", "tools/offer_queue.py", "tests/test_client_core_parity.py",
+                     "tests/evals/stakeholder_release.py",
                      "tests/evals/stakeholder_statistics.py", ".agents/skills/stakeholder-profiles/SKILL.md"):
             self.assertTrue(qual.affected({"file":{"filename": "moved", "previous_filename":path}}))
         for path in ("README.md","playbook/release.json","tools/metric_registry.py"):
@@ -118,9 +142,11 @@ class ReleaseQualificationTests(unittest.TestCase):
         for folder in (corpus, evidence, scorer):
             folder.mkdir()
         (corpus / "manifest.json").write_text("{}")
-        (evidence / "registration.json").write_text("{}")
+        registration = dict(protocol=qual.PROTOCOL, comparison_mode=qual.COMPARISON_MODE, candidate=self.head)
+        (evidence / "registration.json").write_bytes(qual.canonical(registration))
         (evidence / "observer.json").write_text("captured independently")
-        self.manifest = self.study = sha256(b"{}").hexdigest()
+        self.manifest = sha256(b"{}").hexdigest()
+        self.study = sha256(qual.canonical(registration)).hexdigest()
         self.report.update(manifest_sha256=self.manifest, registration_sha256=self.study)
         for name in qual.SCORER:
             (scorer / name).write_text("")
@@ -186,8 +212,27 @@ class ReleaseQualificationTests(unittest.TestCase):
         self.report["checks"] = expected
         args = (self.head, self.expected_pins, gates)
         self.assertTrue(qual.qualified_report(json.dumps(self.report).encode(), *args))
-        for checks in ({"test": True}, dict(expected, **{"warm/first/p95/relative": False}),
+        for checks in ({"test": True}, dict(expected, **{f"{qual.COMPARISON_MODE}/warm/first/p95/relative": False}),
                        {k:v for k,v in expected.items() if k != "registered-case/current-intent"},
                        {("replaced" if k == "linux/oryx-codex/privacy/revoke" else k):v for k,v in expected.items()}):
             with self.assertRaisesRegex(ValueError, "required named gate"):
                 qual.qualified_report(json.dumps(dict(self.report, checks=checks)).encode(), *args)
+
+    def test_report_cannot_relabel_an_old_study_or_assert_parity_without_captures(self):
+        args = (self.head, self.expected_pins, qual.required_gates())
+        for changes in ({"protocol":"v1"}, {"comparison_mode":"native"}, {"results":{"shared_core":True}},
+                        {"results":{"shared_core":{}}}):
+            with self.subTest(changes=changes), self.assertRaises(ValueError):
+                qual.qualified_report(json.dumps(dict(self.report, **changes)).encode(), *args)
+        proof = self.report["results"]["shared_core"]
+        proof["macos"]["capture_sha256"] = proof["linux"]["capture_sha256"]
+        with self.assertRaisesRegex(ValueError, "own capture"):
+            qual.qualified_report(json.dumps(self.report).encode(), *args)
+
+    def test_signed_scorer_needs_measured_codex_results_even_with_all_boolean_gates(self):
+        args = (self.head, self.expected_pins, qual.required_gates())
+        with self.assertRaisesRegex(ValueError,"Codex measurements"):
+            qual.qualified_report(json.dumps(dict(self.report, results={"shared_core":self.report["results"]["shared_core"]})).encode(), *args)
+        self.report["results"]["performance"]["warm/complete/p95"]["native_absolute_upper_ms"] = 200
+        with self.assertRaisesRegex(ValueError,"Codex measurements"):
+            qual.qualified_report(json.dumps(self.report).encode(), *args)

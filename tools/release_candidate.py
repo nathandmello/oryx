@@ -40,6 +40,9 @@ def needs_native(paths):
         "tools/storage.py", "tools/upgrades.py", "tools/workspace.py", "tools/release_*.py",
         "tools/publish_release.py", "tests/test_alignment.py", "tests/test_filing.py", "tests/test_pm.py",
         "tests/test_repositories.py", "tests/test_release.py", "tests/test_publication.py",
+        "tests/test_client_core_parity.py", "tools/ingestion_signals.py", "tools/stakeholder*.py",
+        "tools/source_evidence.py", "tools/evidence_spans.py", "tools/profile_retrieval.py",
+        ".agents/skills/stakeholder-profiles/*", ".claude/skills/stakeholder-profiles/*",
         "tests/test_layout*.py", "tests/test_*_upgrade.py",
     )
     return any(fnmatchcase(path, pattern) for path in paths for pattern in patterns)

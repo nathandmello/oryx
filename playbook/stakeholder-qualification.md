@@ -1,6 +1,9 @@
 # Qualify a stakeholder release
 
-The study operator freezes the fixtures and registers the study before collecting evidence.
+The operator registers study protocol `oryx-stakeholder-study/v2` and freezes the fixtures before collection.
+Codex generates the model outputs. Independent blinded readers grade them. Both clients must pass shared-code, privacy and integration checks on each supported host.
+Comparative results cover the pinned Codex repository harness. Protected native Codex has separate latency budgets and subscriber controls.
+
 The independent reviewer controls the qualification runner, approved scorer installation, and signing identity. [Study protocol](../tests/evals/stakeholder_release.py)
 
 ## Prepare the independent runner
@@ -16,7 +19,7 @@ python3 -I /review/qualification.py required-gates > /review/scorer/required-gat
 python3 -I /review/qualification.py fingerprint scorer /review/scorer
 ```
 
-Pin this scorer digest before the study. It covers all three modules and the required gate list.
+Pin this scorer digest before the new study. Preserve the previous study and its independent pins. It covers all three modules and the required gate list.
 The evaluator runs in an isolated interpreter with only the pinned modules. It receives neither candidate code nor signing-key arguments.
 
 ## Bind the study and observed evidence
@@ -61,7 +64,8 @@ python3 -I /review/qualification.py attest \
 ```
 
 The command saves the scorer's exact output. It rechecks the captured evidence before signing.
-A verified pass binds the repository, candidate, version, all four pins, and report digest.
+The v3 receipt binds the protocol, comparison mode, repository, candidate, version, all four pins, and report digest.
+The verifier requires the new registration, gate list, and separate parity captures from Linux, macOS and WSL2.
 
 Verify the signed receipt against the private report with the expected values.
 

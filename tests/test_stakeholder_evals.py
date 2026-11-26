@@ -1,10 +1,12 @@
 """Evaluator controls use toy rows. No release fixture or answer is installed with the Hub."""
+from copy import deepcopy
 import json
 from pathlib import Path
 import subprocess
 import sys
 from tempfile import TemporaryDirectory
 import unittest
+from unittest.mock import patch
 
 EVALS = Path(__file__).resolve().parent / "evals"
 sys.path.insert(0, str(EVALS))
@@ -60,7 +62,21 @@ class StakeholderEvaluationTests(unittest.TestCase):
         self.assertAlmostEqual(stats.exact_lower(6,10),.3035372126,places=8)
         self.assertIsNone(stats.bounded_lower([]))
         self.assertLess(stats.bounded_lower([1]*8),.90)
-        self.assertLess(stats.bounded_lower([0]*8,width=2),-.05)
+        self.assertLess(stats.deficit_lower([0]*58),-.05)
+        self.assertGreater(stats.deficit_lower([0]*59),-.05)
+        self.assertGreater(stats.bounded_lower([1]*29),.90)
+        self.assertEqual(stats.deficit_lower([1, 1, 1]), stats.deficit_lower([0, 0, 0]))
+        self.assertLess(stats.deficit_lower([-1, 1, 1]), stats.deficit_lower([0, 0, 0]))
+        self.assertEqual(stats.lower_mean(0, 10), 0)
+        self.assertIsNone(stats.ratio_lower(0, 0, 10, 2))
+        self.assertGreater(stats.ratio_lower(200, 200, 100, 2), .95)
+        self.assertLess(stats.ratio_lower(200, 200, 100, 4), stats.ratio_lower(200, 200, 100, 2))
+        for n in (5, 19, 60):
+            lower = [stats.lower_mean(k/n,n) for k in range(n+1)]
+            self.assertEqual(lower, sorted(lower))
+            for true_mean in (.01,.1,.25,.5,.9,.99):
+                probabilities = stats.binomial_masses(n, true_mean)
+                self.assertLessEqual(sum(p for p,limit in zip(probabilities,lower) if limit > true_mean), .05 + 1e-12)
         self.assertEqual(stats.order_bounds(list(range(1,101)),.95), (90,100))
         self.assertIsNone(stats.order_bounds([1]*8,.95)[1])
 
@@ -89,6 +105,27 @@ class StakeholderEvaluationTests(unittest.TestCase):
             write_rows()
             with self.assertRaisesRegex(ValueError,"breadth"):
                 corpus.freeze(source,root/"thin")
+
+    def test_public_discussion_provenance_stays_private_and_cannot_inflate_sample(self):
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            rows = toy_corpus()
+            provenance = dict(kind="public", url="https://example.org/minutes", license="CC BY 4.0",
+                              discussion_id="meeting-one")
+            rows[0]["provenance"] = provenance
+            rows[2]["provenance"] = dict(provenance, url="https://example.org/minutes/mirror")
+            source = root/"rows"
+            source.write_text("".join(json.dumps(x)+"\n" for x in rows))
+            with self.assertRaisesRegex(ValueError, "one independent original"):
+                corpus.freeze(source,root/"bad")
+            del rows[2]["provenance"]
+            source.write_text("".join(json.dumps(x)+"\n" for x in rows))
+            frozen = root/"frozen"
+            pin = corpus.freeze(source, frozen)
+            self.assertEqual(corpus.load_manifest(frozen,pin)[rows[0]["id"]]["provenance"], provenance)
+            out = root/"packet"
+            corpus.packet(frozen,pin,rows[0]["id"],out)
+            self.assertFalse(any(b"discussion_id" in file.read_bytes() for file in out.iterdir()))
 
     def test_filesystem_effects_include_ignored_hidden_and_link_changes(self):
         with TemporaryDirectory() as temp:
@@ -190,12 +227,115 @@ class StakeholderEvaluationTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError,"positive source"):
                 gate.audit_trial(root,run,verdict,key,{},"unit",500,source)
 
+    def test_independent_shared_core_captures_check_both_dispatch_paths_and_effects(self):
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            def save(name, record):
+                raw = corpus.data(record)
+                (root/name).write_bytes(raw)
+                return {"path":name, "sha256":corpus.digest(raw)}
+            paths = sorted(f"{path}:{name}" for path,names in gate.PARITY_FUNCTIONS.items() for name in names)
+            digests = {path:corpus.digest(path.encode()) for path in (*gate.PARITY_FUNCTIONS,
+                       ".agents/skills/stakeholder-profiles/SKILL.md")}
+            effects = dict(preview_writes=0, rejected_approval_writes=0, accepted_records=1, replay_added=0,
+                           named_recall=True, refusal_excluded=True, record_sha256="d"*64)
+            run = {"paths":paths, "effects":effects}
+            reg = dict(candidate="a"*40, parity_runner_sha256="e"*64, parity_source_hashes=digests)
+            raw = dict(protocol="oryx-shared-core/1", host="linux", candidate=reg["candidate"], same_core=True,
+                       source_hashes=digests, clients={client:deepcopy(run) for client in ("codex","claude")})
+            trace = save("launch", {"observed":"independently recorded test invocation"})
+            review = {"evidence":trace,"critical":[],"result":"pass"}
+            def score(row):
+                capture = dict(report=save("capture",row), launch=trace, runner_sha256=reg["parity_runner_sha256"])
+                return gate.shared_core(root, "linux", reg, capture, review, {})["matched"]
+            self.assertTrue(score(raw))
+            with self.assertRaises(ValueError):
+                score(dict(raw, clients={"codex":run}))
+            with self.assertRaises(ValueError):
+                score(dict(raw, host="macos"))
+            with self.assertRaises(ValueError):
+                score(dict(raw, source_hashes={}))
+            for field, bad in (("refusal_excluded",False), ("accepted_records",True), ("record_sha256","f"*64)):
+                altered = deepcopy(raw)
+                altered["clients"]["claude"]["effects"][field] = bad
+                self.assertFalse(score(altered))
+            for client in ("claude","codex"):
+                raw["clients"][client]["paths"] = ["tools/hook.py:main"]
+            self.assertFalse(score(raw))
+
+    def test_registration_requires_matching_harness_and_native_control(self):
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root/"harness").write_bytes(b"common pinned script")
+            harness = {"path":"harness","sha256":corpus.digest((root/"harness").read_bytes())}
+            candidate, reference = "a"*40, gate.REFERENCE
+            base = dict(client="codex",client_version="1",model="test",model_revision="1",tools=["pm"],
+                        settings={"temperature":0},revision=candidate)
+            arms = {arm:dict(base, mode=gate.COMPARISON_MODE, harness_sha256=harness["sha256"],
+                             revision=reference if arm==gate.ARMS[1] else candidate) for arm in gate.ARMS}
+            arms.update({arm:dict(base, mode="protected-native", subscriber=arm==gate.NATIVE)
+                         for arm in (gate.NATIVE,gate.CONTROL)})
+            adapters = {arm:{"client":arm.removeprefix("oryx-"),"client_version":"1","hooks_sha256":"a"*64,
+                             "revision":candidate} for arm in gate.CLIENTS}
+            reg = dict(setups=arms,harness=harness,client_adapters=adapters,candidate=candidate,reference=reference)
+            gate.validate_setups(root, reg)
+            for arm, change in ((gate.ARMS[0],{"mode":"protected-native"}), (gate.ARMS[1],{"model_revision":"2"}),
+                                (gate.CONTROL,{"subscriber":True}), (gate.NATIVE,{"settings":{}})):
+                bad = deepcopy(reg)
+                bad["setups"][arm].update(change)
+                with self.assertRaises(ValueError):
+                    gate.validate_setups(root, bad)
+            with self.assertRaisesRegex(ValueError, "new v2"):
+                gate.registration(root, {"protocol":"old"}, "a"*64)
+
+    def test_semantic_gates_cluster_repeats_and_compare_only_matched_codex_trials(self):
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            source = root/"toy"
+            source.write_bytes(b"arithmetic fixture")
+            cases, keys, runs, grades = {}, {}, {}, {}
+            setups = {arm:{"mode":gate.COMPARISON_MODE, "arm":arm} for arm in gate.ARMS}
+            reg = dict(repeats=3, per_artifact_claim_cap=1, timeout_ms=20, setups=setups,
+                       consequential_dimensions=dict.fromkeys(gate.WORKFLOWS, gate.DIMENSIONS))
+            for family in corpus.FAMILIES:
+                for i in range(60):
+                    case = f"{family}-{i:02d}"
+                    cases[case] = dict(split="heldout", origin=case, family=family,
+                                       workflow=gate.WORKFLOWS[i%len(gate.WORKFLOWS)],
+                                       files={"source.txt":"s","request.txt":"p","seed.json":"k"})
+                    keys[case] = dict(required=[{"id":"A"}], permissible=[], negative=False)
+            for index,case in enumerate(sorted(cases)):
+                for iteration in range(reg["repeats"]):
+                    for j,arm in enumerate(gate.ARMS):
+                        name = f"{case}/{arm}/{iteration}"
+                        runs[name] = dict(session=name, submitted_utc_ms=100 + ((index+iteration+j)%2),
+                                          setup=setups[arm],case_files="s",request_sha256="p",seed_sha256="k")
+                        grades[name] = dict(findings=[finding("A")],rubric=dict.fromkeys(gate.DIMENSIONS,"pass"))
+            def score():
+                checks = {}
+                with patch.object(gate,"audit_trial",return_value={}), patch.object(gate,"verified_file",return_value=source):
+                    results = gate.semantic(root,cases,keys,runs,grades,reg,checks,root)
+                return results, checks
+            results, checks = score()
+            self.assertTrue(all(checks.values()))
+            self.assertEqual(results["extraction"][f"{gate.ARMS[0]}/overall"]["independent"], 360)
+            self.assertEqual(results["comparison"]["reuse"]["independent"], 60)
+            self.assertFalse(any("claude" in name for name in checks))
+            for name, grade in grades.items():
+                if name.startswith("reuse-") and gate.ARMS[0] in name:
+                    grade["findings"] = [finding("unsupported", supported=False)]
+                    grade["rubric"]["evidence"] = "fail"
+            _, checks = score()
+            self.assertFalse(checks[f"{gate.ARMS[0]}/reuse/precision"])
+            self.assertFalse(checks[f"{gate.COMPARISON_MODE}/reuse/agreement"])
+            self.assertFalse(checks[f"{gate.ARMS[0]}/draft/coaching"])
+
     def test_timing_gates_reject_empty_schedules_and_reused_sessions(self):
         with TemporaryDirectory() as temp:
             root = Path(temp)
             with self.assertRaisesRegex(ValueError,"Insufficient matched"):
                 gate.performance(root,{"timing_schedule":{}},{},{},{})
-            reg = {"timing_schedule":{"one":{"arm":"oryx-codex","stratum":"cold","original":"A"}}}
+            reg = {"timing_schedule":{"one":{"arm":gate.NATIVE,"stratum":"cold","original":"A"}}}
             run = {"session":"two","condition":reg["timing_schedule"]["one"]}
             with self.assertRaisesRegex(ValueError,"assignment"):
                 gate.performance(root,reg,{"one":run},{"one":{}},{})
@@ -209,13 +349,13 @@ class StakeholderEvaluationTests(unittest.TestCase):
                 return {"path":name, "sha256":corpus.digest(raw)}
             schedule, runs, grades = {}, {}, {}
             trace = save("dummy-trace",b"toy evidence for arithmetic checks only")
-            setups = {a:{"test":a} for a in (*gate.ARMS,"oryx-codex-off")}
+            setups = {a:{"test":a} for a in gate.TIMING_ARMS}
             for group in ("warm","cold"):
                 for i in range(100):
                     source = save(f"source-{group}-{i}",f"unit {group} {i}".encode())
                     for arm in setups:
                         sid = f"{group}-{i}-{arm}"
-                        design = dict(arm=arm,stratum=group,original=str(i),source_sha256=source["sha256"])
+                        design = dict(arm=arm,stratum=group,original=str(i),source_sha256=source["sha256"],negative=False)
                         events = [{"kind":"submitted","ms":5,"session":sid,"source_sha256":source["sha256"]},
                                   {"kind":"model-start","ms":6},{"kind":"reply","ms":9,"text":"test finding"},
                                   {"kind":"model-end","ms":11},{"kind":"common-complete","ms":12},
@@ -232,7 +372,12 @@ class StakeholderEvaluationTests(unittest.TestCase):
             self.assertEqual(result["warm/complete/p95"]["matched_upper_ratio"],1)
             registration["codex_budgets_ms"]["complete"] = 7
             gate.performance(root,registration,runs,grades,checks)
-            self.assertFalse(checks["cold/complete/p95/absolute"])
+            self.assertFalse(checks[f"{gate.NATIVE}/cold/complete/p95/absolute"])
+            sid = next(iter(grades))
+            grades[sid]["useful_basis"]["kind"] = "correct-abstention"
+            with self.assertRaisesRegex(ValueError, "positive source"):
+                gate.performance(root,registration,runs,grades,{})
+            grades[sid]["useful_basis"]["kind"] = "grounded"
             a,b = list(runs)[:2]
             runs[b]["events"] = runs[a]["events"]
             with self.assertRaisesRegex(ValueError,"Replayed"):

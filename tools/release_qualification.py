@@ -6,6 +6,7 @@ import binascii
 from fnmatch import fnmatchcase
 from hashlib import sha256
 import json
+from math import isfinite
 import os
 from pathlib import Path
 import re
@@ -18,7 +19,11 @@ DIGEST = re.compile(r"[a-f0-9]{64}")
 VERSION = re.compile(r"(?:0|[1-9]\d*)(?:\.(?:0|[1-9]\d*)){2}", re.ASCII)
 REPO = re.compile(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+")
 TITLE = "Stakeholder qualification"
+PROTOCOL = "oryx-stakeholder-study/v2"
+COMPARISON_MODE = "matched-codex-repo-harness"
 SCORER = ("stakeholder_release.py", "stakeholder_statistics.py", "stakeholder_corpus.py")
+FAMILIES = ("preferences", "decisions", "attribution", "identity", "boundaries", "reuse")
+WORKFLOWS = ("setup", "update", "conversation", "draft", "rehearsal")
 PINS = ("manifest_sha256", "registration_sha256", "scorer_sha256", "evidence_sha256")
 # This contract belongs to the independent reviewer. A scorer cannot rename its own obligations.
 INTEGRATION = {
@@ -33,20 +38,23 @@ INTEGRATION = {
 
 def required_gates():
     arms = ("oryx-codex", "oryx-claude")
-    families = ("preferences", "decisions", "attribution", "identity", "boundaries", "reuse")
     gates = {f"{host}/{arm}/{group}/{test}" for host in ("linux", "macos", "wsl2") for arm in arms
              for group, tests in INTEGRATION.items() for test in tests.split()}
-    gates.update(f"{arm}/known-answer" for arm in (*arms, "ref-claude"))
-    gates.update(f"{arm}/{family}/{measure}" for arm in arms for family in ("overall", *families)
+    candidate = "oryx-codex-harness"
+    native = "oryx-codex-native"
+    gates.update(f"{host}/shared-core/both-clients" for host in ("linux", "macos", "wsl2"))
+    gates.update(f"{arm}/known-answer" for arm in (candidate, "ref-codex-harness", native))
+    gates.update(f"{candidate}/{family}/{measure}" for family in ("overall", *FAMILIES)
                  for measure in ("precision", "recall"))
-    gates.update(f"{arm}/{workflow}/coaching" for arm in arms
-                 for workflow in ("setup", "update", "conversation", "draft", "rehearsal"))
-    gates.update(f"{family}/agreement" for family in families)
+    gates.update(f"{candidate}/{workflow}/coaching"
+                 for workflow in WORKFLOWS)
+    gates.update(f"{COMPARISON_MODE}/{family}/agreement" for family in FAMILIES)
     for group in ("warm", "cold"):
-        gates.add(group + "/turns")
+        gates.add(f"{COMPARISON_MODE}/{group}/turns")
         for metric in ("first", "complete"):
-            gates.add(f"{group}/{metric}/p50/relative")
-            gates.update(f"{group}/{metric}/p95/{rule}" for rule in ("relative", "absolute", "subscriber"))
+            for percentile in ("p50", "p95"):
+                gates.add(f"{COMPARISON_MODE}/{group}/{metric}/{percentile}/relative")
+            gates.update(f"{native}/{group}/{metric}/p95/{rule}" for rule in ("absolute", "subscriber"))
     return gates
 FEATURE = (
     "tools/stakeholder*.py", "tools/profile_retrieval.py", "tools/onboarding_profile_step.py",
@@ -54,7 +62,7 @@ FEATURE = (
     "tools/*handoff*.py", "tools/session_journal.py", "tools/journal_*.py", "tools/context_advice.py",
     "tools/turn_intent.py", "tools/release_qualification.py", "tests/evals/stakeholder*",
     "tests/test_stakeholder*.py", "tests/test_profile_onboarding.py", "tests/test_profile_retrieval.py", "tests/test_profile_suggestions.py",
-    "tests/test_profile_session_hooks.py", "tests/test_ingestion*.py", "tests/test_offer*.py",
+    "tests/test_client_core_parity.py", "tests/test_profile_session_hooks.py", "tests/test_ingestion*.py", "tests/test_offer*.py",
     "tests/test_session_journal.py", "tests/test_context_advice.py", "tests/test_release_qualification.py",
     "playbook/stakeholder*.md", "playbook/ingestion.md", "playbook/handoffs.md", "playbook/context-advice.md",
     "playbook/session-continuity.md", "templates/stakeholder*.md", ".agents/skills/stakeholder-profiles/*",
@@ -114,22 +122,85 @@ def canonical(receipt):
 def claims(repo, head, version, pins, artifact):
     if set(pins) != set(PINS):
         raise ValueError("Register the fixture, study, trusted scorer and captured evidence pins")
-    return {"schema": "oryx-stakeholder-qualification/v2", "decision": "PASS",
+    return {"schema": "oryx-stakeholder-qualification/v3", "protocol": PROTOCOL,
+            "comparison_mode": COMPARISON_MODE, "decision": "PASS",
             "repository": expect(REPO, repo, "repository"), "candidate": expect(SHA, head, "candidate"),
             "version": expect(VERSION, version, "release version"),
             **{key: expect(DIGEST, pins[key], key) for key in PINS},
             "artifact_sha256": expect(DIGEST, artifact, "artifact")}
 
 
+def measurements(results):
+    """Check the independent scorer supplied the numerical results behind its release claims."""
+    def number(row, key, low, high):
+        value = row.get(key)
+        return type(value) in (int, float) and isfinite(value) and low <= value <= high
+
+    candidate = "oryx-codex-harness"
+    extraction = results["extraction"]
+    for family in ("overall", *FAMILIES):
+        row = extraction[f"{candidate}/{family}"]
+        p, r = (.95, .90) if family == "overall" else (.90, .85)
+        if not (number(row, "precision_lower95", p, 1) and number(row, "recall_lower95", r, 1)):
+            return False
+    for family in FAMILIES:
+        row = results["comparison"][family]
+        if not (number(row, "lower95", .90, 1) and number(row, "deficit_lower95", -.05, 1)):
+            return False
+    for workflow in WORKFLOWS:
+        if not number(results["coaching"][f"{candidate}/{workflow}"], "lower95", .90, 1):
+            return False
+    perf = results["performance"]
+    for group in ("warm", "cold"):
+        turns = perf[f"{group}/turns"]
+        if not (number(turns, "median", float("-inf"), 1) and number(turns, "upper", float("-inf"), 1)):
+            return False
+        for metric in ("first", "complete"):
+            budget = perf["codex_budgets_ms"][metric]
+            if not number(perf["codex_budgets_ms"], metric, 0, float("inf")) or budget <= 0:
+                return False
+            for percentile in ("p50", "p95"):
+                row = perf[f"{group}/{metric}/{percentile}"]
+                if (type(row["n"]) is not int or row["n"] < 100
+                        or not number(row, "matched_upper_ratio", 0, 1.2) or row["matched_upper_ratio"] <= 0):
+                    return False
+                if percentile == "p95" and not (number(row, "native_absolute_upper_ms", 0, budget)
+                        and row["native_absolute_upper_ms"] > 0 and number(row, "subscriber_upper_ratio", 0, 1.1)
+                        and row["subscriber_upper_ratio"] > 0):
+                    return False
+    return True
+
+
 def qualified_report(data, head, pins, gates):
     report = read_json(data)
     if (not isinstance(report, dict) or report.get("decision") != "PASS" or report.get("failed") != []
+            or report.get("protocol") != PROTOCOL or report.get("comparison_mode") != COMPARISON_MODE
             or report.get("candidate") != head or report.get("manifest_sha256") != pins["manifest_sha256"]
             or report.get("registration_sha256") != pins["registration_sha256"]
             or not isinstance(report.get("checks"), dict) or not required_gates() <= gates <= report["checks"].keys()
             or any(value is not True for value in report["checks"].values())
             or not isinstance(report.get("results"), dict) or not report["results"]):
         raise ValueError("The pinned evaluator must report PASS on every required named gate for this candidate and study")
+    parity = report["results"].get("shared_core")
+    hosts = {"linux", "macos", "wsl2"}
+    if not isinstance(parity, dict) or set(parity) != hosts:
+        raise ValueError("Require a separate shared-core capture from each supported host")
+    captures = set()
+    runners = set()
+    for host, row in parity.items():
+        if (not isinstance(row, dict) or row.get("host") != host
+                or row.get("candidate") != head or row.get("matched") is not True):
+            raise ValueError("Unverified client parity in reviewer report")
+        captures.add(expect(DIGEST, row.get("capture_sha256"), "shared-core capture"))
+        runners.add(expect(DIGEST, row.get("runner_sha256"), "shared-core runner"))
+    if len(captures) != len(hosts) or len(runners) != 1:
+        raise ValueError("Each host must supply its own capture from the registered parity runner")
+    try:
+        valid = measurements(report["results"])
+    except (KeyError, TypeError, AttributeError, OverflowError):
+        valid = False
+    if not valid:
+        raise ValueError("Incomplete or failing Codex measurements in reviewer report")
     return sha256(data).hexdigest()
 
 
@@ -268,6 +339,10 @@ def attest(args):
     if (sha256(private_path(frozen / "manifest.json").read_bytes()).hexdigest() != pins["manifest_sha256"] or
             sha256((evidence / "registration.json").read_bytes()).hexdigest() != pins["registration_sha256"]):
         raise ValueError("The frozen fixture or study registration differs from its protected pin")
+    registration = read_json((evidence / "registration.json").read_bytes())
+    if (registration.get("protocol") != PROTOCOL or registration.get("comparison_mode") != COMPARISON_MODE
+            or registration.get("candidate") != args.head):
+        raise ValueError("Use fresh study registration pins for this protocol, comparison mode and reviewed head")
     process = score(bundle, frozen, evidence, pins)
     with os.fdopen(os.open(report, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600), "wb") as target:
         target.write(process.stdout)

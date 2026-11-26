@@ -46,7 +46,7 @@ Start with the title, meeting date, duration, and permitted participant informat
 | Group | What to capture |
 | --- | --- |
 | Topics discussed | One to three sentences per topic. Preserve chronology where it helps. |
-| Decisions | State explicit outcomes, scope, authority, and rationale. Label proposals as proposals. |
+| Decisions | State explicit outcomes, scope, authority, and rationale. Carry forward timing windows and exceptions as agreed. Label proposals as proposals. |
 | Action items | Record the action, owner, and due date. Use Unassigned or Unspecified for missing details. |
 | Open questions | Capture unresolved issues and deferred decisions. |
 | Key quotes | Include brief, permitted verbatim quotes when the wording matters. |

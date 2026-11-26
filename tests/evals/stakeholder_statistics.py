@@ -1,6 +1,6 @@
 """Descriptive counts and conservative one-sided bounds for the stakeholder study."""
 from collections import Counter
-from math import exp, fsum, lgamma, log, log1p, sqrt
+from math import exp, fsum, lgamma, log, log1p
 from statistics import mean
 
 
@@ -63,9 +63,48 @@ def exact_lower(successes, n, alpha=.05):
     return lo
 
 
-def bounded_lower(values, width=1, alpha=.05):
-    """One-sided Hoeffding bound on independent artifact-level means (paired differences span 2)."""
-    return mean(values) - width * sqrt(log(1/alpha) / (2 * len(values))) if values else None
+def lower_mean(sample_mean, n, alpha=.05):
+    """Invert the one-sided Chernoff bound for n independent [0, 1] observations."""
+    if not 0 <= sample_mean <= 1 or n < 1 or not 0 < alpha < 1:
+        raise ValueError("Invalid bounded sample")
+    if sample_mean == 0:
+        return 0.0
+    if sample_mean == 1:
+        return alpha ** (1 / n)
+    limit = -log(alpha) / n
+    low, high = 0.0, sample_mean
+    for _ in range(55):
+        p = (low + high) / 2
+        divergence = (sample_mean * log(sample_mean / p)
+                      + (1 - sample_mean) * (log1p(-sample_mean) - log1p(-p)))
+        if divergence > limit:
+            low = p
+        else:
+            high = p
+    return low
+
+
+def bounded_lower(values):
+    return lower_mean(mean(values), len(values)) if values else None
+
+
+def deficit_lower(differences):
+    """E[difference] >= -E[max(0, -difference)]. Each original contributes one value."""
+    if not differences:
+        return None
+    nonloss = [1 - max(0, -value) for value in differences]
+    return bounded_lower(nonloss) - 1
+
+
+def ratio_lower(numerator, denominator, n, cap):
+    """Bonferroni upper error and lower denominator bounds for a pooled source-truth ratio."""
+    if not denominator or not n:
+        return None
+    total_cap = n * cap
+    error_rate = (denominator - numerator) / total_cap
+    upper_errors = 1 - lower_mean(1 - error_rate, n, .025)
+    lower_denominator = lower_mean(denominator / total_cap, n, .025)
+    return max(0, 1 - upper_errors / lower_denominator) if lower_denominator else 0.0
 
 
 def order_bounds(values, quantile, alpha=.025):

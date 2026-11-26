@@ -1,4 +1,4 @@
-"""Freeze original synthetic materials, deliver clean packets and capture observable file effects."""
+"""Freeze stakeholder study materials, deliver clean packets and capture observable file effects."""
 import argparse
 import hashlib
 from collections import Counter
@@ -51,6 +51,7 @@ def freeze(corpus, directory):
     require(len(set(ids)) == len(ids) and all(IDENT.fullmatch(i) for i in ids), "Duplicate or invalid ID")
     origins = {x["id"]: x for x in rows if x["origin"] == x["id"]}
     sources = set()
+    discussions = {}
     for row in rows:
         require(row["origin"] in origins and row["family"] in FAMILIES, "Unknown family or original")
         original = origins[row["origin"]]
@@ -60,6 +61,17 @@ def freeze(corpus, directory):
         require(row["source"].strip() and row["prompt"].strip() and row["source"] not in sources,
                 "Missing or repeated source")
         sources.add(row["source"])
+        provenance = row.get("provenance")
+        if provenance is not None or original.get("provenance") is not None:
+            require(isinstance(provenance, dict) and provenance.get("kind") == "public"
+                    and all(isinstance(provenance.get(k), str) and provenance[k].strip()
+                            for k in ("url", "license", "discussion_id"))
+                    and provenance["url"].startswith("https://"), "Missing public-source rights or provenance")
+            require(provenance["discussion_id"] == (original.get("provenance") or {}).get("discussion_id"),
+                    "Public variants must retain the original discussion")
+            for identifier in (("discussion", provenance["discussion_id"]), ("source", provenance["url"])):
+                require(discussions.setdefault(identifier, row["origin"]) == row["origin"],
+                        "A public discussion can count as only one independent original")
         key = row["key"]
         require(isinstance(key["negative"], bool) and
                 (all(item.get("durable") is False for item in key["required"]) if key["negative"] else key["required"]),
@@ -87,6 +99,8 @@ def freeze(corpus, directory):
             hashes[name] = digest(value)
         manifest["cases"][row["id"]] = {field:row[field] for field in ("split","family","origin","format","workflow")}
         manifest["cases"][row["id"]].update(files=hashes, transformation=row.get("transform_expectation"))
+        if row.get("provenance"):
+            manifest["cases"][row["id"]]["provenance"] = row["provenance"]
     raw = data(manifest)
     (directory/"manifest.json").write_bytes(raw)
     return digest(raw)

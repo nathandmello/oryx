@@ -8,7 +8,13 @@ import re
 
 NAME = r"[^\W\d_][\w’'\-]*(?: [^\W\d_][\w’'\-]*){0,3}"
 TIME = r"(?:\d{1,2}:)?\d{1,2}:\d{2}(?:\.\d{1,3})?"
-LABEL = re.compile(rf"^\s*(?:[-*>]\s+)?(?:\[?(?:(?P<day>\d{{4}}-\d{{2}}-\d{{2}})[ T])?(?P<at>{TIME})\]?\s+)?(?P<person>{NAME})"
+# Some transcript exports append a role to the speaker label. Recognize professional
+# role words only. Free-form parentheses can instead attribute the words to someone else.
+ROLE_TERM = (r"(?:design(?:er)?|product|research(?:er)?|eng(?:ineer(?:ing)?)?|operations?|ops|"
+             r"sales|service|finance|legal|support|manager|lead|director|staff|senior|"
+             r"chair|secretary|facilitator|editor|observer|coordinator|owner|PM|VP|UX)")
+ROLE = rf"(?:[ \t]+\((?i:{ROLE_TERM}(?:[ -]{ROLE_TERM}){{0,3}})\))?"
+LABEL = re.compile(rf"^\s*(?:[-*>]\s+)?(?:\[?(?:(?P<day>\d{{4}}-\d{{2}}-\d{{2}})[ T])?(?P<at>{TIME})\]?\s+)?(?P<person>{NAME}){ROLE}"
                    rf"(?:\s+\[?(?P<after>{TIME})\]?)?\s*:\s*(?P<body>\S.*)$")
 QUOTED = re.compile(rf'^\s*(?P<person>{NAME}) (?:said|wrote|asked|replied),?\s+["“](?P<body>.+?)["”][.]?\s*$')
 REPORT = re.compile(rf"^\s*(?:[-*]\s+)?(?P<person>{NAME}) (?P<report>(?:"

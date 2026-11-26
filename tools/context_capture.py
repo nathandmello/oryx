@@ -744,6 +744,19 @@ def route(payload, private, remit=None, *, single_excerpt=False, descriptive_int
             if scope != "product" or "product_area" not in entry:
                 raise ValueError("Choose a product and its confirmed area before naming an area group")
             layout.area(entry.get("product"), entry["product_area"], entry["area_group"])
+        deferred_initiative = None
+        if scope == "initiative" and entry.get("product") is None:
+            deferred_initiative = layout.slug(entry.get("initiative"))
+            allowed = {"scope", "product", "initiative", "topic", "source", "location", "quote", "interpretation", "affects"}
+            if entry.keys() - allowed:
+                raise ValueError("Confirm the owning product before proposing changes to this initiative.")
+            if "topic" in entry and line(entry["topic"], "Topic") not in TOPICS["initiative"]:
+                raise ValueError("Use a supported brief topic for initiative scope")
+            # Until the owning product is known, the passage can be reviewed at its source.
+            # Use the same source and commitment checks as an explicitly deferred excerpt.
+            scope = "unclear"
+            entry = {k: v for k, v in entry.items() if k not in {"product", "initiative", "topic"}}
+            entry["scope"] = scope
         canonical, subject = None, None
         if scope == "product":
             canonical = product_path(entry.get("product"))
@@ -855,6 +868,9 @@ def route(payload, private, remit=None, *, single_excerpt=False, descriptive_int
             revision = decision_review(entry, destination, evidence)
             validate_decision_approval(entry, revision, evidence["checked_on"])
             entry = dict(entry, decision_revision=revision)
+        if deferred_initiative is not None:
+            entry = dict(entry, pending_initiative=deferred_initiative,
+                         follow_up="Confirm which product owns this initiative before filing the excerpt.")
         entries.append(dict(entry, destination=destination, section=section, disposition=disposition,
                             relevance=attention, responsibilities=responsibilities))
     originals = upgrades.source_paths(private)

@@ -85,6 +85,44 @@ class IngestionEvidenceTests(unittest.TestCase):
         self.assertEqual(found["excerpt"], self.line)
         self.assertEqual(found["evidence"], offer["evidence"])
 
+    def test_role_annotation_preserves_the_named_speaker_and_entire_passage(self):
+        line = "09:01 Inez Vale (design): I need three options for roadmap reviews."
+        self.transcript(line)
+        result = self.cli(["ingestion", "assess"], {"source": self.source(), "moment": "pause",
+                          "observations": {"stakeholder-profile": [
+                              {"person": "Inez Vale", "excerpt": "I need three options for roadmap reviews."}]}})
+        offer = result["selection"]
+        self.assertEqual((offer["person"], offer["excerpt"]), ("Inez Vale", line))
+        change = dict(self.as_change(offer), id="inez", name="Inez Vale", role="Designer")
+        review = self.cli(["stakeholder-profile", "preview"], change)
+        saved = self.cli(["stakeholder-profile", "accept"], {"review": review, "approved_wording": change["wording"]})
+        self.assertTrue(saved["written"])
+        self.transcript(line.replace("(design)", "(quoting Dara Cole)"))
+        ambiguous = self.cli(["ingestion", "assess"], {"source": self.source(), "moment": "busy",
+                             "observations": {"stakeholder-profile": [{"person": "Inez Vale",
+                                                                       "excerpt": "I need three options for roadmap reviews."}]}})
+        self.assertEqual(ambiguous["consumers"]["stakeholder-profile"]["unsupported_rows"], 1)
+        self.assertNotIn("selection", ambiguous)
+
+    def test_unresolved_initiative_parent_preserves_the_source_and_defers_filing(self):
+        quote = "Nia may approve copies for the trial week."
+        source = {"reference": "Fictional review", "date": "unknown", "checked_on": "2025-11-25",
+                  "coverage": "read", "text": quote}
+        entry = {"scope": "initiative", "initiative": "checkout-notes", "topic": "decisions",
+                 "source": 1, "location": "sentence 1", "quote": quote}
+        target = self.work / "context/initiatives/checkout-notes/overview.md"
+        payload = {"sources": [source], "entries": [entry]}
+        deferred = self.cli(["route-context"], payload)["entries"][0]
+        self.assertEqual((deferred["disposition"], deferred["destination"], deferred["quote"]),
+                         ("deferred", None, quote))
+        self.assertEqual(deferred["pending_initiative"], "checkout-notes")
+        self.assertIn("product", deferred["follow_up"])
+        self.assertFalse(target.exists())
+        protected = dict(entry, record={"path": "context/initiatives/checkout-notes/overview.md"})
+        message = self.cli(["route-context"], {**payload, "entries": [protected]}, ok=False)
+        self.assertIn("owning product", message)
+        self.assertFalse(target.exists())
+
     def test_accept_rechecks_current_bytes_revision_and_explicit_revocation(self):
         path = self.transcript()
         source = self.source(revision="v1")

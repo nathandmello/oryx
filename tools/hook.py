@@ -83,6 +83,7 @@ CONVERSATION_GUIDANCE = (
     "Keep source access, acceptance of wording, "
     "and explicit confirmation of a specific product decision distinct. Offer feedback and alternatives. "
     "The PM owns the choice. Preserve source, date, scope, attribution and uncertainty when reusing claims. "
+    "Keep timing as precise as the source permits. When a calendar entry needs an exact time, ask the PM to choose it. "
     "When the PM brings new company learning, offer to review it. Check pm.py company-onboarding status. "
     "Use unresolved_company_questions to qualify the answer. Offer follow-up on the agreed cue or at the PM’s request. "
     "For role questions or requested coaching, use pm.py pm-profile --topic with the relevant topic. Ask before reading a broader mixed section. "
