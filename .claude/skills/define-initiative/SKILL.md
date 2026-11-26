@@ -18,6 +18,6 @@ Use the [conversation guide](../../../playbook/conversation.md) to compare credi
 7. Inspect the metric's existing experiment or linked draft with `initiative show`. Keep unknown test details empty.
 8. Apply [the brief-review checks](../../../playbook/brief-review.md). Resolve gaps that block approval or return them to the PM.
 9. Review the wording with the PM. After acceptance, mark the brief complete and use `initiative propose` for `approve-initiative`.
-10. Hand the exact brief revision to the PM. Wait for the signed change before treating the work as a candidate.
+10. Hand the exact brief revision to the PM. Wait for their approval before treating the work as a candidate.
 
 Reopen for material changes. Keep approved source references and historical decisions visible.

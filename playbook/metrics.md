@@ -71,7 +71,7 @@ When changing `period` on a fixed definition, confirm `reporting_window` again. 
 ## Use the same definition
 
 - For `check-metric`, pass the `metric` ID and `product` when applicable. Each observation needs the registry reference and population effective on its last included day. Use a currency code in observation units, such as `USD/month` for `currency/month`. Use `as_of` when looking up the definition if an observation date is missing. The checker flags a revision change between periods. Verify and document a restatement on a common definition before comparing those periods.
-- For a signed initiative metric, propose `{"type":"metric","metric":"logo-churn"}`. The proposal captures the effective definition and its revision.
-- Give qualified definitions a local signing ID. For example, propose `{"type":"metric","metric":"reported-sales","registry_metric":"company.revenue"}`.
-- If an initiative needs a revised definition, use a new local metric ID. For example, add `"registry_metric":"logo-churn"` to a proposal with `"metric":"logo-churn-v2"`. Existing signed records still explain how earlier outcomes were measured.
-- A legacy signed metric can adopt the same workflow when its name or ID matches the registry. Keep previously signed targets and outcomes on their historical definition. Use the new ID for new targets.
+- To register an initiative metric, propose `{"type":"metric","metric":"logo-churn"}`. The proposal captures the effective definition and its revision.
+- Give qualified definitions a local metric ID. For example, propose `{"type":"metric","metric":"reported-sales","registry_metric":"company.revenue"}`.
+- If an initiative needs a revised definition, use a new local metric ID. For example, add `"registry_metric":"logo-churn"` to a proposal with `"metric":"logo-churn-v2"`. Existing records still explain how earlier outcomes were measured.
+- An older registered metric can adopt the same workflow when its name or ID matches the registry. Keep previously approved targets and outcomes on their historical definition. Use the new ID for new targets.

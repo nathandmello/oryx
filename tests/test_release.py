@@ -132,7 +132,7 @@ class BackupTests(unittest.TestCase):
 class ReleaseReviewTests(unittest.TestCase):
     def setUp(self):
         self.head, self.merge = "a" * 40, "b" * 40
-        self.pr = {"head": {"sha": self.head}, "base": {"ref": "main"}, "merged": True, "number": 9,
+        self.pr = {"changed_files": 0, "head": {"sha": self.head}, "base": {"ref": "main"}, "merged": True, "number": 9,
                    "merge_commit_sha": self.merge, "body": """## Consumer impact and recovery
 Verified fresh setup and rollback.
 ## Verification limits

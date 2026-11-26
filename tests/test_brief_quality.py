@@ -1,9 +1,7 @@
 """Verify fresh narrative reviews and compatibility with earlier signed approvals."""
 
 import json
-import os
 import unittest
-from unittest.mock import patch
 
 import test_opportunities
 import opportunities
@@ -87,9 +85,7 @@ class BriefReviewTests(unittest.TestCase):
         old_approval = next(e for e in envelope["record"]["events"] if e.get("action") == "approve-initiative")
         old_approval["references"] = pm.initiative_store.doc_reference(
             h.root, h.brief, "initiative-brief", initiative=h.i)
-        with patch.dict(os.environ, h.env):
-            envelope["signature"] = pm.initiative_store.sign(h.root, envelope["record"], h.key)
-        h.ledger.write_text(json.dumps(envelope))
+        h.write_legacy_register(envelope["record"])
 
         h.cli("check")
         self.assertEqual(h.trace()["review_issues"], [])
@@ -133,9 +129,7 @@ class BriefReviewTests(unittest.TestCase):
         envelope = json.loads(h.ledger.read_text())
         event = next(event for event in envelope["record"]["events"] if event["type"] == "experiment")
         event["criterion"] = "Noted."
-        with patch.dict(os.environ, h.env):
-            envelope["signature"] = pm.initiative_store.sign(h.root, envelope["record"], h.key)
-        h.ledger.write_text(json.dumps(envelope))
+        h.write_legacy_register(envelope["record"])
 
         h.cli("check")
         self.assertEqual(h.trace()["initiative"]["experiments"][plan["experiment"]]["criterion"], "Noted.")

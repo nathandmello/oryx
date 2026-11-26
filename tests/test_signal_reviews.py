@@ -1,4 +1,4 @@
-"""Exercise plan evidence review through signed initiative commands."""
+"""Exercise plan evidence review through initiative approvals."""
 
 from copy import deepcopy
 from datetime import date, timedelta
@@ -40,7 +40,26 @@ class SignalReviewTests(unittest.TestCase):
     def reviews(self):
         return self.hub.trace()["initiative"]["signal_reviews"]
 
-    def test_ordinary_signal_previews_signed_claims_and_remains_due_after_capture(self):
+    def test_existing_claim_authority_is_preserved_when_approving_new_events(self):
+        h = self.hub
+        h.submit(self.signal)
+        claim = h.decision("approve-initiative")["reason"]
+        review = h.preview(self.assessment(claim=claim))["reviewed_transactions"][0]
+        citation = review["references"]["claim"]
+        self.assertEqual(citation["authority"], "PM-approved approve-initiative")
+        citation["authority"] = "PM-signed approve-initiative"
+        record = json.loads(h.ledger.read_bytes())["record"]
+        record["events"].append(review)
+        h.write_legacy_register(record)
+
+        before = h.ledger.read_bytes()
+        self.assertEqual(self.reviews()[0]["claims"], [citation])
+        self.assertEqual(h.ledger.read_bytes(), before)
+        h.submit({**self.signal, "source": "Legal decision 42, added scope restriction"})
+        self.assertEqual(json.loads(h.ledger.read_bytes())["record"]["events"][:-1], record["events"])
+        self.assertEqual(self.reviews()[0]["claims"], [citation])
+
+    def test_ordinary_signal_previews_approved_claims_and_remains_due_after_capture(self):
         h = self.hub
         self.assertEqual(self.reviews(), [])
         before = h.ledger.read_bytes()
@@ -63,7 +82,7 @@ class SignalReviewTests(unittest.TestCase):
         self.assertIn("Evidence review", h.cli("roadmap", "--format", "markdown"))
         h.preview(self.signal, error="Source already captured")
 
-    def test_signed_signal_feeds_scoped_coaching_and_weekly_review_once(self):
+    def test_approved_signal_feeds_scoped_coaching_and_weekly_review_once(self):
         h = self.hub
         h.submit(self.signal)
         before = h.ledger.read_bytes()
@@ -139,4 +158,4 @@ class SignalReviewTests(unittest.TestCase):
         self.assertEqual(json.loads(h.cli("roadmap")), [])
         self.assertEqual(item["signals"][-1]["source"], second["source"])
         self.assertEqual(json.loads(h.cli("initiative", "show", "example", sibling))["initiative"], sibling_before)
-        h.preview(self.assessment(signal=second["source"]), error="against the active signed approval")
+        h.preview(self.assessment(signal=second["source"]), error="and its linked claim")

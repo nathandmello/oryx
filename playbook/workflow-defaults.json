@@ -2,5 +2,9 @@
   "weekly-review-order": {
     "scope": "Weekly reviews",
     "behavior": "Start with the single recommended check."
+  },
+  "stakeholder-profile-suggestions": {
+    "scope": "All sources",
+    "behavior": "Offer useful stakeholder profile suggestions at a natural pause."
   }
 }

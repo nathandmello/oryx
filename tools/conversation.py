@@ -223,7 +223,7 @@ def context_offer(prompt, result, deferrals, quiet):
             "scope": result["scope"], "source": risk["id"], "sources": sources,
             "revision": evidence_revision([evidence]),
             "reason": risk["reason"],
-            "next_action": ("Compare the observation with the signed plan in initiative show."
+            "next_action": ("Compare the observation with the approved plan in initiative show."
                             if signed_signal else "Read the cited claims and confirm the applicable authority."),
         })
     for warning in result["warnings"]:
@@ -287,7 +287,7 @@ def review_protection(root, record, text):
         reference = event.get("references", {})
         if (reference.get("path") == record and event.get("action") != "start-discovery"
                 and reference.get("sha256") == fingerprint(text)):
-            raise ValueError("The signed review binds this file. Use an editable owning work record.")
+            raise ValueError("The approved review binds this file. Use an editable owning work record.")
 
 
 def updated_text(text, changes):

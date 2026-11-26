@@ -20,7 +20,7 @@ When time is tight, ask for expedite mode. Oryx takes on more legwork and keeps 
 | When capacity changes | “We can fit one of these two initiatives. Show me what we give up with each choice.” | A planning comparison you can discuss. You approve changes to the roadmap. |
 | After launch | “We expected fewer support tickets. Compare the result with our forecast. What should we revisit?” | A review that keeps the original prediction alongside what happened. |
 
-The local browser app lets you present the roadmap, review priorities, and work through launch checks. It reads the same records you use in the terminal. [Browser guide](playbook/local-ui.md)
+The local browser app lets you present the roadmap, review priorities, and work through launch checks. It shares records with the terminal. Review and confirm roadmap changes in either interface. [Browser guide](playbook/local-ui.md) · [Initiative approvals](playbook/initiative-approvals.md)
 
 ![The oryx roadmap for fictional Atlas Workspace, with guided setup in Now, weekly digests in Next, and report exports in Later.](playbook/images/roadmap.png)
 
@@ -55,13 +55,17 @@ Step 3 covers the product as it works today. If you own a plugin, you still star
 
 If you own part of that product, oryx offers an optional step 4 for your area. You can review it now, come back later, or skip it. Its findings go in a separate brief. [Product walkthrough](playbook/product-context.md)
 
+After product or area setup, oryx offers to help you build a stakeholder profile. Start with one person, skip it, or return whenever it helps.
+Ask “Where did we leave off?” to resume saved work in either client. [Work handoffs](playbook/handoffs.md)
+You can enable [private session transcripts](playbook/session-continuity.md) and manage [context tips](playbook/context-advice.md) separately.
+
 ## Make it yours
 
 “Going forward, start each weekly review with decisions you need from me.” Say it once and oryx saves the rule in your private workspace. The rule takes priority for that part of the review. You can also change a brief template, add a confidence column to your roadmap, or keep a different view for leadership. [Workflow rules](playbook/overrides.md) · [Templates, fields, and views](playbook/customization.md)
 
 ## Placement
 
-**Core** is the shared software. **Studio** is your own Git repository inside `studio/`. A protected session gives your agent write access to Studio and read access to core. Core updates and your work have separate Git histories.
+**Core** is the shared software. **Studio** is your own Git repository inside `studio/`. A protected session lets your agent edit private drafts and read the core software and your initiative approval receipts. Core updates and your work have separate Git histories.
 
 | Location | What lives there |
 | --- | --- |

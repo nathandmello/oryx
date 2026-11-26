@@ -1,13 +1,10 @@
-"""Exercise the signed scope of an active discovery plan through the normal CLI."""
+"""Exercise the reviewed scope of an active discovery plan through the normal CLI."""
 
 import hashlib
 import json
-import os
 import unittest
-from unittest.mock import patch
 
 import test_opportunities
-import initiative_store
 
 
 class DiscoverySourceTests(unittest.TestCase):
@@ -50,7 +47,7 @@ class DiscoverySourceTests(unittest.TestCase):
         h.submit(h.evidence()[3], self.finish)
         self.assertEqual(h.trace()["initiative"]["phase"], "defining")
 
-    def test_workspace_sections_survive_template_removal_and_are_signed(self):
+    def test_workspace_sections_survive_template_removal_and_are_approved(self):
         h = self.hub
         change = {"templates": {"discovery-brief": {
             "Interview protocol": {"prompt": "Record the protocol."},
@@ -109,14 +106,12 @@ class DiscoverySourceTests(unittest.TestCase):
         del reference["scope"]
         previous_bytes = json.dumps(list(self.sections.values()), separators=(",", ":")).encode("utf-8")
         reference["sha256"] = hashlib.sha256(previous_bytes).hexdigest()
-        with patch.dict(os.environ, h.env):
-            envelope["signature"] = initiative_store.sign(h.root, envelope["record"], h.key)
-        h.ledger.write_text(json.dumps(envelope))
+        h.write_legacy_register(envelope["record"])
         self.assertEqual(h.trace()["review_issues"], [])
         h.fill(h.discovery, {"Sources": "Updated renewal log.\n\n<pre>\n## Example\n</pre>\nLost interview 91."},
                complete=False)
         self.assertEqual(h.trace()["review_issues"], [])
-        h.preview(self.finish, error="sign start-discovery before prepare-brief")
+        h.preview(self.finish, error="start-discovery before prepare-brief")
         h.preview(self.start, error="indent example headings")
         path = h.work / h.discovery
         path.write_text(path.read_text().replace("## Example", "    ## Example"))

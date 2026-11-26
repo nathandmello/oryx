@@ -10,11 +10,11 @@ Omit the product filter for a portfolio review. The command reads the private wo
 
 | Finding | What to check |
 | --- | --- |
-| Decision due | Read the latest signed decision, its review date, and any follow-up measurement. |
+| Decision due | Read the latest approved decision, its review date, and any follow-up measurement. |
 | Forecast due | Compare the outcome evidence with the original resolution criterion. |
 | Possible conflict | Compare the cited authority and scope in the open context review. |
 | Context risk | Verify the cited evidence with the owner. |
-| Signal review | Compare the observation with the affected claim in the active signed plan. |
+| Signal review | Compare the observation with the affected claim in the approved plan. |
 | Possible trigger | Compare newly registered evidence with the PM's stated reopen condition. |
 | Stale assumption | Check the assumption with its owner after the record's review date. |
 | Unassessed hypothesis | Read the registered hypothesis and look for evidence of a test. |

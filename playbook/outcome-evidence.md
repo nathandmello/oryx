@@ -1,6 +1,6 @@
 # Release measurements, guardrails and corrections
 
-Use `/pm delivery outcome review PRODUCT INITIATIVE`. Read `initiative show PRODUCT INITIATIVE` for the signed targets, guardrails, evidence and earlier decisions. Prepare changes through the [initiative approval procedure](initiative-approvals.md). The PM signs each decision.
+Use `/pm delivery outcome review PRODUCT INITIATIVE`. Read `initiative show PRODUCT INITIATIVE` for the approved targets, guardrails, evidence and earlier decisions. Prepare changes through the [initiative approval procedure](initiative-approvals.md). The PM approves each decision.
 
 ## Approve a guardrail
 
@@ -61,7 +61,7 @@ Use `measurement` for a success target. Use `guardrail-reading` with a guardrail
 
 This example uses a local metric. Registry measurements need the pinned definition reference and its [approved calculation inputs](numbers.md). A proportion needs a checked numerator, eligible denominator, denominator basis and subset confirmation.
 
-Check [the reporting window](metrics.md) for each observation. Use the exclusive end date. When the effective registry revision changes, cite the restatement on the signed basis in `restatement`. A guardrail observation must fall within one approved threshold revision.
+Check [the reporting window](metrics.md) for each observation. Use the exclusive end date. When the effective registry revision changes, cite the restatement on the approved metric definition in `restatement`. A guardrail observation must fall within one approved threshold revision.
 
 ## Correct the source or reading
 
@@ -76,11 +76,11 @@ Check [the reporting window](metrics.md) for each observation. Use the exclusive
 }
 ```
 
-Propose the replacement reading first, or include both events in one proposal. Omit `replacement` to invalidate the original. The register retains both sources, the reason, signing date and original review.
+Propose the replacement reading first, or include both events in one proposal. Omit `replacement` to invalidate the original. The register retains both sources, the reason, approval date and original review.
 
 Correct a replacement by its active ID. Use the same metric, guardrail and observation window. For a legacy replacement, match its observation date. Cite the original window and population evidence in `comparison_source`.
 
-## Sign the outcome
+## Approve the outcome review
 
 Compare the observed change with the original expectation. Check the cohort, time window, and any competing explanation.
 A rise after launch can support a measured outcome while its cause remains open.
@@ -90,8 +90,8 @@ Review each target independently. Use `unmeasured` when it has no usable reading
 
 Inspect `evidence_review` in the proposal. Verify unconfirmed reporting windows against the original sources. A guardrail can breach while activation meets its target. Give the PM's reason or next action in `guardrail_dispositions`, keyed by each breached or unavailable guardrail. If the available guardrail reading predates the latest target observation, the review shows the coverage gap. Cite material changed readings even when scheduling another follow-up.
 
-Inspect `backlog --due` after a correction or material reading. A signed disposition clears the reminder or schedules follow-up. The initiative trace retains historical breaches, missing evidence and the earlier decision.
+Inspect `backlog --due` after a correction or material reading. The PM’s recorded decision clears the reminder or schedules follow-up. The initiative trace retains historical breaches, missing evidence and the earlier decision.
 
 ## Existing workspaces
 
-Upgrade every active client before signing new events or saving typed reporting windows. Older clients reject the new fields. Keep verified private Git recovery copies. Existing registers replay in their signed order. Inspect `backlog --all-phases` and the initiative trace for guardrail notes and unverified readings. Confirm any adoption against the original source.
+Upgrade every active client before recording new approvals or saving typed reporting windows. Older clients reject the new fields. Keep verified private Git recovery copies. Existing registers replay in the original event order. Inspect `backlog --all-phases` and the initiative trace for guardrail notes and unverified readings. Confirm any adoption against the original source.

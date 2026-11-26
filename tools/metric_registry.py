@@ -284,7 +284,7 @@ def snapshot(root, private, product, event):
     """Bind a new initiative metric to the current revision. Existing signatures replay as written."""
     local_id = event.get("metric")
     if isinstance(local_id, str) and re.fullmatch(SCOPED_ID, local_id):
-        raise ValueError(f"Use a local slug for the signed metric ID and registry_metric={local_id} for the definition.")
+        raise ValueError(f"Use a local slug for the approved metric ID and registry_metric={local_id} for the definition.")
     available = effective(root, private, product)
     selection = event.get("registry_metric", event.get("metric"))
     row = available.get(selection) if isinstance(selection, str) else None

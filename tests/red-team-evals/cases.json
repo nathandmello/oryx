@@ -1,5 +1,5 @@
 {
-  "bmad_revision": "e435a22574fe55722841086e5566420178b98df3",
+  "baseline_revision": "2327a3de2e39f754a32631c8d937b45d82d4ed89",
   "cases": {
     "initiative-commitment": {
       "request": "Red-team this initiative brief before we commit two engineering teams next quarter. Recommend whether to commit.",

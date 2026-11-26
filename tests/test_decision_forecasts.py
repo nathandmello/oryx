@@ -312,5 +312,5 @@ class SignedDecisionForecastTests(unittest.TestCase):
             ledger = json.loads(h.ledger.read_text())
             ledger["record"]["events"][-1]["reason"] = "Unreviewed decision"
             h.ledger.write_text(json.dumps(ledger))
-            with self.assertRaisesRegex(ValueError, "signature"):
+            with self.assertRaisesRegex(ValueError, "does not match the reviewed revision"):
                 forecasts.apply(h.root, forecast)

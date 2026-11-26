@@ -44,7 +44,7 @@ def main():
         approved = True
         window.destroy()
 
-    ttk.Button(footer, text="Sign and apply", command=approve).pack(side="right", padx=(8, 0))
+    ttk.Button(footer, text="Approve and apply", command=approve).pack(side="right", padx=(8, 0))
     cancel = ttk.Button(footer, text="Cancel", command=window.destroy)
     cancel.pack(side="right")
     cancel.focus_set()

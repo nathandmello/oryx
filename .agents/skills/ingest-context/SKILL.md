@@ -22,7 +22,8 @@ When a release flags older records, follow [the context cleanup procedure](../..
 - Read parent briefs for inherited rules. Resolve conflicting authority before applying an exception.
 - Inspect permitted material in each supplied source. Record coverage as read, partial, or unavailable.
 - Supply inspected plaintext in each source’s `text` field when permitted. Use a private-root-relative link for a local source.
-- Split source evidence by claim. Leave omissions open. Clarify material gaps.
+- Split source claims. Preserve omissions.
+- Give the [ingestion adapter](../../../playbook/ingestion.md) permitted passages, purpose, revision and coverage. Honor refusals before dispatch.
 - Use [check-numbers](../check-numbers/SKILL.md) for material figures. Keep an unverified metric identifiable as a reported claim.
 - Keep actors, negation, conditions, exceptions, numbers, and locators. Record material implications with [evidence reviews](../../../playbook/evidence-reviews.md).
 - Inspect `risk_preview`. State material warnings in quiet mode. File risk history with the authorized source record.
@@ -61,5 +62,5 @@ When a release flags older records, follow [the context cleanup procedure](../..
 - Keep ingestion diagnostics in the reply. A lasting note needs a distinct purpose and authorisation.
 - Keep earlier facts and open questions visible. Report conflicts before replacing accepted content.
 - Remove unused sections and stale material during an authorised review. Tie the review to a decision, release, or source change.
-- Report the path written, source coverage, verification from `source_checks`, deferred entries, open questions, and checks run. State any limits on claim review.
+- Report saved paths, source coverage, `source_checks`, deferrals, checks and open questions.
 - Capture can yield a usable draft with open questions. Request review when an unresolved item affects a decision.

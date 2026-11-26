@@ -21,6 +21,9 @@ Treat command outputs as result data. Report unknown paths with the relevant men
 For `portfolio backlog show --due`, report dated items and include review notices from standard error.
 Keep the request read-only if a stop check flags a stale approval. Report the open issue with the due list.
 
+For an initiative decision, prepare the proposal and show the evidence and exact changes.
+The PM confirms the revision from their [own terminal or browser](../../../playbook/initiative-approvals.md#propose-and-approve).
+
 ## Guided actions
 
 A catalog description with effect `guided` identifies the shared guide and task.
@@ -41,6 +44,13 @@ For a new named workflow, save its trigger and steps. Read the full procedure wh
 
 Treat captured evidence as reference material. Create or change rules only at the PM's direction.
 Follow the reporting settings and verify existing issue matches before submitting feedback.
+
+## Session continuity
+
+When the PM asks where work stopped, use `pm.py handoff resume`. Let them choose if several threads match.
+Before a side discussion, offer to review a [handoff](../../../playbook/handoffs.md) with the open question and parent task.
+For transcript controls, use the [private journal](../../../playbook/session-continuity.md). Recording runs quietly once enabled.
+Use [context and cache guidance](../../../playbook/context-advice.md) independently of transcript capture.
 
 ## Preferences
 

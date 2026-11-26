@@ -18,15 +18,10 @@ From a terminal, run the same action:
 python3 tools/pm.py action workspace browser open
 ```
 
-Set the [allowed signers file](initiative-approvals.md) to read signed registers.
-For roadmap approval, install Python with Tk support and use the PM signing key.
-For a protected key, load it in your OpenSSH agent before launch. Pass the absolute path to its public key:
+For roadmap approval, run the terminal command above yourself with a Python installation that supports Tk.
+A protected agent session can preview roadmap edits. Review the changes again in the app you opened yourself.
+On an older Studio, follow the [existing-register instructions](initiative-approvals.md#existing-private-work).
 
-```sh
-python3 tools/pm.py action workspace browser open --key "$PM_SIGNING_KEY_PATH"
-```
-
-Start the app as the PM account when using a separate agent account. Use the local window to confirm the proposal.
 The app opens a browser tab on the same computer. Keep the launch session active during use.
 Share the browser tab for a meeting. Keep the launch URL private.
 
@@ -43,9 +38,12 @@ Choose **New planning cycle** to compare approved candidates. Enter dates, capac
 Choose a horizon, rank, and effort for each selection. Use **Compare only** to leave an option available.
 
 Save the comparison and review the proposal. The comparison uses the same Markdown record as the terminal workflow.
-You can load an existing unsigned comparison by its cycle ID.
-Choose **Approve on this computer**, then confirm the exact changes in the desktop window.
+You can load an existing draft comparison by its cycle ID.
+
+Choose **Approve on this computer** and review the exact changes in the desktop window.
+Select **Approve and apply** to record them. Cancel to leave the proposal open.
 If the register or comparison changes, review a fresh proposal.
+If the app closes during an approved save, use [initiative recovery](initiative-approvals.md#existing-private-work).
 
 ## Tasks and launch checklists
 
@@ -72,7 +70,7 @@ npm test --prefix tests/browser
 ```
 
 Set `PM_HUB_CHROMIUM` to use an installed Chromium binary.
-The tests use temporary workspaces and fixture keys. The signing tests simulate the desktop confirmation and run OpenSSH.
+The tests use temporary workspaces and simulate the PM’s response to the desktop confirmation.
 
 ## Review workflow changes
 

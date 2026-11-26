@@ -32,7 +32,7 @@ For an inaccessible original, use a question and `risk.source` with the supplied
 
 A partial source can open an unassessed review. A meeting summary alone authorizes a reply. File the evidence when the PM requests capture.
 
-Signed initiative signals and context captures retain their own authority. Keep pending evidence in authorized context when a stale brief prevents a register change.
+Registered initiative signals and context captures retain their own authority. Keep pending evidence in authorized context when a stale brief prevents a register change.
 
 ## Respond or retrieve
 
@@ -63,11 +63,11 @@ Use `dismiss` or `resolve` with the PM's reason and source. A changed claim or s
 
 A PM disposition cannot grant a policy exception. Record the decision owner's evidence through the existing context workflow.
 
-A signed ship decision preserves the active advisories and source claims the PM reviewed.
-Use [launch review](initiative-work.md#ship-decision) when those advisories change before signing.
+An approved ship decision preserves the active advisories and source claims the PM reviewed.
+Use [launch review](initiative-work.md#ship-decision) when those advisories change before approval.
 
 ## Existing workspaces
 
 Older context remains readable. Existing decision pairs can surface on lookup. A material legacy note can be reviewed through authorized evidence capture.
 
-Update each client before recording new review history or signing a review transaction. Preserve workspace history and use [the installed-workspace procedure](updates.md).
+Update each client before recording new review history or approving a review transaction. Preserve workspace history and use [the installed-workspace procedure](updates.md).

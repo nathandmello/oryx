@@ -68,14 +68,14 @@ Keep learning, delivery progress, and measured outcomes distinct.
 
 - Build the smallest complete workflow around the PM's judgment.
 - Follow the README placement map. Add templates only for requested artifact types.
-- Use [extend-hub](.agents/skills/extend-hub/SKILL.md) for every core change.
+- Apply [extend-hub](.agents/skills/extend-hub/SKILL.md) to core changes. Omit repository names and links when describing borrowed methods.
 - Prefer files, existing tools, and one command layer. Add dependencies or services for demonstrated needs.
 - Follow the [slash command convention](playbook/commands.md).
 - Apply [the filing rules](playbook/filing.md) before creating or converting any record. Keep one authoritative record per artifact. Preserve stable identifiers when files move.
 - Define sources, ownership, relationships, completion conditions, and review triggers for each new capability.
 - Use scripts for deterministic rules and skills for guided work. Apply the same checks through both agents and CI.
 - Keep partial drafts usable. People judge evidence and strategy.
-- Change this constitution only when the PM explicitly changes its rules. Report the change.
+- Constitutional changes require explicit PM direction. Report changes.
 
 ## Writing
 

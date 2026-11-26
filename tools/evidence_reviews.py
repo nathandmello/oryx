@@ -327,7 +327,7 @@ def needs_plan_review(private, doc):
                 return True
         return False
     except (ValueError, OSError):
-        return True  # Preserve the pending review when the signed basis cannot be checked.
+        return True  # Preserve the pending review when the approved basis cannot be checked.
 
 
 def applies_to_task(review, scope, areas, documents):
@@ -365,7 +365,7 @@ def scoped_reviews(documents, selected, saved, scope, areas, through, *, recall_
 
 
 def review_sources(review):
-    """Collect source pointers from a context risk or signed signal review."""
+    """Collect source pointers from a context risk or approved signal review."""
     result = [review.get("owner"), review.get("evidence", {}).get("source")]
     for claim in review["claims"]:
         result.append(claim.get("record"))

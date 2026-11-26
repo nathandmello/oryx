@@ -37,20 +37,20 @@ async function launch(args, options = {}, timeout = 20_000) {
 
 const test = base.extend({
   hub: [async ({}, use) => {
-    // The fixture creates and signs a synthetic portfolio before it starts the server.
+    // The fixture creates a synthetic portfolio before it starts the server.
     const server = await launch([path.join(__dirname, "fixture.py")], {
       env: { ...process.env, PYTHONDONTWRITEBYTECODE: "1" },
     }, 60_000);
     try {
       const data = JSON.parse(server.line);
-      const env = { ...process.env, PM_HUB_ALLOWED_SIGNERS: data.signers, PYTHONDONTWRITEBYTECODE: "1" };
+      const env = { ...process.env, PYTHONDONTWRITEBYTECODE: "1" };
       const args = [path.join(data.root, "tools", "pm.py")];
       await use({
         ...data,
         cli: (command, input) => JSON.parse(execFileSync(python, ["-B", ...args, ...command], {
           cwd: data.root, env, encoding: "utf8", input: input === undefined ? undefined : JSON.stringify(input),
         })),
-        sign: proposal => spawnSync(python, ["-B", ...args, "initiative", "apply", "example", "--key", data.fixtureKey],
+        approve: proposal => spawnSync(python, ["-B", ...args, "initiative", "apply", "example", "--approve", proposal.revision],
           { cwd: data.root, env, encoding: "utf8", input: JSON.stringify(proposal) }),
         open: screen => launch([...args, ...action, "--no-open", "--screen", screen], { cwd: data.root, env }),
       });
@@ -165,7 +165,7 @@ test("an empty Studio opens its agent walkthrough from a task deep link", async 
   await expect(page.getByRole("heading", { name: "Continue onboarding" })).toHaveCount(0);
 });
 
-test("compare and sign a cycle, filter the board, and approve a drag change", async ({ hub, page }) => {
+test("compare and approve a cycle, filter the board, and approve a drag change", async ({ hub, page }) => {
   test.setTimeout(75_000);
   const template = path.join(hub.root, "templates", "prioritization.md");
   const original = fs.readFileSync(template, "utf8");
@@ -192,7 +192,7 @@ test("compare and sign a cycle, filter the board, and approve a drag change", as
     "Capacity constraints": "Four engineer-days remain after maintenance.",
     "2027": "The renewals lead confirmed next year's capacity.",
     "Alternatives and trade-offs": "Run both pilots within the remaining capacity.",
-    "Sources": "Pilot evidence and the signed initiative briefs.",
+    "Sources": "Pilot evidence and the approved initiative briefs.",
     "Review owner": "The pilot PM will review results.",
     "Selection reason": "Test both approaches within this cycle.",
     "Decision source": "Planning meeting",
@@ -212,6 +212,7 @@ test("compare and sign a cycle, filter the board, and approve a drag change", as
   const review = dialog(page, "Review roadmap proposal");
   await expect(review.locator("pre")).toContainText("The pilot PM will review results.");
   await expect(review.getByText("Create customer-operations")).toBeVisible();
+  await expect(button(review, "Approve on this computer")).toBeEnabled();
   await button(review, "Approve on this computer").click();
   await expect(review.getByText("Approval cancelled. You can review or approve again.")).toBeVisible();
   expect(hub.cli(["roadmap", "--product", "example"])).toEqual([]);
@@ -219,17 +220,18 @@ test("compare and sign a cycle, filter the board, and approve a drag change", as
   await expect(lane(page, "now").getByRole("heading", { name: "Renewal delays" })).toBeVisible();
   await expect(lane(page, "later").getByRole("heading", { name: "Export turnaround" })).toBeVisible();
 
+  await expect(page.getByRole("status")).toHaveText("Roadmap changes approved and saved.");
   const renewalID = hub.cli(["roadmap", "--product", "example"]).find(row => row.title === "Renewal delays").id;
   const decision = { type: "decision", initiative: renewalID, on: hub.today,
     reason: "The PM chose earlier renewal reminders.", source: "Renewal planning review, item 2" };
   const tradeoff = "Delay export research by one week to test reminders.";
-  const signedPlan = hub.cli(["initiative", "propose", "example"], [
+  const reviewedPlan = hub.cli(["initiative", "propose", "example"], [
     { ...decision, action: "unplan" },
     { ...decision, action: "plan", cycle: "customer-operations", rank: 1, horizon: "now", effort: 2,
       rationale: { choice: "Test reminders first", alternatives: ["Test both in parallel"], tradeoff,
         owner: "Renewals PM", scope: "Renewal pilot", reopen_when: "Renewal contacts rise by five percent" } },
   ]);
-  expect(hub.sign(signedPlan).status).toBe(0);
+  expect(hub.approve(reviewedPlan).status).toBe(0);
   expect(hub.cli(["roadmap", "--product", "example"]).find(row => row.id === renewalID).trade_off).toBe(tradeoff);
   await button(page, "Refresh").click();
   const placement = card(page, "Renewal delays");
@@ -415,7 +417,7 @@ test("withdrawing a verified task shows its launch impact and invalidates the re
   const propose = change => hub.cli(["initiative", "propose", "example"], [change]);
   const expedite = propose({ ...decision, action: "expedite", owner: "Incident PM", obligation: "Restore EU alerts",
     deadline: hub.today, scope: "Verify the European renewal pilot", delivery: "https://example.com/drill/42" });
-  expect(hub.sign(expedite).status).toBe(0);
+  expect(hub.approve(expedite).status).toBe(0);
   const evidence = "Canary alert receipt EU-41.";
   hub.cli(["task", "apply", ...scope, "--revision", "absent"], [{ action: "add", id: "canary",
     fields: { title: "Run the canary", owner: "On-call lead", completion_criteria: "Receive the regional alert",
@@ -443,7 +445,7 @@ test("withdrawing a verified task shows its launch impact and invalidates the re
   expect(propose(ship)).toEqual(ready);
   await button(preview, "Save edit").click();
   await expect(page.locator(".row").filter({ hasText: "Run the canary" })).toContainText("Check launch");
-  const rejected = hub.sign(ready);
+  const rejected = hub.approve(ready);
   expect(rejected.status).not.toBe(0);
   expect(rejected.stdout).toContain("proposal is stale");
   await button(page, "Launch checklists").click();
@@ -457,7 +459,7 @@ test("withdrawing a verified task shows its launch impact and invalidates the re
   await button(checkpoint, "Edit Check launch").click();
   const edit = dialog(page, "Edit Check launch");
   await select(edit, "Evidence basis").selectOption("independent");
-  await field(edit, "Verification evidence").fill("Independent signed regional alert receipt EU-42.");
+  await field(edit, "Verification evidence").fill("Independent regional alert receipt EU-42.");
   await button(edit, "Preview edit").click();
   await button(dialog(page, "Review Check launch"), "Save edit").click();
   await expect(readiness).toContainText("Ready for launch decision");

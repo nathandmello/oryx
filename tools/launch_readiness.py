@@ -1,4 +1,4 @@
-"""Keep the evidence considered in launch reviews and in signed ship decisions."""
+"""Keep the evidence considered in launch reviews and in approved ship decisions."""
 
 from datetime import date
 import hashlib
@@ -178,7 +178,7 @@ def snapshot(checks, check_history, tasks, task_history, *, present, effective_o
 
 def validate_snapshot(value):
     keys = {'checklist_present', 'checkpoints', 'linked_tasks', 'removed_from_scope', 'outstanding'}
-    # Preserve ship decisions signed before scoped advisories were available.
+    # Preserve ship decisions approved before scoped advisories were available.
     if isinstance(value, dict) and 'advisories' in value:
         advisories = value['advisories']
         if (not isinstance(advisories, dict) or advisories.keys() != {'signals', 'context'}
@@ -189,7 +189,7 @@ def validate_snapshot(value):
             or type(value['checklist_present']) is not bool
             or any(not isinstance(value[key], dict) for key in keys - {'checklist_present'})
             or value['revision'] != digest({key: value[key] for key in keys})):
-        raise ValueError('Invalid signed launch readiness snapshot')
+        raise ValueError('Invalid approved launch readiness snapshot')
     try:
         reviewed = date.fromisoformat(value['reviewed_on'])
         if reviewed > date.today() or reviewed.isoformat() != value['reviewed_on']:

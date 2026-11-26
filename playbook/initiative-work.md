@@ -1,6 +1,6 @@
 # Initiative tasks and launch checklists
 
-Use the product and initiative slugs from the signed register or the product-owned initiative overview. Each initiative has two JSON lists beside its briefs.
+Use the product and initiative slugs from the initiative register or the product-owned initiative overview. Each initiative has two JSON lists beside its briefs.
 Carry existing tasks into the list when the PM confirms the records and their status.
 
 | Record | Purpose | Completion |
@@ -14,7 +14,7 @@ Link engineering tickets in `source`. Engineering keeps status and technical det
 
 Use a stable slug for each task. Name the outcome and its completion criteria. Record the owner and due date when confirmed. Keep unknown fields empty.
 
-Use `depends_on` for other tasks in this initiative. Review unfinished dependencies, high-priority work, and due dates before recommending a next action. Record external blockers in `blocked_reason` and cite their source.
+Use `depends_on` for other tasks in this initiative. Review unfinished dependencies, high-priority work, and due dates before recommending a next action. Record external blockers in `blocked_reason` and cite their source. [GitHub issue dependencies](https://docs.github.com/en/issues/tracking-your-work-with-issues/using-issues/creating-issue-dependencies)
 
 Use `todo`, `in-progress`, `blocked`, `done`, or `cancelled`. A blocked task needs a reason. Done and cancelled tasks need a resolution. A done task also needs an owner.
 
@@ -37,7 +37,7 @@ Include upstream and launch phases. The view shows readiness after both phases c
 ### Evidence changes
 
 Saved material edits retain previous evidence and blockers in each list. Previewing an edit leaves the records untouched.
-A task's second completion retains its withdrawal. Recheck the affected checkpoint before signing.
+A task's second completion retains its withdrawal. Recheck the affected checkpoint before approving the launch.
 
 By default, verification relies on every linked task. To cite independent evidence, set `verification.basis_tasks` to matching task IDs or `[]`.
 Name the independent source in `verification.evidence`. A linked task with changed evidence needs a fresh verification statement.
@@ -57,17 +57,17 @@ Use the PM’s stated reason and approving authority for each outstanding ID in 
 ```
 
 Changes to a scoped advisory or its cited context evidence require a fresh proposal.
-Advisories inform the PM’s judgment. Only outstanding readiness IDs require a signed exception.
-The PM signs the [reviewed decision](initiative-approvals.md#propose-and-approve).
-Use `/pm initiative record show` to read the signed evidence after launch. Downstream changes continue separately.
+Advisories inform the PM’s judgment. Only outstanding readiness IDs require PM approval for an exception.
+The PM approves the [reviewed decision](initiative-approvals.md#propose-and-approve).
+Use `/pm initiative record show` to read the evidence the PM reviewed after launch. Downstream changes continue separately.
 
 ### Existing records
 
 Existing version-1 lists remain readable. Preview the first edit, then save it to start a version-2 history.
 The new list preserves the exact prior text in `legacy_original`. To recover it, extract that UTF-8 string into a separate file.
-Verify the recovered copy against your private backup before restoring it. Update each client before sharing new lists or signed ship decisions.
+Verify the recovered copy against your private backup before restoring it. Update each client before sharing new lists or launch approvals.
 
-Recheck linked verifications without a recorded task basis. Earlier signed releases retain their original evidence gaps.
+Recheck linked verifications without a recorded task basis. Earlier launch decisions retain their original evidence gaps.
 History starts with known records. External withdrawals need a saved update and source.
 
 ## Use the commands
@@ -105,5 +105,3 @@ Use the same operations for `launch-checklist apply`. Submit an array with one `
 A new checkpoint needs `title`, `phase`, and `criterion`. Both lists accept `owner`, `due_on`, and `source`. Task `priority` accepts `high`, `normal`, and `low`.
 
 If the revision changed, read the latest list and reconcile the edits. After a Git conflict, rerun `pm.py check` before sharing.
-
-Task dependencies follow [GitHub Issues](https://docs.github.com/en/issues/tracking-your-work-with-issues/using-issues/creating-issue-dependencies). Readiness checks draw on the [Kubernetes production readiness review](https://github.com/kubernetes/enhancements/blob/master/keps/NNNN-kep-template/README.md#production-readiness-review-questionnaire). [BMAD](https://github.com/bmad-code-org/BMAD-METHOD) informs the guided review at each decision.

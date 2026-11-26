@@ -77,14 +77,14 @@ The backlog entry calls the existing terminal operation.
 
 ```json
 "portfolio backlog show": {
-  "summary": "Show the signed backlog and report review issues in the due view.",
+  "summary": "Show the backlog and report review issues in the due view.",
   "effect": "read",
   "cli": ["backlog"],
   "example": ["--product", "checkout", "--due"]
 }
 ```
 
-Use the established approval procedure for signed decisions, external actions, and repository changes.
+Use the established approval procedure for initiative decisions, external actions, and repository changes.
 The catalog describes what an action does. Authority comes from the PM and the existing workflow.
 
 Run `pm.py check --system-only` to validate names, unique CLI targets, aliases, guides, and CLI examples.

@@ -65,7 +65,7 @@ def usable_candidate(row):
 
 
 def target_preview(item, product):
-    """Return complete target records that fit; the signed initiative lookup always exposes the full set."""
+    """Return complete target records that fit; the approved initiative lookup always exposes the full set."""
     preview = []
     remaining = 1600
     for metric, target in item["targets"].items():
@@ -92,7 +92,7 @@ def check(entries, targets, lookup, measure):
             "If several distinct outcomes still fit, ask one short question about which matters. "
             "For the chosen measure, retrieve its definition, cohort, period, baseline and observed result. "
             "Keep targets distinct from observations. Offer to find a missing comparison before drawing a conclusion."
-            + (" Open initiative_lookup for all signed targets, definitions, corrected readings and guardrails." if lookup else "")
+            + (" Open initiative_lookup for all approved targets, definitions, corrected readings and guardrails." if lookup else "")
         ),
         "question_if_unclear": "How was that measure defined for this group?" if measure else "Which outcome would you like to check?",
         **({"initiative_lookup": lookup} if lookup else {}),

@@ -8,6 +8,7 @@ import unittest
 import test_pm
 import company_onboarding
 import context_capture
+import ingestion_signals
 import onboarding_review
 from onboarding_fixtures import review_current_topic, reviewed_studio
 
@@ -101,3 +102,34 @@ class OnboardingCommandTests(unittest.TestCase):
         self.assertEqual(state["area_offers"], [owned])
         self.assertIn("optional", state["next_action"])
         self.assertNotIn("optional", self.cli("onboarding", "status")["next_action"])
+        deferred = self.cli("onboarding", "select-area", data={
+            "revision": state["revision"], "subject": None, "pm_reply": "Let's leave the area for later.",
+        })
+        self.assertEqual(deferred["optional_offer"]["workflow"], "profile-onboarding")
+        self.assertEqual(deferred["optional_offer"]["next_action"], deferred["next_action"])
+
+    def test_review_topic_returns_the_reserved_offer_for_the_client_to_present(self):
+        source = "context/products/billing/sources/meeting.txt"
+        path = self.work / source
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("Jo Diaz: I prefer a written summary with examples.\n")
+        held = ingestion_signals.assess(self.work, {
+            "moment": "busy", "source": {"kind": "transcript", "scope": source, "reference": source,
+                "authorized": True, "purposes": ["stakeholder-profile"], "retention": "review",
+                "subject": "product/billing"},
+        })
+        self.assertEqual(held["selection"]["status"], "deferred")
+        while True:
+            state = onboarding_review.status(self.work)
+            if state["stage"] == "product" and state["walkthroughs"]["product"]["next_topic"]["id"] == "environment":
+                break
+            review_current_topic(self.work)
+        result = self.cli("onboarding", "review-topic", data={
+            "stage": "product", "revision": state["revision"], "subject": state["product_scope"]["subject"],
+            "topic": "environment", "outcome": "open", "pm_reply": "Let's leave this open.",
+        })
+        self.assertIn("use only the selected optional offer", result["next_action"])
+        offer = result["optional_offer"]
+        self.assertEqual((offer["workflow"], offer["person"]), ("stakeholder-profile", "Jo Diaz"))
+        self.assertEqual(self.cli("offer", "presented", offer["token"]), {"status": "presented"})
+        self.assertNotIn("optional_offer", self.cli("onboarding", "status"))

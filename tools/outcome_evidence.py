@@ -1,4 +1,4 @@
-"""Project release evidence and guardrail history from signed initiative transactions."""
+"""Project release evidence and guardrail history from approved initiative transactions."""
 
 from decimal import Decimal, localcontext
 import operator
@@ -37,7 +37,7 @@ def add_rule(item, event, metric):
         raise ValueError("Reopen this initiative before defining a guardrail")
     number(event["threshold"])
     if not metric_checks.matches_unit(event["unit"], metric["unit"]):
-        raise ValueError("Use the signed metric unit for the guardrail")
+        raise ValueError("Use the approved metric unit for the guardrail")
     contract = event.get("contract")
     if contract:
         basis = metric_registry.window_basis(contract)
@@ -100,16 +100,16 @@ def check_reading(item, event, metric):
             row["metric"] == event["metric"] and row.get("observation") and not row.get("guardrail")
             for row in item["measurements"].values())
         if rule or ("recorded_on" in event and checked_target):
-            raise ValueError("Supply an observation with the signed definition and reporting window")
+            raise ValueError("Supply an observation with the approved definition and reporting window")
         return
     if not metric or not isinstance(obs, dict):
         raise ValueError("Use a registered initiative metric and a structured observation")
     if obs.get("basis") not in metric_registry.REPORTING_WINDOWS:
-        raise ValueError("Choose a supported reporting window for a signed observation")
+        raise ValueError("Choose a supported reporting window for an approved observation")
     contract = event.get("contract") or (rule or {}).get("contract") or metric.get("contract")
     if contract is None:
         if metric_registry.reference_metric(metric):
-            raise ValueError("Recover the signed metric definition before checking this observation")
+            raise ValueError("Recover the approved metric definition before checking this observation")
         contract = {"reference": metric["metric"], "unit": metric["unit"],
                     "population": (rule or {}).get("population", obs.get("population")),
                     "period": "", "reporting_window": (rule or {}).get("basis", obs.get("basis"))}
@@ -117,7 +117,7 @@ def check_reading(item, event, metric):
     if obs.get("source") != event["source"]:
         issues.append("Use the same source in the reading and observation.")
     if rule and isinstance(obs.get("start"), str) and obs["start"] < rule["effective_on"]:
-        issues.append("The bound changed during this window; use a complete window under one signed threshold.")
+        issues.append("The bound changed during this window; use a complete window under one approved threshold.")
     if rule and (obs.get("basis"), obs.get("unit"), obs.get("population")) != (
             rule["basis"], rule["unit"], rule["population"]):
         issues.append("Use the guardrail's approved window, unit and population.")
@@ -127,14 +127,14 @@ def check_reading(item, event, metric):
         raise ValueError("The observation window must follow the verified release")
     value = number(event["value"])
     if "value" in obs and metric_checks.reading_value(obs) != value:
-        raise ValueError("The observation value differs from the signed reading")
+        raise ValueError("The observation value differs from the approved reading")
     calculation = contract.get("calculation")
     if calculation:
         with localcontext() as context:
             context.prec = 40
             computed = metric_checks.ratio({"current": obs}, calculation, issues)
             if obs.get("denominator_basis") != contract["denominator"]:
-                issues.append("The eligible denominator differs from the signed definition.")
+                issues.append("The eligible denominator differs from the approved definition.")
             if issues:
                 raise ValueError("Ineligible observation: " + " ".join(issues))
             # Use the unrounded ratio for guardrails. A display value can be rounded at its stated precision.

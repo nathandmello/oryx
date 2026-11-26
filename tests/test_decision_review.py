@@ -1,4 +1,4 @@
-"""Weekly PM review through the published actions and real signed records."""
+"""Weekly PM review through the published actions and approved records."""
 
 from datetime import date, timedelta
 import json
@@ -37,7 +37,7 @@ class WeeklyReviewTests(unittest.TestCase):
         approval["reason"] = "Signed wording | Reviewed rationale: a later explanation"
         self.assertEqual(initiative_views.signal_claims(None, basis)[0]["text"], approval["reason"])
 
-    def test_signed_dates_cap_and_no_write(self):
+    def test_approved_dates_cap_and_no_write(self):
         h = self.hub
         events = [h.setup_event(max_open=9)]
         for number in range(6):
@@ -56,9 +56,9 @@ class WeeklyReviewTests(unittest.TestCase):
         self.assertEqual(before, h.ledger.read_bytes())
         h.cli("decision-review", "--product", "unknown", error="Unknown review product")
         h.ledger.write_text(h.ledger.read_text().replace("Support log 0", "Changed locator"))
-        h.cli("decision-review", error="signature")
+        h.cli("decision-review", error="does not match the reviewed revision")
 
-    def test_signed_rationale_schedules_the_same_review_in_both_public_views(self):
+    def test_approved_rationale_schedules_the_same_review_in_both_public_views(self):
         h = self.hub
         rationale = {"choice": "Assess the renewal pilot", "alternatives": ["Drop the pilot"],
                      "tradeoff": "Use research time this week", "owner": "Billing PM", "scope": "Renewals",

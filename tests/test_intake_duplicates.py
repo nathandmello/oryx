@@ -1,13 +1,10 @@
-"""Exercise the PM's duplicate decision at the signed capture boundary."""
+"""Exercise the PM's duplicate decision at initiative capture."""
 
 from copy import deepcopy
 import json
-import os
 import unittest
-from unittest.mock import patch
 
 import test_opportunities
-import initiative_store
 
 
 class IntakeReviewTests(unittest.TestCase):
@@ -22,7 +19,7 @@ class IntakeReviewTests(unittest.TestCase):
         flags = []
         for identifier in ids:
             flags.extend(("--confirm-distinct", identifier))
-        hub.cli("initiative", "apply", "example", "--key", str(hub.key), *flags, value=proposal, error=error)
+        hub.cli("initiative", "apply", "example", "--approve", proposal["revision"], *flags, value=proposal, error=error)
         if error:
             self.assertEqual(hub.ledger.read_bytes(), before)
 
@@ -85,9 +82,7 @@ class IntakeReviewTests(unittest.TestCase):
         prior = h.capture(h.product_id + "/older", "Older problem", "Old register")
         envelope = json.loads(h.ledger.read_text())
         envelope["record"]["events"].append(prior)
-        with patch.dict(os.environ, h.env):
-            envelope["signature"] = initiative_store.sign(h.root, envelope["record"], h.key)
-        h.ledger.write_text(json.dumps(envelope))
+        h.write_legacy_register(envelope["record"])
         before = h.ledger.read_bytes()
         new = h.capture(h.product_id + "/later", "Later problem", "New source")
         proposal = h.preview(new)

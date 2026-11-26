@@ -118,7 +118,7 @@ RATIONALE_MARK = " | Reviewed rationale: "
 
 
 def reviewed_rationale(event):
-    """Sign optional reviewed detail in the existing reason field, readable by version 1."""
+    """Store optional reviewed detail in the existing reason field, readable by version 1."""
     if not isinstance(event, dict) or event.get("type") != "decision" or "rationale" not in event:
         return event
     detail = event["rationale"]
@@ -135,10 +135,10 @@ def reviewed_rationale(event):
                                    or detail["review_on"] < event["on"]):
         raise ValueError("Set the rationale review date on or after the decision")
     if any(event[key] != detail[key] for key in {"scope", "owner", "review_on"} & event.keys() & detail.keys()):
-        raise ValueError("The rationale must match the signed decision's scope, owner and review date")
-    signed = {key: value for key, value in event.items() if key != "rationale"}
-    signed["reason"] += RATIONALE_MARK + json.dumps(detail, ensure_ascii=False, sort_keys=True)
-    return signed
+        raise ValueError("The rationale must match the approved decision's scope, owner and review date")
+    approved = {key: value for key, value in event.items() if key != "rationale"}
+    approved["reason"] += RATIONALE_MARK + json.dumps(detail, ensure_ascii=False, sort_keys=True)
+    return approved
 
 
 def decision_rationale(event):
@@ -227,6 +227,18 @@ def validate_target_reviews(outcomes, approved):
             raise ValueError(f"{metric}: cite measured evidence for this assessment")
 
 
+def normalized_signal_review(event):
+    """Compare current and historical receipts using the same human approval label."""
+    reference = event["references"]
+    claim = reference["claim"]
+    if not isinstance(claim, dict) or not isinstance(claim.get("authority"), str):
+        return event
+    authority = claim["authority"]
+    if not authority.startswith("PM-signed "):
+        return event
+    return {**event, "references": {**reference, "claim": {**claim, "authority": "PM-approved " + authority.removeprefix("PM-signed ")}}}
+
+
 def validate_event(event, approved=False):
     if not isinstance(event, dict) or not isinstance(event.get("type"), str) or event["type"] not in FIELDS:
         raise ValueError("Choose a supported transaction type. Run pm.py initiative schema.")
@@ -247,7 +259,7 @@ def validate_event(event, approved=False):
         if "recorded_on" in event:
             fields = {**fields, "recorded_on": "past date"}
         elif kind != "measurement":
-            raise ValueError("Expected the signed transaction date")
+            raise ValueError("Expected the approved transaction date")
     if approved and kind in outcome_evidence.READINGS | {"metric", "guardrail"} and "contract" in event:
         fields = {**fields, "contract": "object"}
     if approved and kind == "decision" and event["action"] == "review-outcomes" and "evidence_review" in event:
@@ -277,7 +289,7 @@ def validate_event(event, approved=False):
         raise ValueError(f"{kind}: missing {sorted(missing)}; unknown {sorted(extra)}")
     for name, value_type in fields.items():
         if value_type == "evaluation":
-            # Signed histories can contain the original free-text evaluation.
+            # Older histories can contain the original free-text evaluation.
             if not (approved and text(event[name])):
                 validate_evaluation(event[name])
         elif value_type == "target reviews":
@@ -510,9 +522,9 @@ class Register:
         if (approval != item["_plan_approval"] or review["basis"] != reference["basis"]
                 or (claim is not None and (not isinstance(claim, dict) or claim.get("text") != event["claim"]))
                 or (claim is None) != (event["claim"] is None)):
-            raise ValueError("Review evidence against the active signed approval and its linked claim")
+            raise ValueError("Review evidence against the active approval and its linked claim")
         history = review["history"]
-        if history and history[-1] == event:
+        if history and normalized_signal_review(history[-1]) == normalized_signal_review(event):
             raise ValueError("This signal review is already recorded")
         if event["on"] < max(approval["on"], review["evidence"]["observed_on"],
                              history[-1]["on"] if history else approval["on"]):
@@ -564,7 +576,7 @@ class Register:
             item["discovery"] = (index, event["references"])
         elif action == "prepare-brief" and phase == "in discovery":
             if not event["references"]:
-                raise ValueError("Formal discovery requires signed findings")
+                raise ValueError("Formal discovery requires approved findings")
             started, _ = item["discovery"]
             if any(item["assessments"].get(key, (-1,))[0] < started for key in item["hypotheses"]):
                 raise ValueError("Assess each decision-critical hypothesis during the current timebox")
@@ -600,7 +612,7 @@ class Register:
             raise ValueError("Review every initiative target exactly once using its metric ID")
         checked = "evidence_review" in event
         if checked and event["evidence_review"] != outcome_evidence.review_snapshot(item, event, self.metrics):
-            raise ValueError("The signed outcome review must match its evidence and guardrails")
+            raise ValueError("The approved outcome review must match its evidence and guardrails")
         measured = set()
         for identifier, measurement in item["measurements"].items():
             if measurement["observed_on"] > event["on"]:

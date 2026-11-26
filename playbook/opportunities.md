@@ -9,7 +9,7 @@ The PM owns the decisions. Use company context, product context, strategy, and c
 | Authorize discovery | Discovery Brief and hypothesis IDs | Allocate capacity and authorize the timebox |
 | Investigate | Discovery Brief, hypothesis assessments, experiments, and results | Define, extend, defer, or stop |
 | Review | Initiative Brief and linked success measures | Approve a reviewed revision as a candidate |
-| Prioritize | Planning cycle and signed capacity decision | Select work, defer it, or keep it eligible |
+| Prioritize | Planning cycle and approved capacity | Select work, defer it, or keep it eligible |
 | Deliver and learn | Delivery reference, release evidence, and measured outcomes | Verify the release and review outcomes |
 
 ## Follow a single ID
@@ -28,7 +28,7 @@ Discovery and the Initiative Brief belong to the same initiative. Use their Mark
 An experiment links a hypothesis and the product metric it measures. Its results link the experiment. A target links an initiative to a product metric definition. Post-release measurements reference that same metric.
 
 Use `initiative show PRODUCT ID` to locate working briefs and the current planning comparison under `files`.
-Each brief entry gives its canonical path and whether the file exists. The initiative's signed decisions identify reviewed revisions.
+Each brief entry gives its canonical path and whether the file exists. The initiative's decisions identify reviewed revisions.
 
 ## Evaluate incoming evidence
 
@@ -48,7 +48,7 @@ The `evaluation` object below refers to the signal added by the [capture example
 }
 ```
 
-The PM can reassess an initiative under consideration. Each signed evaluation preserves the earlier assessment.
+The PM can reassess an initiative under consideration. Each approved evaluation preserves the earlier assessment.
 
 ## Start an experiment draft
 
@@ -63,14 +63,14 @@ python3 tools/pm.py initiative draft-experiment example PRODUCT_CONTEXT_ID/renew
 ```
 
 Fill in known fields. Leave other fields null or omit them. Use a cited test criterion chosen for this experiment.
-Repeating the command or revising the target preserves edits. The draft stays outside the signed register during editing.
+Repeating the command or revising the target preserves edits. The draft stays outside the register during editing.
 
-Each signed update reconciles drafts for the affected initiative and metric pairs. Use `initiative sync-drafts PRODUCT` for product-wide recovery.
+Each approved update reconciles drafts for the affected initiative and metric pairs. Use `initiative sync-drafts PRODUCT` for product-wide recovery.
 
 Check that the linked metric answers the hypothesis. [Review the test and decision rule](brief-review.md#match-the-test-to-the-hypothesis).
 
 Propose `approve-experiment` with the initiative and metric IDs when the plan is ready.
-The PM reviews the resolved plan before signing. Approval records the same experiment ID and retires the draft file.
+The PM reviews and approves the resolved plan. Approval records the same experiment ID and retires the draft file.
 Results use that ID. The [approval procedure](initiative-approvals.md) explains review and recovery.
 
 ```sh
@@ -127,5 +127,3 @@ The PM supplies open backlog limits, discovery limits, and capacity for each pla
 The supplied *Product Strategy Mindset* informs goal alignment, the four risks, experiments, and confidence. [Product strategy framework](framework.md).
 
 The supplied *Product Backlog & Discovery Workflow* informs intake, review cadence, and proportionate exceptions. The supplied *Product Prioritization — PM Handbook* informs commercial evidence and constrained planning. The Initiative Brief gate follows the PM's stated workflow.
-
-The skills use short entry points, focused discovery steps, and explicit human checkpoints. [BMAD Method skills](https://github.com/bmad-code-org/BMAD-METHOD/tree/e435a22574fe55722841086e5566420178b98df3/skills).

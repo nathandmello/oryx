@@ -1,4 +1,4 @@
-"""Keep editable experiment plans linked to signed initiative and metric identities."""
+"""Keep editable experiment plans linked to approved initiative and metric identities."""
 
 import json
 

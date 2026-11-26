@@ -13,7 +13,7 @@ python3 tools/pm.py agent claude
 ```
 
 Linux and WSL2 require bubblewrap with working user namespaces. macOS uses sandbox-exec.
-The launcher aligns the workspace before starting the client. Core stays readable during the session.
+The launcher aligns Studio before startup. Core and [initiative approval receipts](initiative-approvals.md) are read-only during the session.
 
 Run system updates from the PM's terminal. Use a separate development checkout for shared contributions.
 Enable the project's trusted hooks. Use local filesystem tools for edits to oryx files.
@@ -42,6 +42,8 @@ python3 tools/pm.py override list
 Apply the rule immediately and on subsequent relevant turns. Both clients receive the same rules at prompt submission.
 Use the effective rules from the list command when prompt hooks are unavailable.
 The private repository stores rules, reporting receipts, and retired rules in `studio/customizations/rules.json`.
+
+Silence profile prompts immediately with `pm.py override profile-suggestions off`. Use `--source transcript` for a narrower request. Offer optional feedback afterwards.
 
 ## Add a workflow
 

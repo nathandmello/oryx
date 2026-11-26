@@ -30,7 +30,7 @@ Use `initiative propose` to validate changes. For each new ID, review `intake_re
 The shortlist includes up to five existing initiatives. It compares wording and confirmed areas across all phases. Other initiatives can describe the same problem.
 
 Read the closest records with `initiative show`. Search the full backlog when the shortlist misses the likely owner.
-For a shared problem, propose `signal` on its existing ID. For a distinct problem, the PM supplies `--confirm-distinct NEW_ID` when signing.
+For a shared problem, propose `signal` on its existing ID. For a distinct problem, the PM supplies `--confirm-distinct NEW_ID` when approving the proposal.
 Leave uncertain ownership in the proposal, including in quiet mode.
 
 ## Reassess
@@ -45,7 +45,7 @@ Review active discovery weekly against its learning goals. At the open-item limi
 Use `signal` for new evidence and `reopen` for a decision to reconsider an existing initiative.
 
 Review `signal_reviews` when previewing new evidence against an approved plan.
-Show the affected claim, source, and remaining risk. Let the PM sign the review or keep it due.
+Show the affected claim, source, and remaining risk. Let the PM approve the review or keep it due.
 Use [the signal review procedure](../../../playbook/initiative-views.md#review-new-evidence) for dispositions.
 
 ## Deliver and learn
@@ -54,7 +54,7 @@ Use [the signal review procedure](../../../playbook/initiative-views.md#review-n
 2. Propose `start-delivery` after implementation starts. Use `expedite` for a verified critical exception.
 3. Propose `ship` after release verification. Name a review date and cite the release evidence.
 4. Follow the [release evidence procedure](../../../playbook/outcome-evidence.md). Check success measurements and guardrail readings against their approved windows.
-5. Sign corrections against the original reading. Retain the source and cite any comparable replacement.
+5. Propose corrections against the original reading for PM approval. Retain the source and cite any comparable replacement.
 6. Propose `review-outcomes` with the PM's assessment for each target. Explain each breached or unavailable guardrail.
 7. Use `unmeasured` when no usable reading exists. Schedule a dated `follow_up` for pending evidence.
 8. Check `backlog --due` for material evidence. Cite changed observations before closing or rescheduling.

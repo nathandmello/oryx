@@ -1,4 +1,4 @@
-"""Prepare browser roadmap edits through the signed initiative workflow."""
+"""Prepare browser roadmap edits for PM review."""
 
 from datetime import date
 import re
@@ -207,7 +207,7 @@ def comparison(root, product, cycle):
     target, original = read_comparison(root, product, cycle)
     sections = comparison_sections(original) if original else {}
     return {"revision": initiative_store.digest(original.encode("utf-8")) if original is not None else "absent",
-            "signed": cycle in register.cycles, "text": original,
+            "approved": cycle in register.cycles, "text": original,
             "sections": sections, "order": list(sections),
             "path": target.relative_to(storage.private_root(root)).as_posix()}
 
@@ -224,7 +224,7 @@ def save_comparison(root, product, cycle, options, sections, expected, register_
         revision, register = snapshot(root, product)
         check_revision(revision, register_revision)
         if cycle in register.cycles:
-            raise ValueError("This cycle is signed. Create a new cycle for a new comparison")
+            raise ValueError("This cycle has PM approval. Create a new cycle for a new comparison")
         for identifier in options:
             if identifier not in register.items or register.items[identifier]["phase"] != "candidate":
                 raise ValueError("Compare approved candidates for this product")

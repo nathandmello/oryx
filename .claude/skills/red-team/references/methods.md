@@ -69,7 +69,6 @@ An experiment claims that AI summaries reduce ticket resolution time. Its only m
 
 ## Sources
 
-- The neutral brief, independent reads, and method catalog adapt [BMAD Advanced Elicitation](https://github.com/bmad-code-org/BMAD-METHOD/blob/main/skills/core-tools/bmad-advanced-elicitation/SKILL.md) and its [method definitions](https://github.com/bmad-code-org/BMAD-METHOD/blob/main/skills/core-tools/bmad-advanced-elicitation/assets/methods.csv).
 - Assumptions, source quality, and competing explanations draw on the [UK Ministry of Defence Red Teaming Handbook](https://www.gov.uk/government/publications/a-guide-to-red-teaming). The pre-mortem uses [Gary Klein's project method](https://hbr.org/2007/09/performing-a-project-premortem).
 - Experiment checks draw on [Microsoft Research's pre-experiment patterns](https://www.microsoft.com/en-us/research/articles/patterns-of-trustworthy-experimentation-pre-experiment-stage/).
 - AI review draws on [OpenAI's evaluation guidance](https://developers.openai.com/api/docs/guides/evaluation-best-practices) and the [NIST Generative AI Profile](https://www.nist.gov/publications/artificial-intelligence-risk-management-framework-generative-artificial-intelligence).

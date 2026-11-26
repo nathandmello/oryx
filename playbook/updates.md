@@ -4,6 +4,7 @@ Private format 2 applies.
 
 | Release | Change |
 | --- | --- |
+| 0.15.0 | Candidate. Adds optional stakeholder profiles, reviewed handoffs, local session transcripts and client tips. Existing context keeps its paths. Update clients sharing a Studio before writing these records. Transcript capture starts disabled. |
 | 0.14.0 | Separates parent product setup from optional area setup. Update every client sharing a Studio before saving optional area progress. Briefs and citations keep their paths. An unfinished 0.13.0 combined review resumes at the parent. A completed one keeps the hub open. Review the parent separately before starting its optional area walkthrough. |
 | 0.13.0 | Adds the [product walkthrough](product-context.md) after the PM pass. Completed company and PM topics carry forward. Existing `areas/` briefs keep their paths and citations. Update clients sharing a Studio before writing briefs under team-specific folders. |
 | 0.12.0 | Adds [company](company-context.md) and [PM](pm-context.md) walkthroughs, including a [stakeholder map](stakeholders.md). Update shared Studio clients before saving a map. Existing records can supply evidence. That release held product work at the third stage. |
@@ -25,11 +26,11 @@ Release 0.3.5 adds [context section leads](filing.md#when-a-section-earns-its-pl
 
 `playbook/release.json` reports format 1 for older updaters. The private format is in `playbook/workspace-format.json`.
 
-Check [signed prototype compatibility](initiative-approvals.md#existing-private-work).
+Update every client sharing a Studio before using the new initiative approvals. Earlier clients cannot read them.
+Keep the public verification file for [existing signed registers](initiative-approvals.md#existing-private-work).
 
-Update all clients before sharing new transactions or discovery approvals with custom sections. Existing format-2 signatures remain readable.
 Verify historical readiness and thresholds against dated sources.
-For an active discovery approved before source binding, review the plan and sources together. Sign a fresh `start-discovery` before concluding.
+For discovery predating source review, obtain fresh PM approval for the plan and sources with `start-discovery`.
 
 ## What runs
 

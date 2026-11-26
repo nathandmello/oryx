@@ -341,10 +341,14 @@ with patch("shutil.which", side_effect=lambda tool: "/bin/" + tool), patch("os.e
                     self.assertFalse(old.exists())
                     self.assertTrue((self.work / overrides.FILE).is_file())
                     if program == "bwrap":
+                        approvals = str(self.work / ".oryx-approvals")
+                        i = argv.index(approvals)
+                        self.assertEqual(argv[i - 1:i + 2], ["--ro-bind", approvals, approvals])
                         ro = argv.index("--ro-bind")
                         self.assertEqual(argv[ro + 1:ro + 6], [str(self.root), str(self.root), "--bind", str(self.work), str(self.work)])
                     else:
                         self.assertEqual(program, "sandbox-exec")
+                        self.assertIn(f'(deny file-write* (subpath {json.dumps(str(self.work / ".oryx-approvals"))}))', argv[2])
                         self.assertIn(f"(require-not (subpath {json.dumps(str(self.work))}))", argv[2])
                     if client == "codex":
                         self.assertIn(f'{json.dumps(str(self.work))}="write"', argv[-1])
@@ -423,16 +427,32 @@ with patch("shutil.which", side_effect=lambda tool: "/bin/" + tool), patch("os.e
                 self.skipTest("Bubblewrap namespaces unavailable")
         elif sys.platform != "darwin":
             self.skipTest("Protected PM sessions require Linux or macOS")
-        # Include a child shell, as both interactive clients launch tools in children.
+        # Check the OS boundary independently of environment markers or agent hooks.
+        approvals = self.work / ".oryx-approvals"
+        approvals.mkdir(exist_ok=True)
+        receipt = approvals / "existing.json"
+        receipt.write_text("PM reviewed this batch.")
         script = """from pathlib import Path
 import errno
+import os
+os.environ.pop("PM_HUB_PROTECTED_ROOT", None)
+draft = Path("studio/workspace/initiatives/draft.md")
+draft.parent.mkdir(parents=True, exist_ok=True)
+draft.write_text("Agent draft")
 Path("studio/probe").touch()
+for path in ("core-probe", "studio/.oryx-approvals/new.json", "studio/.oryx-approvals/existing.json"):
+    try:
+        Path(path).write_text("unreviewed edit")
+    except OSError as exc:
+        assert exc.errno in {errno.EACCES, errno.EPERM, errno.EROFS}
+    else:
+        raise AssertionError(f"{path} was writable")
 try:
-    Path("core-probe").touch()
+    Path("studio/.oryx-approvals").rename("studio/replaced-approvals")
 except OSError as exc:
-    assert exc.errno in {errno.EACCES, errno.EPERM, errno.EROFS}
+    assert exc.errno in {errno.EACCES, errno.EPERM, errno.EBUSY, errno.EROFS}
 else:
-    raise AssertionError("core was writable")
+    raise AssertionError("PM approval history could be replaced")
 """
         probe_command = [sys.executable, "-c", script]
         for client in ("codex", "claude"):
@@ -447,5 +467,7 @@ else:
                 self.assertTrue((self.work / "probe").exists())
                 (self.work / "probe").unlink()
                 self.assertFalse((self.root / "core-probe").exists())
+                self.assertEqual(receipt.read_text(), "PM reviewed this batch.")
+                self.assertEqual((self.work / "workspace/initiatives/draft.md").read_text(), "Agent draft")
         # The PM's own process still has its original permissions.
         (self.root / "core-probe").touch()

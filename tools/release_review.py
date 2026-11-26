@@ -72,6 +72,8 @@ def joint_clearance(pr, summary, api):
 
 def browser_impact(pr, api):
     count = pr["changed_files"]
+    if type(count) is not int or not 0 <= count <= 3000:
+        raise ValueError("Cannot verify all changed paths for this release")
     files = {}
     for page in range(1, (count + 99) // 100 + 1):
         for changed in api(f"pulls/{pr['number']}/files?per_page=100&page={page}"):

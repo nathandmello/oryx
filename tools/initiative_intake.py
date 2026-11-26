@@ -34,7 +34,7 @@ def candidates(items, capture):
 
 def validate_review(items, review):
     if not isinstance(review, dict) or set(review) != {"considered", "candidates"}:
-        raise ValueError("Expected a signed intake comparison")
+        raise ValueError("Expected an approved intake comparison")
     ids = review["candidates"]
     if (type(review["considered"]) is not int or review["considered"] != len(items)
             or not isinstance(ids, list) or not items or len(ids) != min(len(items), MAX_CANDIDATES)

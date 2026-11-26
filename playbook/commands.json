@@ -29,6 +29,24 @@
     "preferences": "workspace preferences"
   },
   "commands": {
+    "workspace journal show": {
+      "summary": "Show local transcript capture and retention settings for this Studio.",
+      "effect": "read",
+      "cli": ["journal", "status"],
+      "example": []
+    },
+    "workspace handoff show": {
+      "summary": "Find open work by its name and review the saved next step.",
+      "effect": "read",
+      "cli": ["handoff", "resume"],
+      "example": []
+    },
+    "workspace suggestions show": {
+      "summary": "Find pending optional suggestions that can still be reviewed.",
+      "effect": "read",
+      "cli": ["offer", "list"],
+      "example": []
+    },
     "workspace company apply": {
       "summary": "Import a versioned company workflow file into this Studio.",
       "effect": "local-write",
@@ -74,6 +92,20 @@
     "context stakeholder show": {
       "summary": "Look up confirmed people, reporting lines and decision relationships in the stakeholder map.",
       "guide": "playbook/stakeholders.md"
+    },
+    "context stakeholder-profile capture": {
+      "summary": "Create or update a private stakeholder profile together, one sourced observation at a time.",
+      "guide": ".agents/skills/stakeholder-profiles/SKILL.md"
+    },
+    "context stakeholder-profile coach": {
+      "summary": "Prepare for a conversation or rehearse a decision using selected stakeholder profiles.",
+      "guide": "playbook/stakeholder-profiles.md"
+    },
+    "context stakeholder-profile show": {
+      "summary": "Read accepted observations for one stakeholder by their stable profile ID.",
+      "effect": "read",
+      "cli": ["stakeholder-profile", "show"],
+      "example": ["maya"]
     },
     "context area show": {
       "summary": "Locate a product area's standing context and sources.",
@@ -140,13 +172,13 @@
       "guide": ".agents/skills/define-initiative/SKILL.md"
     },
     "portfolio backlog show": {
-      "summary": "Show the signed backlog and report review issues in the due view.",
+      "summary": "Show the backlog and report review issues in the due view.",
       "effect": "read",
       "cli": ["backlog"],
       "example": ["--product", "checkout", "--due"]
     },
     "portfolio roadmap show": {
-      "summary": "Generate the selected roadmap from the signed initiative register.",
+      "summary": "Generate the selected roadmap from the initiative register.",
       "effect": "read",
       "cli": ["roadmap"],
       "example": ["--product", "checkout", "--format", "markdown"]

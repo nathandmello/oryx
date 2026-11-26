@@ -1,40 +1,10 @@
 # Approve initiative transactions
 
-Use a trusted oryx checkout and OpenSSH with `ssh-keygen -Y sign` and `ssh-keygen -Y verify`.
-
-Keep the PM signing key and trusted allowed-signers file outside both repositories. List `pm-hub-pm` and its public key on one line. Set `PM_HUB_ALLOWED_SIGNERS` to the file's absolute path.
-
-Keep signing access with the PM. Protect verified oryx code and signer configuration against agent writes. Give agents writable drafts and read-only access to registers and their parent directories.
-
-Signatures detect changes to signed data. Filesystem permissions protect registers from deletion and rollback.
-
-### Two local POSIX accounts
-
-Set `PM_HUB_SHARED_GROUP` to the dedicated group in both accounts. Fresh files default to owner-only access.
-Use a local filesystem that supports exclusive locks on read-only descriptors.
-
-| Existing location | PM provisions | Access for the group |
-| --- | --- | --- |
-| `studio/workspace/backlogs/<product>/` | PM owner, shared group, mode `2750` | Read and traverse |
-| `studio/workspace/experiments/<product>/<initiative>/` | Shared group, mode `2770` | Create and edit drafts |
-| Signed register | Shared group, mode `0640` | Read |
-| Named experiment drafts | Shared group, mode `0660` | Read and write |
-| `.git/pm-hub-writer.lock` and `studio/.git/pm-hub-writer.lock` | PM owner, shared group, mode `0640` | Read and lock |
-
-Before enabling sharing, provision both locks and existing files as shown. Keep both locks in place.
-Provision the experiment draft directory before its first target. Setgid directories preserve the group during atomic publication.
-
-Give the group read access to context, settings, upgrade records, Git metadata, and public signers.
-Protect Git metadata and register ancestors against agent writes. Check inherited ACLs. Trust only verified repository paths in Git.
-
-Test `initiative show` and `initiative draft-experiment` as the agent after a signed revision.
-Verify write access to drafts and read-only access to registers and their parents. Tests check file modes and locking under one account.
-
-If the shared-write test skips, rerun with `TMPDIR` on a filesystem that preserves setgid.
+Prepare proposals in a [protected agent session](overrides.md#start-a-pm-session). The PM approves them in their own terminal or, for roadmap changes, the [local browser app](local-ui.md).
 
 ## Register the product
 
-Create the company and product context records first. Check their parent link. Choose a maximum for open initiatives and concurrent discovery work. Use zero for discovery when no capacity is available.
+Create the linked company and product context records. Set limits for open initiatives and concurrent discovery. Zero discovery slots means none are available.
 
 ```json
 [
@@ -48,25 +18,28 @@ Create the company and product context records first. Check their parent link. C
 ]
 ```
 
-Replace these fictional limits with PM-confirmed values.
+Replace the example limits with the PM’s values.
 
 ## Propose and approve
 
-Run `python3 tools/pm.py initiative schema` for accepted fields and transitions. Use the exact identifier returned by `initiative show`. Submit one or more linked transactions in one JSON array.
+Run `python3 tools/pm.py initiative schema` for accepted fields and transitions. Use the IDs from `initiative show`. Submit linked transactions in one JSON array.
 
 ```sh
 python3 tools/pm.py initiative propose example < changes.json > proposal.json
 ```
 
-Review each transaction, [decision rationale](decision-forecasts.md), and cited source. Stop when a gate requires missing facts.
-
-From the trusted PM account, apply the reviewed proposal. Use the PM signing key's absolute path.
+Open the proposal in your terminal.
 
 ```sh
-python3 tools/pm.py initiative apply example --key "$PM_SIGNING_KEY" < proposal.json
+python3 tools/pm.py initiative apply example < proposal.json
 ```
 
-Changes to a proposal, register, or reviewed document require a fresh preview.
+Read the proposed changes, [decision rationale](decision-forecasts.md), and cited evidence. Type `approve` at the prompt to record that revision.
+If evidence is missing, leave the proposal open. Changed transactions, register history, or reviewed documents require a fresh preview.
+
+For a PM-run script, pass `--approve REVISION` with the complete `revision` you reviewed.
+Supply that value independently of the proposal file.
+Inspect the decision with `initiative show example INITIATIVE_ID`.
 
 Use the registered product context ID and a stable initiative slug.
 
@@ -92,16 +65,15 @@ After the first capture, review the [possible matches](initiative-views.md#revie
 
 `initiative show` lists the editable draft and its missing fields.
 A ready plan needs a linked hypothesis, method, decision criterion, planned date, and source.
-New proposals need visible answers. Give the method and criterion distinct content.
+Describe the method and criterion separately.
 
 ```json
 [{"type": "approve-experiment", "initiative": "product-context-0123456789ab/renewals", "metric": "renewal-rate"}]
 ```
 
-Review the experiment under `reviewed_transactions` before signing. Schedule the test for the signing date or later.
-Run the approved test and submit its results in a later proposal.
+Review the experiment under `reviewed_transactions` before approval. Schedule the test for the approval date or later.
 
-After an interrupted file update, run `python3 tools/pm.py initiative sync-drafts example`. This also creates drafts for eligible existing targets.
+Recover missing experiment drafts with `initiative sync-drafts example`.
 
 ## Review gates
 
@@ -111,25 +83,51 @@ After an interrupted file update, run `python3 tools/pm.py initiative sync-draft
 - Apply [the brief-review checks](brief-review.md) before proposing a candidate.
 - Use `approve-initiative` with a complete Initiative Brief and a linked success target. This creates a roadmap candidate.
 - List each approved candidate in the comparison table once. Submit the same IDs in `cycle.options`. Describe existing commitments in prose.
-- Use `plan` with a reviewed cycle, unique rank, horizon, effort, and trade-off. Stay within signed cycle capacity.
+- Use `plan` with a reviewed cycle, unique rank, horizon, effort, and trade-off. Stay within approved cycle capacity.
 - Compare a candidate again after the PM approves a revised Initiative Brief.
-- Use `start-delivery` with the delivery URL. Propose `ship` with [reviewed readiness](initiative-work.md#ship-decision) and a review date. Sign [the outcome review](outcome-evidence.md).
+- Use `start-delivery` with the delivery URL. Propose `ship` with [reviewed readiness](initiative-work.md#ship-decision) and a review date. Ask the PM to approve [the outcome review](outcome-evidence.md).
 - Use `defer` with a review date or event. Decline obsolete deferred work directly. Reopen work for material changes.
 - Use `expedite` only for verified urgent work. Provide the owner, obligation, deadline, scope, delivery link, and review date.
 
-An approved Initiative Brief, completed discovery brief, and planning comparison are bound to their reviewed bytes. Keep notes outside those files after approval. A new discovery timebox binds its plan and Sources. Findings can evolve. Renew older timeboxes with `start-discovery` before concluding.
+Approval records the exact reviewed briefs and planning comparison. Keep later notes separately. A discovery timebox covers its plan and Sources. Update Findings as evidence arrives. Renew older timeboxes with `start-discovery` before concluding.
 
 ## Existing private work
 
-New reviews need distinct, visible answers. A short answer or named source can suffice.
-Prior signed hypotheses and experiments remain readable.
+Oryx rechecks the Initiative Brief at selection and delivery start. Reopen weak briefs for review.
 
-Describe the discovery method in the brief. The signed `review_on` sets its next checkpoint.
-At selection and delivery start, oryx checks the approved Initiative Brief again. Reopen weak briefs for revision and approval.
+Update all clients before the first new approval. Sync and back up the register with its receipt at `studio/.oryx-approvals/<product>.json`.
+After an interrupted save, retry the approved proposal. If it is unavailable, run `python3 tools/pm.py initiative recover PRODUCT` in your terminal.
+Recovery applies the recorded approval only when the register matches its expected revision. [Updates and recovery](updates.md)
 
-For existing work, cite the original analysis. Registered initiatives use the generated roadmap.
+An older register may carry a PM SSH signature. Keep its existing trusted public allowed-signers file outside the checkout.
+Set `PM_HUB_ALLOWED_SIGNERS` to its absolute path. Oryx uses OpenSSH to verify the register.
 
-Follow [the oryx update procedure](updates.md) for private format alignment.
+The first approved change retains the old signature, revision, and event count. Subsequent reviews use the recorded history.
+Keep the public file and backup for independent verification. New approvals need no signing key.
 
 Published format-1 installations follow the normal upgrade. An unreleased prototype stored signed registers under the earlier layout.
-If alignment detects that prototype, it pauses before moving the data or changing signed references. Use its original format-1 checkout at `02a62b6`. If a previous upgrade already moved those files, consult the verified installation backup.
+Alignment pauses on that prototype. Use its original checkout at `02a62b6`. If those files already moved, consult the verified installation backup.
+
+## Two local POSIX accounts
+
+For a separate agent account, set `PM_HUB_SHARED_GROUP` to the dedicated group in both accounts. New files otherwise allow only owner access.
+Use a local filesystem that supports exclusive locks on read-only descriptors.
+
+| Existing location | PM provisions | Access for the group |
+| --- | --- | --- |
+| `studio/workspace/backlogs/<product>/` | PM owner, shared group, mode `2750` | Read and traverse |
+| `studio/workspace/experiments/<product>/<initiative>/` | Shared group, mode `2770` | Create and edit drafts |
+| `studio/.oryx-approvals/` | PM owner, shared group, mode `2750` | Read and traverse |
+| Initiative register and receipt | Shared group, mode `0640` | Read |
+| Named experiment drafts | Shared group, mode `0660` | Read and write |
+| `.git/pm-hub-writer.lock` and `studio/.git/pm-hub-writer.lock` | PM owner, shared group, mode `0640` | Read and lock |
+
+Provision both locks and existing files before sharing. Keep both locks in place.
+Provision the experiment draft directory before its first target. Setgid directories preserve the group during atomic publication.
+
+Give the group read access to context, settings, upgrade records, and Git metadata.
+Protect Git metadata and the ancestors of registers and receipts against agent writes. Check inherited ACLs. Trust only verified repository paths in Git.
+
+Test `initiative show` and `initiative draft-experiment` as the agent. Check draft write access and read-only access to registers and receipts.
+
+If the shared-write test skips, rerun with `TMPDIR` on a filesystem that preserves setgid.

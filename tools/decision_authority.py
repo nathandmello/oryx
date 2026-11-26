@@ -175,7 +175,7 @@ def lookup(root, ref):
     elif ref.get("kind") == "context":
         candidates = context(storage.private_root(root), ref.get("record"))
     else:
-        raise ValueError("Select a signed initiative decision or a reviewed closed context decision")
+        raise ValueError("Select an approved initiative decision or a reviewed closed context decision")
     matches = [entry["authority"] for entry in candidates if fingerprint(ref) == fingerprint(entry["decision"])]
     if len(matches) != 1:
         raise ValueError("The decision is missing, ambiguous, superseded or changed. Select its current reference.")

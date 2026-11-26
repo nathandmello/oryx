@@ -28,10 +28,16 @@ CSP = ("default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'se
 MAX_BODY = 1024 * 1024
 
 
+def reviewed_comparison(root, path, revision):
+    _, _, contents = initiative_store.local_markdown(root, path, "prioritization")
+    if initiative_store.digest(contents) != revision:
+        raise ValueError("The comparison changed. Review a fresh proposal")
+    return contents.decode("utf-8")
+
+
 class App:
-    def __init__(self, root, key, prepare_write, run_work, confirm):
+    def __init__(self, root, prepare_write, run_work, confirm):
         self.root = root
-        self.key = key
         self.prepare_write = prepare_write
         self.run_work = run_work
         self.confirm = confirm
@@ -66,7 +72,7 @@ class App:
                 continue
             entry["initiatives"].update((item["id"].split("/")[1], item["title"]) for item in register.items.values())
         ordered = sorted(products.values(), key=lambda entry: (entry["title"].casefold(), entry["id"]))
-        return {"products": ordered, "signing": self.key is not None}
+        return {"products": ordered, "can_approve": not initiative_store.in_agent_session()}
 
     def preview(self, product, body):
         with self.approval_lock:
@@ -88,10 +94,11 @@ class App:
             documents = []
             for cycle in sorted(cycles):
                 reference = register.cycles[cycle]["references"]
-                _, contents = roadmap_edit.read_comparison(self.root, product, cycle)
-                if contents is None or initiative_store.digest(contents.encode("utf-8")) != reference["sha256"]:
-                    raise ValueError("The comparison changed. Prepare a new proposal")
-                documents.append({"path": reference["path"], "text": contents, "revision": reference["sha256"]})
+                path = layout.prioritization(product, cycle)
+                if reference["path"] != path:
+                    raise ValueError("The approved comparison must belong to this product and cycle")
+                contents = reviewed_comparison(self.root, path, reference["sha256"])
+                documents.append({"path": path, "text": contents, "revision": reference["sha256"]})
             titles = {event["initiative"]: register.items[event["initiative"]]["title"]
                       for event in changes if "initiative" in event}
             identifier = secrets.token_urlsafe(24)
@@ -101,8 +108,8 @@ class App:
             return public
 
     def approve(self, identifier):
-        if self.key is None:
-            raise ValueError("Start oryx with --key to approve the roadmap from this machine")
+        if initiative_store.in_agent_session():
+            raise ValueError("Open oryx from your own terminal to approve this roadmap change")
         with self.approval_lock:
             if self.review is None or identifier != self.review[0]["id"]:
                 raise ValueError("Review a current proposal before approval")
@@ -112,14 +119,23 @@ class App:
             if current != proposal:
                 self.review = None
                 raise ValueError("The roadmap or comparison changed. Review a fresh proposal")
+            self.check_documents(review)
             if not self.confirm(self.root, review):
                 return {"cancelled": True}
             try:
-                self.require_setup()
-                revision = initiative_store.apply(self.root, review["product"], proposal, self.key)
+                with storage.writer_lock(storage.private_root(self.root)):
+                    self.require_setup()
+                    self.check_documents(review)
+                    revision = initiative_store.apply(self.root, review["product"], proposal,
+                                                      approved_revision=review["revision"])
             finally:
                 self.review = None
             return {"revision": revision}
+
+    def check_documents(self, review):
+        # Releasing the last placement can remove its comparison from the register's live checks.
+        for doc in review["documents"]:
+            reviewed_comparison(self.root, doc["path"], doc["revision"])
 
     def dispatch(self, path, body):
         self.require_setup()
@@ -261,12 +277,10 @@ def confirm_on_desktop(root, review):
     raise ValueError("The approval window could not open. Start oryx from your desktop with Tk available")
 
 
-def serve(root, key, no_open, prepare_write, run_work, *, screen="roadmap"):
+def serve(root, no_open, prepare_write, run_work, *, screen="roadmap"):
     workspace.repo(root, "workspace")
     workspace.settings(root)
-    if key is not None:
-        key = initiative_store.external_file(root, key, "PM signing key")
-    app = App(root, key, prepare_write, run_work, confirm_on_desktop)
+    app = App(root, prepare_write, run_work, confirm_on_desktop)
     with make_server(app) as server:
         query = urlencode({"screen": screen})
         address = f"{server.origin}/?{query}#{server.token}"

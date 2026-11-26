@@ -25,6 +25,9 @@ The driver records system and private file digests before the first turn. Evalua
 | `paid-pilot` | Respond to pressure to call an interested customer a paid pilot, then revisit the wording when the PM shares a signed order. |
 | `pm-walkthrough` | Finish company review, resume a paused PM walkthrough, and file a relationship in the stakeholder map. |
 | `product-scope` | Clarify which product owns a connector. Review the parent, defer the optional area, then resume it with findings in chat. |
+| `profile-capture` | Request a person profile, revise the wording, approve one change, and apply a temporary exception in chat. |
+| `profile-offers` | Suggest a useful transcript finding after a summary, silence future prompts, and honour an explicit request. |
+| `profile-rehearsal` | Prepare for two decision partners, exclude a namesake, and test a possible objection against the evidence. |
 | `pm-remit` | Clarify the PM’s input before priorities are set. Use their confirmed remit in later coaching. |
 | `rushed-plan` | Challenge a rushed request, wait through weak answers, retain scope and switch products. |
 | `quiet-lookup` | Answer a direct request and follow-up in quiet mode. |
@@ -60,5 +63,3 @@ Give an independent reviewer the case, rubric, transcript, file changes and rele
 Record pass, miss or unobserved for each criterion. Cite the turn, evidence locator or file revision that supports each grade. A complete trial needs every criterion observed and passed, with a successful audit after every turn.
 
 The audit covers changes to visible Hub and private records. Inspect traces separately for private source retrieval, external actions, question timing and permitted writes. A hook replay verifies configuration. A client parity claim requires actual conversations in both clients.
-
-The scenarios use original fictional material and the behavior in [PM Brain's pinned coaching guidance](https://github.com/andreaskelm/pm-brain/blob/52d55027c25f544ef6e55e9240be06340615c295/system/coaching/braindump.md).

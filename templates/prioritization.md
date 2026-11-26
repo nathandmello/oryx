@@ -7,7 +7,7 @@
 
 ## Capacity constraints
 
-{{Explain commitments, dependencies, and constraints. The signed cycle stores its dates, capacity, and unit.}}
+{{Explain commitments, dependencies, and constraints. The approved cycle stores its dates, capacity, and unit.}}
 
 ## Comparison
 

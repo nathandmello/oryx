@@ -40,6 +40,14 @@ import company_onboarding
 import product_intake
 import onboarding
 import onboarding_review
+import onboarding_profile_step
+import ingestion_signals
+import context_advice
+import offer_queue
+import work_handoffs
+import session_journal
+import turn_intent
+import stakeholder_profiles
 import customizations
 import studio_layout
 import agent_session
@@ -65,7 +73,13 @@ REQUIRED = (
     "tools/conversation.py", conversation.GUIDE, "tools/company_onboarding.py", "tools/onboarding.py",
     "tools/onboarding_review.py", "playbook/onboarding-frameworks.json", "tools/pm_profile_view.py",
     "playbook/pm-context.md", "playbook/product-context.md", "playbook/stakeholders.md",
-    "tools/product_intake.py", "tools/outcome_context.py",
+    "tools/product_intake.py", "tools/outcome_context.py", "tools/onboarding_profile_step.py",
+    "tools/ingestion_signals.py", "tools/stakeholder_signals.py", "tools/stakeholder_profiles.py",
+    "tools/turn_intent.py", "tools/session_journal.py", "tools/journal_native.py", "tools/context_advice.py",
+    "tools/offer_queue.py", "tools/work_handoffs.py", "tools/source_evidence.py", "tools/evidence_spans.py",
+    "tools/profile_retrieval.py", "playbook/ingestion.md", "playbook/stakeholder-profiles.md",
+    ".agents/skills/stakeholder-profiles/SKILL.md", ".claude/skills/stakeholder-profiles/SKILL.md",
+    "playbook/session-continuity.md", "playbook/context-advice.md", "playbook/handoffs.md",
     "tools/hub_commands.py", "playbook/commands.md", hub_commands.CATALOG,
     ".agents/skills/extend-hub/SKILL.md", ".claude/skills/extend-hub/SKILL.md",
     ".agents/skills/ingest-context/SKILL.md", ".claude/skills/ingest-context/SKILL.md",
@@ -109,7 +123,7 @@ if len(roots) != 1:
 root = roots[0]
 sys.path.insert(0, str(root / "tools"))
 runpy.run_path(str(root / "tools/hook.py"), run_name="__main__")"""
-CODEX_COMMAND = "python3 -c '" + HOOK_SCRIPT + "'"
+CODEX_COMMAND = "python3 -c '" + HOOK_SCRIPT + "' codex"
 
 ARTIFACT = re.compile(
     r"(?:^|[-_ ])(?:prds?|specs?|specifications?|requirements|user[-_ ]stories|"
@@ -285,8 +299,9 @@ def hook_errors(texts: dict[str, str]) -> list[str]:
             claude = name.startswith(".claude")
             handler = {"type": "command", "command": CODEX_COMMAND, "timeout": 15}
             if claude:
-                handler.update(command="python3", args=["-c", HOOK_SCRIPT])
-            for event in ("SessionStart", "UserPromptSubmit", "Stop", "PreToolUse"):
+                handler.update(command="python3", args=["-c", HOOK_SCRIPT, "claude"])
+            events = ("SessionStart", "UserPromptSubmit", "Stop", "PreToolUse", "PreCompact", "PostCompact")
+            for event in events if claude else (*events, "PostModelRequest"):
                 group = {"hooks": [dict(handler, timeout=600 if event == "SessionStart" else 15)]}
                 if event == "PreToolUse":
                     group["matcher"] = "Write|Edit|MultiEdit|NotebookEdit|Bash|PowerShell" if claude else "apply_patch|Bash"
@@ -301,7 +316,7 @@ def hook_errors(texts: dict[str, str]) -> list[str]:
     return errors
 
 
-def check_workspace(root: Path, system_texts: dict[str, str]) -> list[str]:
+def check_workspace(root: Path, system_texts: dict[str, str], *, validate_profiles=True) -> list[str]:
     errors, texts = [], {}
     try:
         private = workspace.repo(root, "workspace")
@@ -355,6 +370,11 @@ def check_workspace(root: Path, system_texts: dict[str, str]) -> list[str]:
     except (OSError, ValueError) as exc:
         errors.append(f"{private.name}/customizations/: {exc}")
     errors.extend(decision_forecasts.check_workspace(private))
+    if validate_profiles:
+        errors.extend(stakeholder_profiles.check_workspace(private))
+        errors.extend(ingestion_signals.check_workspace(private))
+        errors.extend(offer_queue.check_workspace(private))
+        errors.extend(work_handoffs.check_workspace(private))
     files = inventory(private)
     initiative_work_homes = set()
     captures = {company_onboarding.FILE: "company", company_onboarding.PM_FILE: "pm",
@@ -371,8 +391,24 @@ def check_workspace(root: Path, system_texts: dict[str, str]) -> list[str]:
         if not path.is_file():
             continue
         parts = path.relative_to(private).parts
+        if len(parts) == 2 and parts[0] == initiative_store.APPROVAL_HOME and path.suffix == ".json":
+            continue  # registrations() verifies the corresponding product history below.
         if (len(parts) == 3 and parts[:2] == ("workspace", "forecasts") and path.suffix == ".json"):
             continue  # The forecast checker validates every receipt in this directory.
+        if path.parent == private / stakeholder_profiles.HOME and path.suffix == ".json":
+            continue  # Profile checks validate identities, sources, and accepted revisions.
+        if rel == work_handoffs.FILE:
+            try:
+                work_handoffs.read(private)
+            except (ValueError, OSError) as exc:
+                errors.append(f"{label}: {exc}")
+            continue
+        if rel == onboarding_profile_step.FILE:
+            try:
+                onboarding_profile_step.read(private)
+            except (ValueError, OSError) as exc:
+                errors.append(f"{label}: {exc}")
+            continue
         if rel in captures or rel == onboarding_review.FILE:
             try:
                 if rel == onboarding_review.FILE:
@@ -458,7 +494,7 @@ def check_workspace(root: Path, system_texts: dict[str, str]) -> list[str]:
     return errors
 
 
-def check(root: Path = ROOT, include_workspace=True, *, command_base=None) -> list[str]:
+def check(root: Path = ROOT, include_workspace=True, *, command_base=None, validate_profiles=True) -> list[str]:
     root = root.resolve()
     errors, texts, safe = [], {}, set()
     for path in inventory(root):
@@ -548,7 +584,7 @@ def check(root: Path = ROOT, include_workspace=True, *, command_base=None) -> li
     except (OSError, ValueError) as exc:
         errors.append(f"playbook/release.json: {exc}")
     if include_workspace:
-        errors.extend(check_workspace(root, texts))
+        errors.extend(check_workspace(root, texts, validate_profiles=validate_profiles))
     return errors
 
 
@@ -585,7 +621,7 @@ def filing_validator(root, *, legacy_replay=False, legacy_structure=False):
                 for event in payload["events"]:
                     reference = event.get("references", {})
                     if reference.get("path") in governed and "sha256" in reference:
-                        raise ValueError(f"{reference['path']} binds signed evidence. Use the initiative review workflow.")
+                        raise ValueError(f"{reference['path']} binds approved evidence. Use the initiative review workflow.")
         texts = {f"templates/{kind}.md": (root / f"templates/{kind}.md").read_text() for kind in records.KINDS}
         for path in inventory(private):
             if path.suffix.lower() == ".md" and path.is_file() and path.resolve() == path:
@@ -813,11 +849,19 @@ def build_parser():
     parser = argparse.ArgumentParser(description=__doc__)
     commands = parser.add_subparsers(dest="command", required=True)
     commands.add_parser("action", help="Discover and run published oryx actions")
-    commands.add_parser("agent").add_argument("client", choices=("codex", "claude"))
+    agent = commands.add_parser("agent")
+    agent.add_argument("client", choices=("codex", "claude"))
+    agent.add_argument("--context-statusline", action="store_true", help="Use the Claude context status line for this launch")
     company_source.add_commands(commands)
     customizations.add_commands(commands)
     overrides.add_commands(commands)
     preferences.add_commands(commands)
+    stakeholder_profiles.register(commands)
+    ingestion_signals.add_commands(commands)
+    context_advice.add_commands(commands)
+    offer_queue.add_commands(commands)
+    work_handoffs.add_commands(commands)
+    session_journal.register(commands)
     checks = commands.add_parser("check")
     checks.add_argument("--system-only", action="store_true")
     checks.add_argument("--command-base", metavar="COMMIT", help="Check published slash actions against a base commit")
@@ -849,10 +893,9 @@ def build_parser():
     ui = commands.add_parser("ui", help="Open the local oryx browser app")
     ui.add_argument("--screen", choices=("roadmap", "tasks", "launch-checklists"), default="roadmap",
                     help="Choose the first screen (default: roadmap)")
-    ui.add_argument("--key", help="Absolute path to the PM signing key or its agent-backed public key")
     ui.add_argument("--no-open", action="store_true", help="Print the local URL without launching a browser")
     setup = commands.add_parser("onboarding", help="Continue the current guided walkthrough")
-    setup.add_argument("operation", choices=("status", "select-product", "select-area", "review-topic"))
+    setup.add_argument("operation", choices=("status", "select-product", "select-area", "review-topic", "profiles"))
     company_setup = commands.add_parser("company-onboarding", help="Review or resume company context in Studio")
     company_setup.add_argument("operation", choices=company_onboarding.OPERATIONS)
     for kind, description in (("pm", "Review PM and stakeholder context in Studio"),
@@ -911,7 +954,7 @@ def build_parser():
 # The browser gates its own reads and writes. Numeric checks support intake evidence.
 SETUP_TOOLS = {
     "agent", "align", "check", "check-metric", "company-onboarding", "eval-red-team", "git",
-    "init-workspace", "onboarding", "preferences", "set-remit", "sync-skills", "ui",
+    "init-workspace", "onboarding", "preferences", "journal", "set-remit", "sync-skills", "ui",
 }
 
 
@@ -1003,7 +1046,7 @@ def early_signal_plan(private, payload, remit):
 
 
 def check_command_setup(args):
-    if args.command == "override" and args.operation in {"list", "show", "set", "remove"}:
+    if args.command == "override" and args.operation in {"list", "show", "set", "remove", "profile-suggestions", "context-advice", "optional-suggestions"}:
         return None
     if args.command == "set-remit":
         require_pm_stage()
@@ -1024,7 +1067,7 @@ def check_command_setup(args):
         state = onboarding.status(private)
         if not state["ready"]:
             return onboarding.required(onboarding.for_request(private, state, args.prompt))
-        return onboarding.area_request(state, args.prompt)
+        return onboarding.area_request(state, args.prompt) or onboarding.profile_request(state, args.prompt)
     state = incomplete_setup()
     if not state:
         return None
@@ -1062,15 +1105,23 @@ def main() -> int:
                 prepare_private_write(ROOT)
                 operation = {"select-product": onboarding_review.select_product,
                              "select-area": onboarding_review.select_area,
+                             "profiles": onboarding_review.profiles,
                              "review-topic": onboarding_review.review}[args.operation]
                 transition = operation(workspace.repo(ROOT, "workspace"), storage.json_input(sys.stdin.read()))
             state = onboarding.status(workspace.repo(ROOT, "workspace"))
-            if transition and state.get("revision") == transition["revision"] and state["ready"]:
+            if (transition and state["ready"] and state.get("revision") == transition["revision"]
+                    and state.get("stakeholder_profiles") == transition.get("stakeholder_profiles")):
                 state["next_action"] = transition["next_action"]
+                if "optional_offer" in transition:
+                    state["optional_offer"] = transition["optional_offer"]
             print(json.dumps(state, indent=2, ensure_ascii=False))
             return 0
+        if args.command == "journal":
+            private = None if session_journal.owner_operation(args) else workspace.repo(ROOT, "workspace")
+            print(json.dumps(session_journal.run(private, args), indent=2, ensure_ascii=False))
+            return 0
         if args.command == "agent":
-            agent_session.launch(ROOT, args.client)
+            agent_session.launch(ROOT, args.client, context_statusline=args.context_statusline)
             return 0
         if args.command == "customize":
             if args.operation == "apply":
@@ -1134,7 +1185,7 @@ def main() -> int:
                 return result.returncode
             return 0
         if args.command in {"backlog", "roadmap", "initiative"}:
-            if args.command == "initiative" and args.operation in {"apply", "sync-drafts", "draft-experiment"}:
+            if args.command == "initiative" and args.operation in {"apply", "recover", "sync-drafts", "draft-experiment"}:
                 prepare_private_write(ROOT)
             initiatives_cli.run(ROOT, args)
             return 0
@@ -1148,7 +1199,7 @@ def main() -> int:
             return 0
         if args.command == "ui":
             import local_ui
-            local_ui.serve(ROOT, args.key, args.no_open, prepare_private_write, run_initiative_work, screen=args.screen)
+            local_ui.serve(ROOT, args.no_open, prepare_private_write, run_initiative_work, screen=args.screen)
             return 0
         if args.command == "new":
             workspace.repo(ROOT, "workspace")
@@ -1207,9 +1258,14 @@ def main() -> int:
                 explicit = {"company": True} if args.company else (
                     {"product": args.product, "area": args.area, "initiative": args.initiative} if args.product else None
                 )
-                result, _ = task_context.turn_context(private, args.prompt, cwd=Path.cwd().resolve(),
-                                                      explicit=explicit, work_record=args.work_record,
-                                                      include_history=args.history, explain=args.explain)
+                request = turn_intent.instruction(args.prompt)
+                control, refused, mute = turn_intent.controls(args.prompt)
+                result = work_handoffs.for_prompt(private, request) if not (refused or control is not None or mute or explicit or args.work_record) else None
+                if not result:
+                    result, _ = task_context.turn_context(private, request, cwd=Path.cwd().resolve(),
+                                                          explicit=explicit, work_record=args.work_record,
+                                                          include_history=args.history, explain=args.explain,
+                                                          allow_profiles=not (refused or control is not None or mute))
             print(json.dumps(result, indent=2, ensure_ascii=False))
             return 0
         if args.command == "check-metric":

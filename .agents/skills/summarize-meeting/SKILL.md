@@ -8,7 +8,7 @@ argument-hint: "<initiative> <meeting title, date range, source link, or transcr
 
 Keep transcript work direct. Use the [conversation guide](../../../playbook/conversation.md) for an ensuing consequential product decision.
 
-Adapted from [Summarize Meeting by Tom Rochette](https://github.com/tomzx/agents/blob/main/skills/summarize-meeting/SKILL.md). See the [MIT license](LICENSE).
+See the [license and copyright notice](LICENSE).
 
 ## Identify the initiative and meetings
 
@@ -46,14 +46,18 @@ Start with the title, meeting date, duration, and permitted participant informat
 | Group | What to capture |
 | --- | --- |
 | Topics discussed | One to three sentences per topic. Preserve chronology where it helps. |
-| Decisions | State explicit outcomes, scope, authority, and rationale. Label proposals as proposals. |
+| Decisions | State explicit outcomes, scope, authority, and rationale. Carry forward timing windows and exceptions as agreed. Label proposals as proposals. |
 | Action items | Record the action, owner, and due date. Use Unassigned or Unspecified for missing details. |
 | Open questions | Capture unresolved issues and deferred decisions. |
 | Key quotes | Include brief, permitted verbatim quotes when the wording matters. |
 
 Combine related topics in long meetings. Cite the source and a timestamp, segment, or line range for material claims. Preserve uncertainty and disagreements.
+For a scheduling decision, reuse the source’s timing phrase with its qualifiers in the proposed wording. Leave any exact time open unless someone agreed to it.
 
-If conflicting accounts affect a decision, owner, or deadline, ask which account to use before filing that claim.
+A direct correction can resolve an earlier secondhand account. Preserve the correction and its source.
+If a material conflict remains, ask which account applies before filing.
+For authorized stakeholder assessment, pass the original permitted passages through the [ingestion adapter](../../../playbook/ingestion.md).
+Keep the main summary focused. Review optional profile wording separately at a natural pause.
 
 ## File initiative context
 

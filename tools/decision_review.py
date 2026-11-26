@@ -28,7 +28,7 @@ def signed_findings(private, product, register, events, today):
             newest_evidence[identifier] = event
         elif event["type"] == "signal" and identifier in decided:
             if event["source"] in register.items[identifier].get("_signal_reviews", {}):
-                continue  # The active signed evidence review owns this signal's disposition.
+                continue  # The active approved evidence review owns this signal's disposition.
             previous = newest_evidence.get(identifier)
             if previous is None or previous["type"] == "signal":
                 newest_evidence[identifier] = event
@@ -45,17 +45,17 @@ def signed_findings(private, product, register, events, today):
         review_date = initiative_events.iso_date(due)
         if review_date and review_date <= today:
             yield finding(0, "decision-due", f"{decision['action']} is due for review on {review_date}.",
-                          decision["source"], "Check the signed review condition against current evidence.")
+                          decision["source"], "Check the approved review condition against current evidence.")
         if item["phase"] == "declined" or (item["phase"] == "shipped" and due is None):
             continue
         if decision and not review_date:
             if initiative_events.iso_date(decision["on"]) <= today - timedelta(weeks=6):
-                yield finding(3, "decision-age", f"The latest signed decision dates to {decision['on']}.",
+                yield finding(3, "decision-age", f"The latest approved decision dates to {decision['on']}.",
                               decision["source"], "Check whether the original reason still applies.")
         for review in initiative_views.signal_reviews(private, item):
             if evidence_reviews.review_due(review, today):
                 message = f"{review['state']}: {review['evidence']['summary']} {review['reason']}"
-                check = "Compare the cited evidence with the signed claim and choose a signal disposition."
+                check = "Compare the cited evidence with the approved claim and choose a signal disposition."
                 row = {"kind": "signal-review", "product": product, "subject": subject, "finding": message,
                        "risk_id": review["id"], "state": review["state"],
                        "sources": [path, *evidence_reviews.review_sources(review)]}
@@ -68,12 +68,12 @@ def signed_findings(private, product, register, events, today):
         condition = rationale.get("reopen_when") or (revisit if not initiative_events.iso_date(revisit) else None)
         if evidence and condition:
             candidate = finding(1, "possible-trigger", f"Check whether new evidence meets this condition: {condition}",
-                                evidence["source"], "Compare the observation with the signed reopen condition.")
+                                evidence["source"], "Compare the observation with the approved reopen condition.")
             candidate[1]["sources"].append(decision["source"])
             yield candidate
         elif evidence and evidence["type"] == "signal":
             yield finding(3, "later-signal", f"Evidence added after the {decision['action']} decision: {evidence['summary']}",
-                          evidence["source"], "Compare the new observation with the signed decision's reason.")
+                          evidence["source"], "Compare the new observation with the approved decision's reason.")
         if item["phase"] in initiative_events.IN_DEFINITION:
             for identifier, hypothesis in sorted(item["hypotheses"].items()):
                 tests = {key for key, test in item["experiments"].items() if test["hypothesis"] == identifier}

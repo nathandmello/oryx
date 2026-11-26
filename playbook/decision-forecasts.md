@@ -18,9 +18,9 @@ For a registered initiative, add optional `rationale` to the usual decision tran
 }
 ```
 
-Use the decision’s existing `source` for the evidence and `reason` for the PM’s words. Include at least one credible alternative. Match any owner, scope or review date required by the transition. The PM signs the entire decision, including the rationale inside its reason.
+Use the decision’s existing `source` for the evidence and `reason` for the PM’s words. Include at least one credible alternative. Match any owner, scope or review date required by the transition. The PM approves the entire decision, including the rationale inside its reason.
 
-For a context-owned choice, use `route-context` and the owning company, product, area or initiative overview. Record the question, scope, person, date, evidence and next step. Capture alternatives, trade-off and reopen condition in the reviewed source or linked rationale. Confirm the review controls and dated Sources entry. Correct an initiative call with a signed successor and a context call with a sourced superseding entry. [Initiative approvals](initiative-approvals.md) · [Context capture](context.md)
+For a context-owned choice, use `route-context` and the owning company, product, area or initiative overview. Record the question, scope, person, date, evidence and next step. Capture alternatives, trade-off and reopen condition in the reviewed source or linked rationale. Confirm the review controls and dated Sources entry. Correct an initiative call with a new PM-approved decision and a context call with a sourced superseding entry. [Initiative approvals](initiative-approvals.md) · [Context capture](context.md)
 
 ## Preview a forecast
 
@@ -33,7 +33,7 @@ python3 tools/pm.py forecast decisions --product billing
 python3 tools/pm.py forecast decisions --context context/products/billing/overview.md
 ```
 
-For registered decisions, `--initiative` with the full registered ID narrows the first command. It verifies the register with the trusted PM signer. Closed context decisions require a reviewed overview, a named owner, a dated source and an active decision row. The selector binds to the original decision and source identity. The preview includes source coverage and applicable open evidence reviews. Forecast confirmation records the prediction and preserves those advisories.
+For registered decisions, `--initiative` with the full registered ID narrows the first command. It checks the register and its approval history. Closed context decisions require a reviewed overview, a named owner, a dated source and an active decision row. The selector binds to the original decision and source identity. The preview includes source coverage and applicable open evidence reviews. Forecast confirmation records the prediction and preserves those advisories.
 
 Replace the example’s `decision` with the returned selector. Use the actual dates and a future resolution date. Probability is a number from 0 to 100, including fractional percentages.
 
@@ -99,6 +99,8 @@ Confirm `true` or `false` only when dated evidence on or after the resolution da
 
 Forecasts live in `studio/workspace/forecasts/forecast-<id>.json`. The private record retains the reviewed decision citation and its evidence as they stood at creation. Historical forecasts can be resolved after the owning decision changes. Existing decisions and private files need no conversion.
 
-Use the release’s normal backup and alignment steps on every client before sharing the first new forecast. An earlier oryx release can still replay a signed rationale, but its workspace checker predates the forecast file type. Preserve a backup of the current private checkout before rolling back. Restore matching oryx and Studio backups into a separate checkout for older-client use. Reopen the preserved current checkout with a compatible release to recover later forecast history. [Installation updates and backups](updates.md)
+Use the release’s normal backup and alignment steps on every client before sharing the first new forecast. Clients predating forecasts can read their own initiative rationales. Their workspace checker predates forecast files.
+
+Preserve a backup of the current private checkout before rolling back. Restore matching oryx and Studio backups into a separate checkout for older-client use. Reopen the preserved current checkout with a compatible release to recover later forecast history. [Installation updates and backups](updates.md)
 
 After a failed write, read the error and preview again if the evidence or record changed. Replay the exact saved proposal after a lost receipt. For a saved revision mismatch, inspect private Git history and restore the intended reviewed version.
