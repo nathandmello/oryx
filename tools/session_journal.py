@@ -86,9 +86,26 @@ def _journal_home(*, exclude=None, provision=False):
     return base
 
 
+def read_only_mount(path):
+    return bool(os.statvfs(path).f_flag & os.ST_RDONLY)
+
+
 def protected_home(private):
-    """Return the checked namespace to mask when this checkout cannot open its own journal."""
-    return _journal_home(exclude=private.parent, provision=True)
+    """Return a mask target, or prove the namespace is absent on a read-only mount."""
+    base = _journal_home(exclude=private.parent)
+    for directory in (base, *base.parents):
+        try:
+            info = directory.lstat()
+        except FileNotFoundError:
+            continue
+        if not stat.S_ISDIR(info.st_mode):
+            raise ValueError("Cannot verify the local journal directory")
+        if directory == base:
+            return base
+        if read_only_mount(directory):
+            return None
+        return _journal_home(exclude=private.parent, provision=True)
+    raise ValueError("Cannot verify the local journal filesystem")
 
 
 def _birth_time(path, info):

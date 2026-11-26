@@ -3,6 +3,7 @@
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import ExitStack
 from datetime import datetime, timezone
+import errno
 import json
 import os
 from pathlib import Path
@@ -421,6 +422,44 @@ class JournalTests(unittest.TestCase):
                 with self.assertRaises(ValueError):
                     agent_session.launch(self.root, "claude")
             exec_client.assert_not_called()
+
+    def test_immutable_state_mount_only_masks_existing_verified_namespaces(self):
+        state = Path(os.environ["XDG_STATE_HOME"])
+        state.mkdir(mode=0o700)
+        base = state / "oryx" / "journals"
+        with ExitStack() as stack:
+            stack.enter_context(patch.object(agent_session.workspace, "repo", return_value=self.studio))
+            stack.enter_context(patch("subprocess.run"))
+            stack.enter_context(patch("shutil.which", side_effect=lambda tool: "/bin/" + tool))
+            stack.enter_context(patch("os.chdir"))
+            stack.enter_context(patch.object(agent_session.sys, "platform", "linux"))
+            exec_client = stack.enter_context(patch("os.execvpe"))
+            for exists in (False, True):
+                if exists:
+                    base.parent.mkdir(mode=0o700)
+                    base.mkdir(mode=0o700)
+                    (base / ("a" * 64)).mkdir(mode=0o700)
+                immutable = OSError(errno.EROFS, "Read-only filesystem")
+                with patch("os.statvfs") as statvfs, patch.object(Path, "mkdir", side_effect=immutable) as mkdir:
+                    statvfs.return_value.f_flag = os.ST_RDONLY
+                    agent_session.launch(self.root, "codex")
+                    mkdir.assert_not_called()
+                    args = exec_client.call_args.args[1]
+                    self.assertEqual("--tmpfs" in args, exists)
+                    if exists:
+                        i = args.index("--tmpfs")
+                        self.assertEqual(args[i:i + 4], ["--tmpfs", str(base), "--remount-ro", str(base)])
+                    self.assertNotIn(str(base), args[-1])
+            base.chmod(0o755)
+            with patch("os.statvfs") as statvfs, self.assertRaises(ValueError):
+                statvfs.return_value.f_flag = os.ST_RDONLY
+                agent_session.launch(self.root, "codex")
+            base.chmod(0o700)
+            # An EROFS or permission error alone cannot establish absence on a read-only mount.
+            with patch.dict(os.environ, XDG_STATE_HOME=str(self.base / "missing")), patch("os.statvfs") as statvfs:
+                statvfs.return_value.f_flag = 0
+                with patch.object(Path, "mkdir", side_effect=OSError(errno.EROFS, "unverified")), self.assertRaises(OSError):
+                    agent_session.launch(self.root, "codex")
 
     def test_protected_client_policy_scope_and_optional_statusline(self):
         with ExitStack() as stack:

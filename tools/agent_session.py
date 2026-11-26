@@ -20,15 +20,14 @@ def launch(root, client, *, context_statusline=False):
     binary = shutil.which(client)
     if not binary:
         raise ValueError(f"Install {client} before starting a protected session")
-    try:
-        # Reserve only this checkout's directory. The journal itself needs explicit consent.
-        journal = session_journal.location(private, provision=True)
-        journals = journal.parent
-    except (OSError, ValueError):
-        journal = None
-        # Mask the entire owner namespace if this checkout cannot prove its own identity.
-        # If the namespace itself is redirected or unsafe, abort before starting the client.
-        journals = session_journal.protected_home(private)
+    journals = session_journal.protected_home(private)
+    journal = None
+    if journals is not None and not session_journal.read_only_mount(journals):
+        try:
+            # Reserve this checkout's directory. Recording still needs explicit consent.
+            journal = session_journal.location(private, provision=True)
+        except (OSError, ValueError):
+            pass  # A verified namespace with an unverified checkout gets a complete mask.
     if sys.platform == "darwin":
         # A path filter is inherited by the shell and by scripts it starts.
         core_path = json.dumps(str(root), ensure_ascii=False)
@@ -36,14 +35,15 @@ def launch(root, client, *, context_statusline=False):
         profile = ('(version 1)(allow default)(deny file-write* '
                    f'(require-all (subpath {core_path}) (require-not (subpath {work_path}))))'
                    f'(deny file-write-unlink (literal {work_path}))')
-        journals_path = json.dumps(str(journals), ensure_ascii=False)
+        if journals is not None:
+            journals_path = json.dumps(str(journals), ensure_ascii=False)
         if journal:
             journal_path = json.dumps(str(journal), ensure_ascii=False)
             profile += (f"(deny file-read* file-write* (require-all (subpath {journals_path}) "
                         f"(require-not (literal {journals_path})) (require-not (subpath {journal_path}))))"
                         f"(deny file-write* (literal {journals_path}))"
                         f"(deny file-write-unlink (literal {journal_path}))")
-        else:
+        elif journals is not None:
             profile += f"(deny file-read* file-write* (subpath {journals_path}))"
         command = ["sandbox-exec", "-p", profile, binary]
     elif sys.platform.startswith("linux"):
@@ -51,10 +51,11 @@ def launch(root, client, *, context_statusline=False):
                    "--dev", "/dev", "--proc", "/proc", "--ro-bind", str(root), str(root),
                    "--bind", str(private), str(private)]
         # Expose a verified checkout directory only. A failed identity check leaves the empty mask in place.
-        command.extend(["--perms", "0700", "--tmpfs", str(journals)])
-        if journal:
-            command.extend(["--bind", str(journal), str(journal)])
-        command.extend(["--remount-ro", str(journals)])
+        if journals is not None:
+            command.extend(["--perms", "0700", "--tmpfs", str(journals)])
+            if journal:
+                command.extend(["--bind", str(journal), str(journal)])
+            command.extend(["--remount-ro", str(journals)])
         command.extend(["--chdir", str(root), "--", binary])
     else:
         raise ValueError("Use Linux, WSL2, or macOS for protected PM sessions")
