@@ -30,7 +30,7 @@ class SessionWorkflowTests(unittest.TestCase):
         state = tempfile.TemporaryDirectory()
         self.addCleanup(state.cleanup)
         self.addCleanup(patch.stopall)
-        patch.dict(os.environ, {"XDG_STATE_HOME": state.name}).start()
+        patch.dict(os.environ, {"XDG_STATE_HOME": str(Path(state.name).resolve())}).start()
 
     def test_all_four_capture_and_tip_settings_in_the_real_hook(self):
         for logging in (False, True):
@@ -38,7 +38,7 @@ class SessionWorkflowTests(unittest.TestCase):
                 with self.subTest(logging=logging, tips=tips):
                     # Use a new Studio per trial so reservations from one do not suppress another.
                     with tempfile.TemporaryDirectory() as tmp:
-                        self._exercise_settings(Path(tmp), logging, tips)
+                        self._exercise_settings(Path(tmp).resolve(), logging, tips)
 
     def _exercise_settings(self, base, logging, tips):
         import shutil

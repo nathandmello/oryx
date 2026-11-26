@@ -4,7 +4,6 @@ from concurrent.futures import ThreadPoolExecutor
 from hashlib import sha256
 import json
 import os
-from pathlib import Path
 import subprocess
 import sys
 from threading import Barrier
@@ -208,7 +207,7 @@ class OfferHandoffTests(unittest.TestCase):
         self.assertEqual(handoff.resume(self.work, "Private launch")["status"], "no-current-match")
 
     def test_approved_checkpoint_survives_expired_optional_conversation_reference(self):
-        with patch.dict(os.environ, {"XDG_STATE_HOME": str(Path(self.temp.name) / "private-journal")}):
+        with patch.dict(os.environ, {"XDG_STATE_HOME": str(self.root.parent / "private-journal")}):
             session_journal.configure(self.work, enabled=True)
             parent = self.save(self.task("Independent launch", id="launch-review"))
             scope = handoff.resume(self.work, "Independent launch")["work"]["journal_scope"]

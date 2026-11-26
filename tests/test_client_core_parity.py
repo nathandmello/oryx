@@ -139,7 +139,8 @@ def capture():
     expected_paths = sorted(path + ":" + function for path, names in FUNCTIONS.items() for function in names)
     with tempfile.TemporaryDirectory() as tmp:
         for client in ("claude", "codex"):
-            directory = Path(tmp) / client
+            # Journal storage requires a canonical path even when TMPDIR is a symlink.
+            directory = Path(tmp).resolve() / client
             directory.mkdir()
             clients[client], hashes[client] = exercise(client, directory)
     effects = clients["codex"]["effects"]
@@ -154,7 +155,13 @@ def capture():
 
 class ClientCoreParityTests(unittest.TestCase):
     def test_registered_hooks_and_reviewed_actions_share_code_and_effects(self):
-        result = capture()
+        with tempfile.TemporaryDirectory() as tmp:
+            target = Path(tmp) / "physical"
+            target.mkdir()
+            alias = Path(tmp) / "linked"
+            alias.symlink_to(target, target_is_directory=True)
+            with patch.object(tempfile, "tempdir", str(alias)):
+                result = capture()
         self.assertTrue(result["same_core"], result)
 
 
