@@ -202,7 +202,6 @@ def prompt_context(private, cwd, payload, *, client=None, off_record=False):
     control, profile_refusal, mute = turn_intent.controls(prompt)
     private_turn = off_record or control is not None
     allow_profiles = not (private_turn or profile_refusal or mute)
-    event_id = turn_intent.turn_key(session, payload, prompt)
     numeric = bool(metric_checks.METRIC.search(prompt))
     guidance = [CONVERSATION_GUIDANCE if allow_profiles else CONVERSATION_GUIDANCE.removesuffix(" " + PROFILE_GUIDANCE)]
     if not allow_profiles:
@@ -215,6 +214,14 @@ def prompt_context(private, cwd, payload, *, client=None, off_record=False):
     request_text = turn_intent.instruction(prompt)
     current = {}
     if private.is_dir():
+        event_id = None
+        if allow_profiles:
+            try:
+                event_id = turn_intent.turn_key(private, client, session, payload, prompt)
+            except (OSError, ValueError, RuntimeError):
+                pass  # Optional offers require a usable submission identity.
+        else:
+            turn_intent.end_submission(private, client, session)
         settings_request = turn_intent.exact_mute(prompt) if mute and not private_turn else None
         if settings_request:
             try:
@@ -315,13 +322,11 @@ def prompt_context(private, cwd, payload, *, client=None, off_record=False):
         else:
             current, state = task_context.turn_context(private, request_text, cwd=cwd, saved=saved, allow_profiles=allow_profiles)
         checks = {} if resume else optional_at_turn(private, client, payload, current, prompt, event_id,
-                                                     allow_source=allow_profiles, allow_offers=allow_profiles)
-        if client and session and state.get("record") and not private_turn and not work:
-            try:
-                parent = pm.work_handoffs.native(private, state["record"])
-                session_journal.bind_turn_scope(private, client, payload, parent["journal_scope"])
-            except (OSError, ValueError, KeyError, RuntimeError):
-                pass  # An unverified checkpoint cannot bind a journal entry.
+                                                     allow_source=allow_profiles, allow_offers=event_id is not None)
+        if client and session and not private_turn and not work:
+            binding = pm.work_handoffs.bind_native_record(private, client, payload, state.get("record"), saved.get("journal_record"))
+            if binding:
+                state["journal_record"] = binding
 
         if any(check.get("status") in {"review", "deferred", "offer", "clarify"} for check in checks.values()):
             guidance.append("Background ingestion assessment for this turn (guidance only): "
@@ -332,8 +337,10 @@ def prompt_context(private, cwd, payload, *, client=None, off_record=False):
             for field in ("binding", "warnings"):
                 state[field].extend(item for item in saved.get(field, []) if item not in state[field])
         # Clients without turn IDs can still pair sequential prompt and Stop events.
-        state.update(numeric=numeric, awaiting_stop=uuid4().hex, client_turn_id=payload.get("turn_id"),
-                     overlapping=bool(saved.get("awaiting_stop")))
+        pending = prior.get("awaiting_stop")
+        overlap = prior.get("overlapping") if pending and pending == event_id else pending
+        state.update(numeric=numeric, awaiting_stop=event_id or uuid4().hex, client_turn_id=payload.get("turn_id"),
+                     overlapping=bool(overlap))
         try:
             if not private_turn:
                 task_context.remember_scope(private, session, state)
@@ -388,14 +395,16 @@ def review_context(state, payload):
     return {"decision": "block", "reason": "\n".join(reason)} if reason else {}
 
 
-def finish_turn(private, payload, state):
-    if not state.get("awaiting_stop"):
+def finish_turn(private, client, payload, state):
+    if not state.get("awaiting_stop") or not session_journal.visible_turn(payload):
         return
     client_turn = state.get("client_turn_id")
     stop_turn = payload.get("turn_id")
     if client_turn and stop_turn and client_turn != stop_turn:
         return
     matched = (client_turn and client_turn == stop_turn) or not state.get("overlapping")
+    if matched:
+        turn_intent.end_submission(private, client, payload.get("session_id"), expected=state["awaiting_stop"])
     offered = bool(matched and conversation.offered_expedite(payload.get("last_assistant_message")))
     updated = {**state, "offered_expedite": offered}
     del updated["awaiting_stop"]
@@ -662,6 +671,8 @@ def main():
         if client not in ("claude", "codex"):
             client = None
         private = pm.workspace.optional_repo(root)
+        if event in {"SessionStart", "PreCompact", "PostCompact"} and session_journal.visible_turn(payload):
+            turn_intent.end_submission(private, client, payload.get("session_id"))
         if event in {"PreCompact", "PostCompact", "PostModelRequest"}:
             record_native_event(private, client, payload, metrics=True)
             result = {}
@@ -696,7 +707,7 @@ def main():
                     result = review_context(state, payload)
                 if result.get("decision") != "block":
                     record_native_event(private, client, payload, journal=True)
-                    finish_turn(private, payload, state)
+                    finish_turn(private, client, payload, state)
             if event == "SessionStart":
                 if private is not None:
                     setup = onboarding.status(private)

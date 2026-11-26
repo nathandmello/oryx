@@ -1,7 +1,12 @@
 """Read explicit session controls from the PM's own request before optional processing."""
 
 import hashlib
+import json
 import re
+from uuid import uuid4
+
+import pm_profile
+import storage
 
 
 # A pasted document supplies evidence. Its speakers cannot change the PM's settings.
@@ -84,8 +89,44 @@ def leaves_handoff(prompt):
     return bool(HANDOFF_EXIT.search(words) or next_step(words) in ("unrelated", "break"))
 
 
-def turn_key(session, payload, prompt):
-    key = payload.get('turn_id') or payload.get('message_id')
-    if not isinstance(key, str) or not key:
-        key = prompt
-    return hashlib.sha256(('oryx-pm-turn\0' + str(session or '') + '\0' + key).encode()).hexdigest()
+def pending_path(private, client, session):
+    if private is None or not client or not isinstance(session, str) or not session:
+        return None
+    name = hashlib.sha256((client + '\0' + session).encode()).hexdigest()
+    return pm_profile.safe_path(private, ".state/pending-submissions/" + name)
+
+
+def end_submission(private, client, session, *, expected=None):
+    try:
+        path = pending_path(private, client, session)
+        if path and path.is_file():
+            with storage.writer_lock(private):
+                if expected is not None:
+                    active = storage.json_input(path.read_bytes())
+                    if not isinstance(active, dict) or active.get("event") != expected:
+                        return
+                path.unlink(missing_ok=True)
+    except (OSError, ValueError, RuntimeError):
+        pass  # A stale marker can defer an optional offer. It cannot interrupt the PM.
+
+
+def turn_key(private, client, session, payload, prompt):
+    native = next((value for field in ('turn_id', 'message_id', 'user_message_id', 'prompt_id')
+                   if isinstance(value := payload.get(field), str) and value), None)
+    key = hashlib.sha256(('oryx-pm-turn\0' + str(session or '') + '\0' + (native or prompt)).encode()).hexdigest()
+    if native:
+        end_submission(private, client, session)
+        return key
+    path = pending_path(private, client, session)
+    if path is None:
+        return key
+    # Until another submission or a client boundary, identical callbacks are indistinguishable.
+    with storage.writer_lock(private):
+        raw = path.read_bytes() if path.is_file() else None
+        previous = storage.json_input(raw) if raw is not None else {}
+        if (isinstance(previous, dict) and previous.get("request") == key
+                and isinstance(previous.get("event"), str) and re.fullmatch("[a-f0-9]{32}", previous["event"])):
+            return previous["event"]
+        event = uuid4().hex
+        storage.replace_text(path, raw, json.dumps({"request": key, "event": event}), mode=0o600)
+        return event

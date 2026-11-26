@@ -11,6 +11,8 @@ import test_pm
 import test_conversation
 from onboarding_fixtures import reviewed_setup
 import context_advice
+import ingestion_signals
+import offer_queue
 import overrides
 import records
 import session_journal
@@ -97,6 +99,106 @@ class SessionWorkflowTests(unittest.TestCase):
             self.assertNotIn("lilac", json.dumps(events))
             self.assertTrue(any("Rowan needs the file" in (e["text"] or "") for e in events))
 
+    def test_identical_milestones_at_distinct_client_submissions(self):
+        prompt = "What is next? Check the mulberry decision."
+        receipts = self.work / offer_queue.FILE
+
+        def queue_source(label):
+            path = f"context/products/billing/sources/{label}.txt"
+            source = self.work / path
+            source.parent.mkdir(parents=True, exist_ok=True)
+            source.write_text("Jo Diaz: I prefer a written summary with examples.\n")
+            ingestion_signals.assess(self.work, {"moment": "busy", "source": {
+                "kind": "transcript", "scope": path, "reference": path, "authorized": True,
+                "purposes": ["stakeholder-profile"], "retention": "review", "subject": "product/billing"}})
+            return next(token for token, row in offer_queue.read(self.work)[1].items() if row["status"] == "pending")
+
+        def after_cooldown():
+            rows = offer_queue.read(self.work)[1]
+            for row in rows.values():
+                row["at"] -= offer_queue.COOLDOWN + 1
+            receipts.write_text(json.dumps(rows))
+
+        for client in ("Codex", "Claude"):
+            session = "milestones-" + client
+            def submit(**fields):
+                response = self.turn(client, "UserPromptSubmit", session, prompt=prompt, **fields)
+                last = response["hookSpecificOutput"]["additionalContext"].splitlines()[-1]
+                turn = json.loads(last).get("conversation", {}) if last.startswith("{") else {}
+                return turn.get("optional_offer", {}).get("token")
+
+            first = queue_source(client + "-initial")
+            self.assertEqual(submit(), first)
+            pending = turn_intent.pending_path(self.work, client.lower(), session)
+            self.assertNotIn("mulberry", pending.read_text())
+            self.assertEqual(pending.stat().st_mode & 0o777, 0o600)
+            for boundary in ("Stop", "PostCompact"):
+                after_cooldown()
+                fresh = queue_source(client + "-" + boundary)
+                self.assertIsNone(submit(), "A replay during the open submission must use its existing pause")
+                if boundary == "Stop":
+                    self.turn(client, boundary, session, last_assistant_message="The decision is open.")
+                else:
+                    self.turn(client, boundary, session, trigger="auto")
+                self.assertEqual(submit(), fresh, (client, boundary))
+            # Real clients can also supply a message or prompt ID without a turn_id.
+            field = "user_message_id" if client == "Codex" else "prompt_id"
+            after_cooldown()
+            identified = queue_source(client + "-identified")
+            self.assertEqual(submit(**{field: "first"}), identified)
+            after_cooldown()
+            later = queue_source(client + "-later")
+            self.assertIsNone(submit(**{field: "first"}))
+            self.assertEqual(submit(**{field: "second"}), later)
+            self.assertFalse(session_journal.read_session(self.work, client.lower(), session)["events"])
+            self.assertNotIn("mulberry", receipts.read_text())
+            after_cooldown()
+
+    def test_stale_and_nested_stops_preserve_an_unidentified_submission(self):
+        for client in ("Codex", "Claude"):
+            sid = "overlap-" + client
+            self.turn(client, "UserPromptSubmit", sid, turn_id="older", prompt="Check the timeline.")
+            self.turn(client, "UserPromptSubmit", sid, prompt="What is next?")
+            pending = turn_intent.pending_path(self.work, client.lower(), sid)
+            outstanding = pending.read_bytes()
+            for stop in ({"agent_id": "worker"}, {"turn_id": "older"}):
+                self.turn(client, "Stop", sid, last_assistant_message="Earlier reply.", **stop)
+                self.assertEqual(pending.read_bytes(), outstanding)
+            self.turn(client, "UserPromptSubmit", sid, prompt="What is next?")
+            self.assertEqual(pending.read_bytes(), outstanding)
+
+    def test_new_compaction_signal_at_an_identical_codex_milestone(self):
+        sid = "compacted-codex"
+        def window(turn):
+            context_advice.observe_codex_event(self.work, sid, {"method": "turn/started", "params": {
+                "threadId": sid, "turn": {"id": turn}}})
+            context_advice.observe_codex_event(self.work, sid, {"method": "thread/tokenUsage/updated", "params": {
+                "threadId": sid, "turnId": turn, "tokenUsage": {"modelContextWindow": 10000,
+                                                                 "last": {"totalTokens": 9000}}}})
+        def milestone():
+            reply = self.turn("Codex", "UserPromptSubmit", sid, prompt="What is next?")
+            turn = json.loads(reply["hookSpecificOutput"]["additionalContext"].splitlines()[-1])
+            offer = turn["conversation"]["optional_offer"]
+            self.assertEqual(offer["action"], "compact")
+            return offer["token"]
+
+        window("before")
+        first = milestone()
+        rows = offer_queue.read(self.work)[1]
+        rows[first]["at"] -= offer_queue.COOLDOWN + 1
+        (self.work / offer_queue.FILE).write_text(json.dumps(rows))
+        self.turn("Codex", "PostCompact", sid)
+        window("after")
+        self.assertNotEqual(milestone(), first)
+
+    def test_unwritable_submission_marker_preserves_primary_work(self):
+        context_advice.observe_claude(self.work, {"session_id": "no-marker", "context_window": {"used_percentage": 94}})
+        (self.work / ".state/pending-submissions").write_text("Cannot create a marker here.")
+        result = self.turn("Claude", "UserPromptSubmit", "no-marker", prompt="What is next?")
+        guidance = result["hookSpecificOutput"]["additionalContext"]
+        self.assertIn("follow the pm's current request", guidance.lower())
+        self.assertNotIn('"optional_offer"', guidance)
+
     def test_quoted_controls_cannot_change_consent_and_explicit_mute_is_immediate(self):
         self.assertEqual(turn_intent.controls('Summarize this. Transcript: Dina: off the record.'), (None, False, None))
         self.assertEqual(turn_intent.controls('Review the sentence “mute context tips”.'), (None, False, None))
@@ -112,9 +214,9 @@ class SessionWorkflowTests(unittest.TestCase):
                 "open_question": "Who will cover the pilot?", "next_step": "Check the support rota."}
         return work_handoffs.save(self.work, {"review": work_handoffs.preview(self.work, task), "approved": True})
 
-    def exchange(self, client, session, turn, prompt):
+    def exchange(self, client, session, turn, prompt, *, reply="Understood."):
         self.turn(client, "UserPromptSubmit", session, turn_id=turn, prompt=prompt)
-        self.turn(client, "Stop", session, turn_id=turn, last_assistant_message="Understood.")
+        self.turn(client, "Stop", session, turn_id=turn, last_assistant_message=reply)
         events = session_journal.read_session(self.work, client.lower(), session)["events"]
         return [row for row in events if row["turn_id"] == turn]
 
@@ -256,3 +358,39 @@ class SessionWorkflowTests(unittest.TestCase):
         self.assertEqual(exchange("new-resume", "Resume Harbour review."), scope)
         session_journal.delete(self.work, client=client.lower(), session_id=sid)
         self.assertIsNone(exchange("deleted-journal", "Keep the existing pilot schedule."))
+
+    def test_record_handoff_recovers_only_related_exchanges_in_the_same_product(self):
+        session_journal.configure(self.work, enabled=True)
+        records.create(self.root, "company-context", "context/company/overview.md")
+        records.create(self.root, "product-context", "context/products/billing/overview.md", "Billing")
+        record = "workspace/problems/bulk-export.md"
+        records.create(self.root, "problem", record, "Bulk export")
+        work = self.cli("handoff", "resume", "Bulk export")["work"]
+        scope = work["journal_scope"]
+        for client, receiver in (("Codex", "Claude"), ("Claude", "Codex")):
+            with self.subTest(client=client):
+                sid = "record-selection-" + client
+                opening = self.exchange(client, sid, "open", f"Review {record} for Billing.",
+                                        reply="The draft lists the export formats.")
+                reference = self.cli("journal", "reference", "--client", client.lower(), "--session", sid, "--scope", scope)
+                self.assertEqual(reference["id"], opening[-1]["id"])
+                task = {"name": "Export checkpoint from " + client, "scope": work["scope"],
+                        "objective": "Review the bulk export draft.", "open_question": "Which formats do we support?",
+                        "next_step": "Confirm the supported formats.", "owner": {"record": record, "revision": work["revision"]},
+                        "journal": [reference["id"]], "journal_reference_scope": scope}
+                review = self.cli("handoff", "preview", payload=task)
+                self.cli("handoff", "save", payload={"review": review, "approved": True})
+
+                related = self.exchange(client, sid, "shorten", "Can you make it shorter?",
+                                        reply="The two supported export formats are CSV and JSON.")
+                email = self.exchange(client, sid, "email", "Draft a Billing email about annual renewals.",
+                                      reply="The annual renewal letter includes the May deadline.")
+                revision = self.exchange(client, sid, "edit-email", "Revise it.", reply="The revised renewal letter is ready.")
+                output = self.turn(receiver, "UserPromptSubmit", "receive-" + client, prompt="Resume " + task["name"] + ".")
+                guidance = output["hookSpecificOutput"]["additionalContext"]
+                snapshots = [json.loads(line) for line in guidance.splitlines() if line.startswith("{")]
+                resumed, = [row["work"] for row in snapshots if row.get("status") == "resume"]
+                self.assertEqual(resumed["since_checkpoint"], related)
+                self.assertEqual([row["scope"] for row in opening + related], [scope] * 4)
+                self.assertEqual([row["scope"] for row in email + revision], [None] * 4)
+                self.assertNotIn("renewal letter", guidance)

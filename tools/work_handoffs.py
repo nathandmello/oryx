@@ -473,6 +473,44 @@ def context_scope(private, work):
     return {}  # An independent checkpoint can exist without any registered context subject.
 
 
+def journal_binding(private, client, payload, current, previous, *, selected):
+    import session_journal
+    bound = {key: current[key] for key in ("id", "record", "revision") if key in current}
+    # A duplicate hook keeps its cursor. Later turns must still prove adjacency and consent.
+    if all(previous.get(key) == value for key, value in bound.items()) and previous.get("event"):
+        bound["event"] = previous["event"]
+    if selected or bound.get("event"):
+        try:
+            event = session_journal.bind_turn_scope(private, client, payload, current["journal_scope"],
+                                                    previous=None if selected else bound["event"])
+            if event:
+                bound["event"] = event
+        except (ValueError, OSError, sqlite3.Error):
+            pass  # Journal availability has no bearing on independently approved work.
+    return bound
+
+
+def bind_native_record(private, client, payload, record, previous):
+    """An explicit record starts a journal scope. Only adjacent turns on that work may inherit it."""
+    prompt = turn_intent.instruction(payload["prompt"])
+    named = task_context.WORK_RECORD.search(task_context.CUSTOMIZATION_PATH.sub(" ", prompt))
+    previous = previous if isinstance(previous, dict) else {}
+    if named:
+        if named[1] != record:
+            return None
+    elif not previous.get("event") or not previous.get("record") or record not in (None, previous["record"]):
+        return None
+    try:
+        with storage.writer_lock(private):
+            current = native(private, record) if named else current_checkpoint(private, previous)
+            if not named and not same_task(private, current, prompt):
+                return None
+            bound = journal_binding(private, client, payload, current, previous, selected=bool(named))
+            return bound if "event" in bound else None
+    except (KeyError, ValueError, OSError, RuntimeError, sqlite3.Error):
+        return None
+
+
 def bind_active(private, client, payload, *, work=None, continuing=False):
     """Keep only the selected checkpoint's identity, revision and optional journal cursor."""
     import session_journal
@@ -491,20 +529,7 @@ def bind_active(private, client, payload, *, work=None, continuing=False):
                         current = candidate
                 except (KeyError, ValueError, OSError, RuntimeError, sqlite3.Error):
                     pass  # A withdrawn or changed checkpoint releases the pointer.
-            bound = {}
-            if current:
-                bound = {k: current[k] for k in ("id", "record", "revision") if k in current}
-                # Keep the last cursor for duplicate hooks. A new binding must still prove adjacency and consent.
-                if all(previous.get(k) == v for k, v in bound.items()) and previous.get("event"):
-                    bound["event"] = previous["event"]
-                if work is not None or bound.get("event"):
-                    try:
-                        event = session_journal.bind_turn_scope(private, client, payload, current["journal_scope"],
-                                                                previous=None if work is not None else bound["event"])
-                        if event:
-                            bound["event"] = event
-                    except (ValueError, OSError, sqlite3.Error):
-                        pass  # Journal availability has no bearing on independently approved work.
+            bound = journal_binding(private, client, payload, current, previous, selected=work is not None) if current else {}
             if current or previous:
                 task_context.remember_scope(private, key, bound)
             return current
