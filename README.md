@@ -29,22 +29,23 @@ The local browser app lets you present the roadmap, review priorities, and work 
 Install Git, Python 3.9 or later, and either Codex CLI or Claude Code. On Linux or WSL2, protected sessions need bubblewrap with working user namespaces. On macOS, they use `sandbox-exec`.
 
 1. Clone this repository using GitHub’s **Code** button and open a terminal in the checkout.
-2. Create your private workspace with your name. If you use a delivery tool, you can add `--delivery-system "Tool name"`.
-
-   ```sh
-   python3 tools/pm.py init-workspace --owner "Your name"
-   ```
-
-3. Start a protected session with your preferred client.
+2. Start a protected session with your preferred client.
 
    | Client | Run from the checkout |
    | --- | --- |
    | Codex CLI | `python3 tools/pm.py agent codex` |
    | Claude Code | `python3 tools/pm.py agent claude` |
 
-4. Trust the project hooks in your client. Tell oryx what you want to work on.
+3. **Step 0 — Set up your workspace.** Create a workspace or restore one from a private GitHub repository.
+   Choose local storage or let Oryx connect GitHub. GitHub setup requires the GitHub CLI (`gh`).
+   If you already have a local workspace, launch normally or add `--setup` to revisit GitHub setup.
+4. Sign in to your client if prompted. Review and trust the Oryx project hooks.
 
-Your first request starts a walkthrough with oryx. You can share a source or explain the business in your own words.
+Oryx asks before creating a GitHub repository or sending the first commit.
+If an earlier run created the repository, choose **Connect** to resume.
+For optional local conversation recording, see [session continuity](playbook/session-continuity.md).
+
+Your first request starts the company walkthrough. You can share a source or explain the business in your own words.
 Together you review customers, economics, the product portfolio, growth, and strategic trade-offs. You can leave questions open or say a topic does not apply.
 If you’re a founder starting with an idea, your own account is enough to begin. Bring back what you learn and review what it changes.
 
@@ -65,7 +66,7 @@ You can enable [private session transcripts](playbook/session-continuity.md) and
 
 ## Placement
 
-**Core** is the shared software. **Studio** is your own Git repository inside `studio/`. A protected session lets your agent edit private drafts and read the core software and your initiative approval receipts. Core updates and your work have separate Git histories.
+**Core** is the shared software. Your private workspace is a separate Git repository inside `studio/`. A protected session lets your agent edit private drafts and read the core software and your initiative approval receipts. Core updates and your work have separate Git histories.
 
 | Location | What lives there |
 | --- | --- |
@@ -77,7 +78,7 @@ You can enable [private session transcripts](playbook/session-continuity.md) and
 | `tools/` · `tests/` | Commands, browser app, workspace setup, and checks |
 | `.agents/` · `.claude/` · `.codex/` · `.github/` | Agent skills, client configuration, and CI |
 
-To resume on another machine, restore your private repository into `studio/`. You choose where to sync it. [Filing guide](playbook/filing.md) · [Git and remotes](playbook/git.md) · [Updates and recovery](playbook/updates.md)
+To resume on another machine, run Step 0 and choose your existing private GitHub repository. [Filing guide](playbook/filing.md) · [Git and remotes](playbook/git.md) · [Updates and recovery](playbook/updates.md)
 
 For a walkthrough from a customer signal to a roadmap decision, start with the [worked example](playbook/opportunities.md#worked-example). For the rules that guide both agents, read the [project constitution](AGENTS.md).
 

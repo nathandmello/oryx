@@ -851,6 +851,7 @@ def build_parser():
     commands.add_parser("action", help="Discover and run published oryx actions")
     agent = commands.add_parser("agent")
     agent.add_argument("client", choices=("codex", "claude"))
+    agent.add_argument("--setup", action="store_true", help="Run workspace setup again")
     agent.add_argument("--context-statusline", action="store_true", help="Use the Claude context status line for this launch")
     company_source.add_commands(commands)
     customizations.add_commands(commands)
@@ -1121,7 +1122,7 @@ def main() -> int:
             print(json.dumps(session_journal.run(private, args), indent=2, ensure_ascii=False))
             return 0
         if args.command == "agent":
-            agent_session.launch(ROOT, args.client, context_statusline=args.context_statusline)
+            agent_session.launch(ROOT, args.client, context_statusline=args.context_statusline, setup=args.setup)
             return 0
         if args.command == "customize":
             if args.operation == "apply":

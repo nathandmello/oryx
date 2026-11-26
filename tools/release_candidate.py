@@ -35,7 +35,7 @@ def needs_native(paths):
         "playbook/workspace-format.json", "tools/workspace-seed/*", "tools/conversion.py",
         "tools/context_*.py", "tools/task_context.py", "tools/search_model/*", "tests/test_context_search.py",
         "tools/git_ops.py", "tools/hook.py", "tools/layout*.py", "tools/pm.py", "tools/snapshots.py",
-        "tools/agent_session.py", "tools/studio_layout.py", "tests/test_studio_contract.py", "tests/test_studio_layout.py",
+        "tools/agent_session.py", "tools/first_run.py", "tools/studio_layout.py", "tests/test_studio_contract.py", "tests/test_studio_layout.py",
         "tools/overrides.py", "tools/company_source.py", "tools/customizations.py", "tests/test_overrides.py",
         "tools/storage.py", "tools/upgrades.py", "tools/workspace.py", "tools/release_*.py",
         "tools/publish_release.py", "tests/test_alignment.py", "tests/test_filing.py", "tests/test_pm.py",

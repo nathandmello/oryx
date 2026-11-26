@@ -127,6 +127,16 @@ def settings(root, compatible=True):
     path = private_root(root) / "settings.json"
     if path.resolve() != path or not path.is_file():
         raise ValueError("Run python3 tools/pm.py init-workspace before PM work")
+    value = read_settings(path)
+    current = release(root)
+    if compatible and value["workspace_format"] != current["workspace_format"]:
+        raise ValueError("Workspace format is incompatible; use the release's migration instructions")
+    if compatible and value["system_version"] != current["system_version"]:
+        raise ValueError("Workspace system_version differs; review the release and record the accepted version")
+    return value
+
+
+def read_settings(path):
     value = json.loads(path.read_text(encoding="utf-8"))
     expected = {"owner", "delivery_system", "system_version", "workspace_format", "remotes"}
     if (not isinstance(value, dict) or set(value) != expected
@@ -144,11 +154,6 @@ def settings(root, compatible=True):
         if parsed.password or (parsed.scheme in {"http", "https"} and parsed.username):
             raise ValueError("Keep remote credentials in the credential manager, outside private settings")
     validate_release({name: value[name] for name in ("system_version", "workspace_format")})
-    current = release(root)
-    if compatible and value["workspace_format"] != current["workspace_format"]:
-        raise ValueError("Workspace format is incompatible; use the release's migration instructions")
-    if compatible and value["system_version"] != current["system_version"]:
-        raise ValueError("Workspace system_version differs; review the release and record the accepted version")
     return value
 
 
