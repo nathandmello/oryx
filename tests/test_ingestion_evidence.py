@@ -86,7 +86,7 @@ class IngestionEvidenceTests(unittest.TestCase):
         self.assertEqual(found["evidence"], offer["evidence"])
 
     def test_role_annotation_preserves_the_named_speaker_and_entire_passage(self):
-        line = "09:01 Inez Vale (design): I need three options for roadmap reviews."
+        line = "09:01 Inez Vale (field maintenance crew): I need three options for roadmap reviews."
         self.transcript(line)
         result = self.cli(["ingestion", "assess"], {"source": self.source(), "moment": "pause",
                           "observations": {"stakeholder-profile": [
@@ -97,7 +97,7 @@ class IngestionEvidenceTests(unittest.TestCase):
         review = self.cli(["stakeholder-profile", "preview"], change)
         saved = self.cli(["stakeholder-profile", "accept"], {"review": review, "approved_wording": change["wording"]})
         self.assertTrue(saved["written"])
-        self.transcript(line.replace("(design)", "(quoting Dara Cole)"))
+        self.transcript(line.replace("(field maintenance crew)", "(quoting the service team)"))
         ambiguous = self.cli(["ingestion", "assess"], {"source": self.source(), "moment": "busy",
                              "observations": {"stakeholder-profile": [{"person": "Inez Vale",
                                                                        "excerpt": "I need three options for roadmap reviews."}]}})

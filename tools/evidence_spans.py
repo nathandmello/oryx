@@ -12,8 +12,13 @@ TIME = r"(?:\d{1,2}:)?\d{1,2}:\d{2}(?:\.\d{1,3})?"
 # role words only. Free-form parentheses can instead attribute the words to someone else.
 ROLE_TERM = (r"(?:design(?:er)?|product|research(?:er)?|eng(?:ineer(?:ing)?)?|operations?|ops|"
              r"sales|service|finance|legal|support|manager|lead|director|staff|senior|"
-             r"chair|secretary|facilitator|editor|observer|coordinator|owner|PM|VP|UX)")
-ROLE = rf"(?:[ \t]+\((?i:{ROLE_TERM}(?:[ -]{ROLE_TERM}){{0,3}})\))?"
+             r"chair|secretary|treasurer|facilitator|editor|observer|coordinator|owner|PM|VP|UX)")
+# A team label can describe any business, including a small cooperative's service desk.
+# Never treat a phrase that introduces another source or speaker as a team qualifier.
+ROLE_HEAD = r"(?:desk|team|department|unit|office|crew|committee|division|lead|manager|coordinator)"
+QUALIFIER = r"(?!(?i:quoting|via|per|for|on|from|speaking|representing|reading|relaying)\b)[a-z][a-z-]{0,31}"
+TEAM_TAG = rf"(?:{QUALIFIER}[ \t]+){{1,3}}(?i:{ROLE_HEAD})"
+ROLE = rf"(?:[ \t]+\((?:(?i:{ROLE_TERM}(?:[ -]{ROLE_TERM}){{0,3}})|{TEAM_TAG})\))?"
 LABEL = re.compile(rf"^\s*(?:[-*>]\s+)?(?:\[?(?:(?P<day>\d{{4}}-\d{{2}}-\d{{2}})[ T])?(?P<at>{TIME})\]?\s+)?(?P<person>{NAME}){ROLE}"
                    rf"(?:\s+\[?(?P<after>{TIME})\]?)?\s*:\s*(?P<body>\S.*)$")
 QUOTED = re.compile(rf'^\s*(?P<person>{NAME}) (?:said|wrote|asked|replied),?\s+["“](?P<body>.+?)["”][.]?\s*$')
