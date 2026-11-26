@@ -7,20 +7,30 @@ import shutil
 import subprocess
 import sys
 
+import first_run
 from initiative_store import APPROVAL_HOME
 import session_journal
 import workspace
 
 
-def launch(root, client, *, context_statusline=False):
+def launch(root, client, *, context_statusline=False, setup=False):
     if context_statusline and client != "claude":
         raise ValueError("The optional native status line requires Claude Code")
-    # Upgrade and acquire the shared lock once before making core read-only.
-    subprocess.run([sys.executable, str(root / "tools/pm.py"), "align"], cwd=root, check=True)
-    private = workspace.repo(root, "workspace")
     binary = shutil.which(client)
     if not binary:
         raise ValueError(f"Install {client} before starting a protected session")
+    if sys.platform != "darwin" and not sys.platform.startswith("linux"):
+        raise ValueError("Use Linux, WSL2, or macOS for protected PM sessions")
+    sandbox = "sandbox-exec" if sys.platform == "darwin" else "bwrap"
+    if not shutil.which(sandbox):
+        raise ValueError(f"Install {sandbox} to run a protected PM session")
+    try:
+        first_run.prepare(root, explicit=setup)
+    except EOFError as exc:
+        raise ValueError("Workspace setup ended. Run the launcher again to resume.") from exc
+    # Upgrade and acquire the shared lock once before making core read-only.
+    subprocess.run([sys.executable, str(root / "tools/pm.py"), "align"], cwd=root, check=True)
+    private = workspace.repo(root, "workspace")
     approvals = private / APPROVAL_HOME
     if approvals.resolve() != approvals or approvals.exists() and not approvals.is_dir():
         raise ValueError("Use a regular Studio directory for PM approval receipts")
@@ -60,7 +70,7 @@ def launch(root, client, *, context_statusline=False):
         elif journals is not None:
             profile += f"(deny file-read* file-write* (subpath {journals_path}))"
         command = ["sandbox-exec", "-p", profile, binary]
-    elif sys.platform.startswith("linux"):
+    else:
         command = ["bwrap", "--die-with-parent", "--unshare-pid", "--bind", "/", "/",
                    "--dev", "/dev", "--proc", "/proc", "--ro-bind", str(root), str(root),
                    "--bind", str(private), str(private)]
@@ -72,10 +82,6 @@ def launch(root, client, *, context_statusline=False):
                 command.extend(["--bind", str(journal), str(journal)])
             command.extend(["--remount-ro", str(journals)])
         command.extend(["--chdir", str(root), "--", binary])
-    else:
-        raise ValueError("Use Linux, WSL2, or macOS for protected PM sessions")
-    if not shutil.which(command[0]):
-        raise ValueError(f"Install {command[0]} to run a protected PM session")
     if client == "codex":
         # A generic workspace-write profile tries to create protected mount
         # points inside the outer checkout. Scope Codex's own writer to studio/.

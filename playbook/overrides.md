@@ -5,7 +5,7 @@ The PM can change how any skill works or teach oryx a new workflow in ordinary c
 
 ## Start a PM session
 
-Initialise or restore the private repository first. Run either command from the outer checkout in your terminal.
+Run from the outer checkout. Step 0 prepares your workspace.
 
 ```sh
 python3 tools/pm.py agent codex
@@ -16,7 +16,7 @@ Linux and WSL2 require bubblewrap with working user namespaces. macOS uses sandb
 The launcher aligns Studio before startup. Core and [initiative approval receipts](initiative-approvals.md) are read-only during the session.
 
 Run system updates from the PM's terminal. Use a separate development checkout for shared contributions.
-Enable the project's trusted hooks. Use local filesystem tools for edits to oryx files.
+Review and trust the project hooks. Use local filesystem tools for edits to oryx files.
 Remote connectors and external services have their own permissions.
 
 For templates, fields, columns, and browser layouts, use [workspace customization](customization.md).
