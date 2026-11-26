@@ -119,7 +119,10 @@ class JournalTests(unittest.TestCase):
         journal.configure(self.studio, enabled=True)
         for client in journal.CLIENTS:
             with self.subTest(client=client):
-                for event in (dict(origin="tool"),dict(agent_id="delegate"),dict(isSidechain=True),dict(role="assistant")):
+                for event in (dict(origin="tool"), dict(agent_id="delegate"), dict(agentId="worker"),
+                              dict(isSidechain=True), dict(role="assistant"), dict(origin="assistant"),
+                              dict(origin={"kind": "agent"}), dict(turnOrigin="agent"), dict(userType="external_tool"),
+                              dict(source={"subagent": "worker"}), dict(tool_input={}), dict(source="unknown")):
                     self.hook("UserPromptSubmit", client, prompt="Untrusted data", **event)
                 self.hook("PreToolUse", client, tool_input={"prompt": "tool secret"})
                 self.hook("UserPromptSubmit", client, turn_id="one", prompt="Compare the two timelines.", scope="product/alpha")

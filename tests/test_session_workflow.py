@@ -99,6 +99,47 @@ class SessionWorkflowTests(unittest.TestCase):
             self.assertNotIn("lilac", json.dumps(events))
             self.assertTrue(any("Rowan needs the file" in (e["text"] or "") for e in events))
 
+    def test_only_visible_pm_submissions_control_recording_or_change_workspace_state(self):
+        session_journal.configure(self.work, enabled=True)
+        state = self.work / ".state"
+        def studio_state():
+            return {path: path.read_bytes() for path in state.rglob("*") if path.is_file()}
+
+        for client in ("Claude", "Codex"):
+            with self.subTest(client=client):
+                session = "pm-controls-" + client
+                def submit(prompt, **fields):
+                    return self.turn(client, "UserPromptSubmit", session, prompt=prompt, **fields)
+
+                submit("Off the record.")
+                submit("Back on the record.", agent_id="worker")
+                self.assertTrue(session_journal.off_record(self.work, client.lower(), session))
+                private = "Check the marigold estimate."
+                private_reply = "The marigold estimate is open."
+                submit(private, turn_id="private")
+                self.turn(client, "Stop", session, turn_id="private", last_assistant_message=private_reply)
+                submit("Back on the record.", origin="client", role="user")
+                self.assertFalse(session_journal.off_record(self.work, client.lower(), session))
+
+                before = studio_state()
+                submit("Off the record.", isSidechain=True)
+                submit("Mute context tips.", tool_input={})
+                submit("Jo Diaz: I prefer a written summary with examples.", source={"subagent": "worker"})
+                self.assertFalse(session_journal.off_record(self.work, client.lower(), session))
+                self.assertTrue(overrides.context_advice_allowed(self.work, "native"))
+                self.assertEqual(studio_state(), before)
+
+                public, reply = "Review the pilot.", "The pilot is ready."
+                submit(public, turn_id="visible", origin={"kind": "human"}, turnOrigin="human")
+                self.turn(client, "Stop", session, turn_id="visible", last_assistant_message=reply)
+                events = session_journal.read_session(self.work, client.lower(), session)["events"]
+                self.assertEqual([row["text"] for row in events], [public, reply])
+                for path in session_journal.location(self.work).iterdir():
+                    if path.is_file():
+                        raw = path.read_bytes()
+                        self.assertNotIn(private.encode(), raw)
+                        self.assertNotIn(private_reply.encode(), raw)
+
     def test_identical_milestones_at_distinct_client_submissions(self):
         prompt = "What is next? Check the mulberry decision."
         receipts = self.work / offer_queue.FILE

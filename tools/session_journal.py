@@ -360,17 +360,29 @@ def _admit(db, private, client, session, payload, scope, now):
 
 
 def visible_turn(payload):
+    event = payload.get("hook_event_name")
     source = payload.get("source")
-    if isinstance(source, dict) or payload.get("origin") not in (None, "human", "user", "assistant", "client"):
+    origin = payload.get("origin")
+    if isinstance(source, dict) or any(payload.get(field) for field in (
+            "agent_id", "agentId", "agent_type", "agentType", "isSidechain", "is_sidechain",
+            "isMeta", "parent_session_id", "parentSessionId", "parent_thread_id", "parent_tool_use_id")):
         return False
-    if payload.get("hook_event_name") == "UserPromptSubmit" and payload.get("role") not in (None, "human", "user"):
+    if event == "UserPromptSubmit":
+        role = payload.get("role")
+        turn_origin = payload.get("turnOrigin")
+        if isinstance(origin, dict):
+            origin = origin.get("kind") or "unknown"
+        elif origin == "client" and (role in ("human", "user") or turn_origin == "human"):
+            origin = "human"
+        return (origin in (None, "human", "user") and role in (None, "human", "user")
+                and source in (None, "human", "user", "cli", "vscode")
+                and turn_origin in (None, "human") and payload.get("userType") != "external_tool"
+                and not any(payload.get(field) is not None for field in
+                            ("tool_name", "tool_input", "tool_output", "tool_response")))
+    if origin not in (None, "human", "user", "assistant", "client") or source in ("subagent", "tool"):
         return False
-    if payload.get("hook_event_name") == "Stop" and payload.get("role") not in (None, "assistant"):
-        return False
-    return not (payload.get("agent_id") or payload.get("agent_type") or payload.get("isSidechain")
-                or payload.get("is_sidechain") or payload.get("isMeta") or payload.get("parent_session_id")
-                or payload.get("source") in ("subagent", "tool") or payload.get("origin") in ("subagent", "tool")
-                or payload.get("role") in ("tool", "developer", "system"))
+    role = payload.get("role")
+    return role in (None, "assistant") if event == "Stop" else role not in ("tool", "developer", "system")
 
 
 def capture(private, client, payload, *, scope=None):

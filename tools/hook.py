@@ -678,6 +678,10 @@ def main():
             result = {}
         elif event == "PreToolUse":
             result = edit_guard(root, cwd, payload)
+        elif event == "UserPromptSubmit" and not session_journal.visible_turn(payload):
+            # Only a visible PM submission can supply controls, evidence or session state.
+            result = {"hookSpecificOutput": {"hookEventName": event,
+                                             "additionalContext": "Continue the assigned work under the PM's existing settings."}}
         elif event == "UserPromptSubmit":
             private_turn = journal_before_prompt(private, client, payload)
             if not private_turn:
