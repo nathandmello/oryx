@@ -177,7 +177,7 @@ def reserve(private, candidates, moment, mode, pause):
 def disposition(private, token, status):
     outcome = {"presented": "presented", "decline": "declined", "defer": "deferred"}.get(status)
     if not valid_token(token) or not outcome:
-        raise ValueError("Supply a reserved offer token and its disposition")
+        raise ValueError("Supply an offer token and its disposition")
     with storage.writer_lock(private):
         raw, rows = read(private)
         row = rows.get(token)
@@ -187,8 +187,8 @@ def disposition(private, token, status):
             _, legacy = stakeholder_signals.ledger(private)
             if token in legacy and status in {"presented", "decline"}:
                 return stakeholder_signals.remember(private, token, status)
-            raise ValueError("Choose an offer already reserved for delivery")
-        if row["status"] == "pending":
+            raise ValueError("Choose a known offer token")
+        if row["status"] == "pending" and outcome == "presented":
             raise ValueError("Wait for a natural pause before presenting the offer")
         if row["status"] == "declined" or row["status"] == "deferred" and outcome != "declined":
             return {"status": row["status"]}

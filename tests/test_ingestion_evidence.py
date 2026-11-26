@@ -57,6 +57,36 @@ class IngestionEvidenceTests(unittest.TestCase):
         return {"name": found["person"], "id": "jo", "role": "Service lead", **{k: found[k] for k in (
             "topic", "kind", "wording", "source", "excerpt", "scope", "subject", "observed_on", "attribution", "evidence")}}
 
+    def test_pm_can_decline_a_pending_offer_found_by_request(self):
+        other = "[03:22] Jo Diaz: I prefer cost comparisons for renewal reviews."
+        self.transcript(self.line + "\n" + other)
+        source = self.source(subject="product/billing")
+        first = self.cli(["ingestion", "assess"], {"source": source, "moment": "pause", "observations": {
+            "stakeholder-profile": [{"person": "Jo Diaz", "excerpt": self.line}]}})["selection"]
+        self.cli(["offer", "presented", first["token"]], {})
+        review = self.cli(["stakeholder-profile", "preview"], self.as_change(first))
+        self.cli(["stakeholder-profile", "accept"], {"review": review, "approved_wording": first["wording"]})
+
+        self.cli(["ingestion", "assess"], {"source": source, "moment": "busy"})
+        held, = self.cli(["offer", "list"], {})["offers"]
+        self.assertEqual(held["delivery"], "pending")
+        token = held["token"]
+        shown, = self.cli(["offer", "show", token], {})["offers"]
+        self.assertEqual(shown["offer"]["excerpt"], other)
+        self.assertIn("natural pause", self.cli(["offer", "presented", token], {}, ok=False))
+        for _ in range(2):
+            self.assertEqual(self.cli(["offer", "decline", token], {}), {"status": "declined"})
+        self.assertNotIn("grant_ref", offer_queue.read(self.work)[1][token])
+        self.assertEqual(self.cli(["offer", "show", token], {}), {"offers": []})
+        self.assertEqual(self.cli(["offer", "list"], {}), {"offers": []})
+        with patch.object(offer_queue, "time", return_value=offer_queue.time() + offer_queue.COOLDOWN + 1):
+            replay = ingestion_signals.assess(self.work, {"source": source, "moment": "pause"})
+        self.assertEqual(replay["selection"], {"status": "none"})
+        context = self.cli(["task-context", "--product", "billing", "Draft an update for Jo Diaz."], {})
+        person, = context["stakeholder_profiles"]["people"]
+        self.assertEqual([entry["wording"] for entry in person["entries"]], [first["wording"]])
+        self.assertNotIn("cost comparisons", json.dumps(context))
+
     def test_transcript_to_profile_rejects_forged_person_time_and_inverted_meaning(self):
         self.transcript(self.line + "\n" + self.second)
         wrong = {"person": "Arun Rao", "excerpt": "I do not want slides unless the customer asks.",

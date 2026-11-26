@@ -13,8 +13,11 @@ For a longer discussion, offer a separate terminal session. The PM chooses the c
 
 Use `pm.py offer list` on request to find pending, deferred, or possibly delivered suggestions.
 Use `offer show TOKEN` to check the reference and its current permissions. For a remote source, add `--reread` and supply the freshly authorized source as JSON.
-Use `offer presented TOKEN`, `offer defer TOKEN`, or `offer decline TOKEN` for the PM's response.
+The PM can respond immediately to an offer found by request.
+Use `offer decline TOKEN` to dismiss it or `offer defer TOKEN` to keep it available for lookup.
+
 Each client reserves delivery before showing a prompt. If delivery is interrupted, an explicit lookup can recover it.
+Use `offer presented TOKEN` after delivery.
 
 Quiet mode, expedite mode, and busy work suppress optional prompts. A source can authorize holding an exact reference for later review.
 The queue retains accepted references and delivery receipts. The source owner keeps the original passage.

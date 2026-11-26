@@ -92,6 +92,19 @@ class OfferHandoffTests(unittest.TestCase):
         source_evidence.revoke(self.work, selected["source_id"])
         self.assertEqual(offer_queue.discover(self.work, held["token"])["offers"], [])
 
+    def test_explicit_deferral_keeps_a_pending_item_available_only_by_request(self):
+        _, payload = self.source()
+        ingestion_signals.assess(self.work, payload)
+        held, = offer_queue.discover(self.work)["offers"]
+        token = held["token"]
+        offer = offer_queue.discover(self.work, token)["offers"][0]["offer"]
+        self.assertEqual(offer_queue.disposition(self.work, token, "defer"), {"status": "deferred"})
+        with patch.object(offer_queue, "time", return_value=offer_queue.time() + offer_queue.COOLDOWN + 1):
+            replay = ingestion_signals.assess(self.work, {**payload, "moment": "pause"})
+        self.assertEqual(replay["selection"], {"status": "none"})
+        self.assertEqual(offer_queue.discover(self.work)["offers"], [dict(held, delivery="deferred")])
+        self.assertEqual(offer_queue.discover(self.work, token)["offers"][0]["offer"], offer)
+
     def test_mute_applies_before_selection_and_feedback_is_optional(self):
         parse = test_pm.pm.build_parser().parse_args
         with patch.object(overrides, "gh") as external:
