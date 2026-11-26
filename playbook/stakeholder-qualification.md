@@ -24,7 +24,7 @@ The evaluator runs in an isolated interpreter with only the pinned modules. It r
 Use a read-only snapshot of the independent evidence bundle. Record its digest after capture and before scoring.
 
 ```sh
-python3 -I /review/qualification.py fingerprint evidence /private/evidence
+python3 -I /review/qualification.py fingerprint evidence /review-data/evidence
 ```
 
 Protect the workflows and release verifier through repository rules and independent review.
@@ -55,9 +55,9 @@ python3 -I /review/qualification.py attest \
   --repository OWNER/REPO --head "$candidate" --version "$version" \
   --manifest "$manifest" --registration "$study" \
   --scorer-dir /review/scorer --scorer-digest "$scorer" \
-  --frozen /private/frozen --evidence /private/evidence --evidence-digest "$captured" \
-  --report /private/results.json --signing-key /review/keys/reviewer.pem \
-  > /private/qualification-section.md
+  --frozen /review-data/frozen --evidence /review-data/evidence --evidence-digest "$captured" \
+  --report /review-data/results.json --signing-key /review/keys/reviewer.pem \
+  > /review-data/qualification-section.md
 ```
 
 The command saves the scorer's exact output. It rechecks the captured evidence before signing.
@@ -70,9 +70,9 @@ python3 -I /review/qualification.py verify \
   --repository OWNER/REPO --head "$candidate" --version "$version" \
   --manifest "$manifest" --registration "$study" \
   --scorer-dir /review/scorer --scorer-digest "$scorer" \
-  --evidence /private/evidence --evidence-digest "$captured" \
-  --report /private/results.json --public-key /review/keys/reviewer-public.pem \
-  --receipt /private/qualification-section.md
+  --evidence /review-data/evidence --evidence-digest "$captured" \
+  --report /review-data/results.json --public-key /review/keys/reviewer-public.pem \
+  --receipt /review-data/qualification-section.md
 ```
 
 Add the signed section to the pull request description through the authorised review process. Keep the report and raw evidence private.
