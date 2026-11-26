@@ -18,6 +18,7 @@ import onboarding
 import pm
 import metric_checks
 import preferences
+import session_journal
 import task_context
 import turn_intent
 
@@ -196,7 +197,8 @@ def prompt_context(private, cwd, payload, *, client=None, off_record=False):
     prompt = payload.get("prompt")
     if not isinstance(prompt, str):
         raise ValueError("UserPromptSubmit needs a prompt")
-    session = payload.get("session_id")
+    visible = session_journal.visible_turn(payload)
+    session = payload.get("session_id") if visible else None
     control, profile_refusal, mute = turn_intent.controls(prompt)
     private_turn = off_record or control is not None
     allow_profiles = not (private_turn or profile_refusal or mute)
@@ -251,7 +253,6 @@ def prompt_context(private, cwd, payload, *, client=None, off_record=False):
                     pass  # The live conversation can still carry the original request.
             return {"hookSpecificOutput": {"hookEventName": "UserPromptSubmit",
                                            "additionalContext": onboarding_guidance(setup) + (("\n" + guidance[-1]) if not allow_profiles else "")}}
-        request_mode = conversation.mode_request(prompt)[0]
         profile_walkthrough = onboarding.profile_request(setup, prompt)
         area = onboarding.area_request(setup, prompt)
         if profile_walkthrough and not area:
@@ -277,28 +278,45 @@ def prompt_context(private, cwd, payload, *, client=None, off_record=False):
             guidance.append("The PM has gone through the required onboarding frameworks. "
                             "If the PM has a waiting request in this conversation, offer to resume it once. "
                             "Follow their current direction and complete only the work they agree to.")
-        continuing = (pm.work_handoffs.CURRENT_TASK.fullmatch(request_text)
-                      and task_context.previous_scope(private, pm.work_handoffs.active_key(client, session)))
-        if allow_profiles and not continuing:
-            resume = pm.work_handoffs.for_prompt(private, request_text)
-            if resume:
-                if saved:
-                    # Clear the previous work record and its Stop checks when the PM chooses another task.
+        prior = saved
+        if prior.get("handoff"):
+            # Revalidate this work before reusing its record, pace, or audience.
+            saved = {}
+        active = task_context.previous_scope(private, pm.work_handoffs.active_key(client, session)) if allow_profiles else {}
+        _, subject = conversation.mode_request(request_text)
+        continuing = active and pm.work_handoffs.CURRENT_TASK.fullmatch(subject)
+        resume = (pm.work_handoffs.for_prompt(private, subject, client=client, payload=payload)
+                  if visible and allow_profiles and not continuing else None)
+        work = None
+        if resume:
+            work = resume.get("work")
+            if not work:
+                if prior:
                     try:
-                        task_context.remember_scope(private, session, {}, expected=saved)
+                        task_context.remember_scope(private, session, {}, expected=prior)
                     except (OSError, ValueError):
                         pass
-                pm.work_handoffs.bind_active(private, client, payload, work=resume.get("work"))
-                guidance.append("The PM asked to resume work. Use this result to pick up the requested thread. "
-                                "If several match, ask which one. Verify the current scope before applying any result.\n"
+                guidance.append("The PM asked to resume work. Verify the current scope. If several match, ask which one.\n"
                                 + json.dumps(resume, ensure_ascii=False))
                 return {"hookSpecificOutput": {"hookEventName": "UserPromptSubmit", "additionalContext": "\n".join(guidance)}}
-        current, state = task_context.turn_context(private, request_text, cwd=cwd, saved=saved, allow_profiles=allow_profiles)
-        checks = optional_at_turn(private, client, payload, current, prompt, event_id,
-                                  allow_source=allow_profiles, allow_offers=not private_turn and not mute and not profile_refusal)
-        bound = pm.work_handoffs.bind_active(private, client, payload, context=current) if allow_profiles else False
-        if client and session and state.get("record") and not private_turn and not bound:
-            import session_journal
+        elif active:
+            work = pm.work_handoffs.bind_active(private, client, payload, continuing=True)
+        if work:
+            record = work.get("record") or work.get("owner", {}).get("record")
+            same = prior.get("handoff") == work["revision"] or (
+                not active and record is not None and not prior.get("handoff") and prior.get("record") == record)
+            saved = prior if same or (not active and task_context.pending_expedite(prior)) else {}
+            current, state = task_context.turn_context(private, request_text, cwd=cwd, saved=saved,
+                                                       explicit=pm.work_handoffs.context_scope(private, work),
+                                                       work_record=record, continuing_work=same, suggest=not resume)
+            state["handoff"] = work["revision"]
+            guidance.append("Continue from this reviewed checkpoint in its current scope.\n" + json.dumps(
+                resume or {"status": "resume", "work": work}, ensure_ascii=False))
+        else:
+            current, state = task_context.turn_context(private, request_text, cwd=cwd, saved=saved, allow_profiles=allow_profiles)
+        checks = {} if resume else optional_at_turn(private, client, payload, current, prompt, event_id,
+                                                     allow_source=allow_profiles, allow_offers=allow_profiles)
+        if client and session and state.get("record") and not private_turn and not work:
             try:
                 parent = pm.work_handoffs.native(private, state["record"])
                 session_journal.bind_turn_scope(private, client, payload, parent["journal_scope"])
@@ -595,7 +613,6 @@ def reply_preferences(root):
 def journal_before_prompt(private, client, payload):
     if not private or not client or not payload.get("session_id"):
         return turn_intent.controls(payload.get("prompt", ""))[0] is not None
-    import session_journal
     choice = turn_intent.controls(payload.get("prompt", ""))[0]
     try:
         if choice is not None:
@@ -614,7 +631,6 @@ def record_native_event(private, client, payload, *, journal=False, metrics=Fals
     if private is None or client is None:
         return
     if journal:
-        import session_journal
         try:
             session_journal.capture(private, client, payload)
         except (OSError, ValueError):

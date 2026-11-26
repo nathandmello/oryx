@@ -175,7 +175,7 @@ def native(private, record):
              else f"product/{relative.parts[2]}" if kind == "prioritization" else "work/" + checkpoint["id"])
     return {"record": record, "revision": sha256(data).hexdigest(), "name": task_context.title(relative, text),
             "scope": scope, "journal_scope": "work/record/" + checkpoint["id"], "status": work["State"], "next_step": work["Next action"],
-            "checkpoint": work["Last checkpoint"], "waiting_on": work["Waiting on"]}
+            "checkpoint": work["Last checkpoint"], "waiting_on": work["Waiting on"], "mode": work["Mode"]}
 
 
 def resolve_link(private, state, link, scope, trail):
@@ -189,10 +189,9 @@ def resolve_link(private, state, link, scope, trail):
     if (not row or row["status"] != "open" or key in trail or len(trail) > 16
             or row["revision"] != link["revision"] or row["task"]["scope"] != scope):
         raise ValueError("Review the current parent checkpoint and its scope before returning")
-    details(private, state, key, row, trail)
-    return {"id": key, "revision": row["revision"], "scope": scope, "journal_scope": "work/handoff/" + key,
-            "name": row["task"]["name"],
-            "next_step": row["task"]["next_step"], "open_question": row["task"]["open_question"]}
+    parent = details(private, state, key, row, trail)
+    return {field: parent[field] for field in
+            ("id", "revision", "scope", "journal_scope", "name", "next_step", "open_question", "mode") if field in parent}
 
 
 def details(private, state, key, row, trail=(), *, admitting=False):
@@ -204,6 +203,8 @@ def details(private, state, key, row, trail=(), *, admitting=False):
         if name in task:
             result[name] = resolve_link(private, state, task[name], scope, (*trail, key))
             allowed_origins.add(result[name]["journal_scope"])
+    if "owner" in result:
+        result["mode"] = result["owner"]["mode"]
     evidence = []
     for handle in task.get("evidence", []):
         grant = state["grants"].get(handle)
@@ -381,18 +382,19 @@ def return_candidates(private):
         return choices(children) if children else None
 
 
+REQUEST_LEAD = r"^(?:(?:please|let['’]s|(?:can|could|would) (?:we|you))\s+)*"
 PROMPT = re.compile(
-    r"^(?:(?:please|let['’]s|can (?:we|you)|could (?:we|you))\s+)*"
+    REQUEST_LEAD +
     r"(?:resume|continue(?: working on)?|pick (?:back )?up(?: where we left off (?:on|with))?|"
     r"where did we (?:leave off|stop) (?:on|with)|return to|get back to|go back to|take me back to)"
     r"(?:\s+(?:(?:the|our|my|that)\s+)?(.+?))?[.!?]*$", re.I)
 
 
 CURRENT_TASK = re.compile(
-    r"^(?:(?:please|let['’]s)\s+)*(?:continue|resume|keep going|carry on|go on)"
+    REQUEST_LEAD + r"(?:continue|resume|keep going|carry on|go on|pick (?:back )?up where we left off)"
     r"(?:\s+(?:working on |with )?(?:this|that|it|the current (?:task|handoff)))?[.!? ]*$", re.I)
 SHORT_FOLLOWUP = re.compile(
-    r"(?:yes|no|agreed|what(?:'s| is| comes) next|what should we do next|"
+    r"(?:(?:can|could|would) you (?:please )?)?(?:yes|no|agreed|what(?:'s| is| comes) next|what should we do next|"
     r"(?:please )?(?:shorten|revise|tighten|update|rewrite) (?:it|that|this)|"
     r"(?:please )?make (?:it|that|this) (?:shorter|clearer|more concise))[.!? ]*", re.I)
 # Remove only the referential introduction. The remaining subject must be grounded in the checkpoint.
@@ -407,24 +409,17 @@ def active_key(client, session):
     return None
 
 
-def same_task(work, prompt, context):
+def same_task(private, work, prompt):
     """Retain the exact work pointer only for a related follow-up in a compatible scope."""
-    if (not prompt or turn_intent.leaves_handoff(prompt) or task_context.SWITCH.match(prompt)
-            or context.get("status") == "ambiguous"):
+    mode, prompt = conversation.mode_request(prompt)
+    if (not prompt and not mode) or turn_intent.leaves_handoff(prompt) or task_context.SWITCH.match(prompt):
         return False
     if not CURRENT_TASK.fullmatch(prompt) and PROMPT.fullmatch(prompt):
         return False  # A named resume that could not be resolved leaves the old task.
     named = task_context.WORK_RECORD.search(prompt)
     if named and named[1] != work.get("record", work.get("owner", {}).get("record")):
         return False
-    subject = context.get("scope", {})
-    if subject:
-        levels = [f"product/{subject['product']}"] if subject.get("product") else []
-        levels += [f"{key}/{subject[key]}" for key in ("area", "initiative") if subject.get(key)]
-        resolved = "/".join(levels) or ("company" if subject.get("company") else "stakeholders")
-        if work["scope"] != resolved and not work["scope"].startswith(resolved + "/"):
-            return False
-    if CURRENT_TASK.fullmatch(prompt) or SHORT_FOLLOWUP.fullmatch(prompt) or conversation.acknowledgement(prompt):
+    if not prompt or CURRENT_TASK.fullmatch(prompt) or SHORT_FOLLOWUP.fullmatch(prompt) or conversation.acknowledgement(prompt):
         return True
     # Every substantive part must refer to this work before joining the entire exchange to its journal.
     wording = " ".join(work.get(k, "") for k in ("name", "objective", "open_question", "next_step", "checkpoint"))
@@ -436,7 +431,20 @@ def same_task(work, prompt, context):
         terms = task_context.words(FOLLOWUP_LEAD.sub("", clause))
         if not terms or not terms <= subjects:
             return False
-    return bool(clauses)
+    if not clauses:
+        return False
+    # A substantive follow-up can name a conflicting subject. Resolve the PM's words independently of the terminal directory.
+    context = task_context.resolve(private, prompt)
+    if context["status"] == "ambiguous":
+        return False
+    subject = context.get("scope", {})
+    if subject:
+        levels = [f"product/{subject['product']}"] if subject.get("product") else []
+        levels += [f"{key}/{subject[key]}" for key in ("area", "initiative") if subject.get(key)]
+        resolved = "/".join(levels) or ("company" if subject.get("company") else "stakeholders")
+        if work["scope"] != resolved and not work["scope"].startswith(resolved + "/"):
+            return False
+    return True
 
 
 def current_checkpoint(private, selected):
@@ -453,60 +461,78 @@ def current_checkpoint(private, selected):
     return work
 
 
-def bind_active(private, client, payload, *, work=None, context=None):
-    """Revalidate the selected work and its grants before binding an adjacent journal turn."""
+def context_scope(private, work):
+    """Translate a reviewed handoff scope when it names a task-context subject."""
+    subject = work["scope"]
+    if subject in {"company", "stakeholders"}:
+        return {subject: True}
+    product = re.fullmatch(r"product/([a-z0-9-]+)(?:/(area|initiative)/([a-z0-9-]+))?", subject)
+    if product and (private / layout.product(product[1])).is_file():
+        return {"product": product[1], "area": product[3] if product[2] == "area" else None,
+                "initiative": product[3] if product[2] == "initiative" else None}
+    return {}  # An independent checkpoint can exist without any registered context subject.
+
+
+def bind_active(private, client, payload, *, work=None, continuing=False):
+    """Keep only the selected checkpoint's identity, revision and optional journal cursor."""
     import session_journal
     key = active_key(client, payload.get("session_id"))
-    if not key or (work is None and not task_context.previous_scope(private, key)):
-        return False
+    if (not key or not session_journal.visible_turn(payload)
+            or (work is None and not task_context.previous_scope(private, key))):
+        return None
     try:
         with storage.writer_lock(private):
             previous = task_context.previous_scope(private, key)
-            selected = work if work is not None else previous
-            bound = {}
-            if selected and (work is not None or context is not None):
+            current = work  # for_prompt holds the workspace lock from lookup through selection.
+            if continuing and previous:
                 try:
-                    current = current_checkpoint(private, selected)
+                    candidate = current_checkpoint(private, previous)
+                    if same_task(private, candidate, turn_intent.instruction(payload["prompt"])):
+                        current = candidate
                 except (KeyError, ValueError, OSError, RuntimeError, sqlite3.Error):
-                    current = None  # A withdrawn or changed checkpoint releases the pointer.
-                if current and (work is not None or same_task(current, turn_intent.instruction(payload["prompt"]), context)):
-                    event = session_journal.bind_turn_scope(private, client, payload, current["journal_scope"],
-                                                           previous=None if work is not None else previous["event"])
-                    if not event:
-                        # A duplicate hook did not admit a new event. A later turn must still prove adjacency.
-                        return False
-                    bound = {k: current[k] for k in ("id", "record", "revision") if k in current}
-                    bound["event"] = event
-            if previous != bound:
+                    pass  # A withdrawn or changed checkpoint releases the pointer.
+            bound = {}
+            if current:
+                bound = {k: current[k] for k in ("id", "record", "revision") if k in current}
+                # Keep the last cursor for duplicate hooks. A new binding must still prove adjacency and consent.
+                if all(previous.get(k) == v for k, v in bound.items()) and previous.get("event"):
+                    bound["event"] = previous["event"]
+                if work is not None or bound.get("event"):
+                    try:
+                        event = session_journal.bind_turn_scope(private, client, payload, current["journal_scope"],
+                                                                previous=None if work is not None else bound["event"])
+                        if event:
+                            bound["event"] = event
+                    except (ValueError, OSError, sqlite3.Error):
+                        pass  # Journal availability has no bearing on independently approved work.
+            if current or previous:
                 task_context.remember_scope(private, key, bound)
-            return bool(bound)
-    except (KeyError, ValueError, OSError, RuntimeError, sqlite3.Error):
-        return False  # An unavailable journal or session cache cannot interrupt the PM's primary task.
+            return current
+    except (OSError, ValueError, RuntimeError):
+        return None  # Failure of the session cache cannot interrupt the primary task.
 
 
-def for_prompt(private, prompt):
-    """Resolve an explicit PM request for open work. Ordinary turns never inspect these references."""
+def for_prompt(private, prompt, *, client=None, payload=None):
+    """Resolve a PM's request and bind that exact selection before releasing the workspace lock."""
     if not isinstance(prompt, str) or len(prompt) > 240 or "\n" in prompt:
         return None
     match_ = PROMPT.fullmatch(prompt.strip())
-    if match_:
-        query = match_[1] or ""
-        if query.casefold() in {"original task", "original work", "main task", "parent task", "parent", "main discussion"}:
-            try:
-                return return_candidates(private)
-            except (OSError, ValueError, RuntimeError):
-                return {"status": "unavailable"}
-        if query.casefold() in {"coaching", "setup", "onboarding", "area setup", "stakeholder profile setup"}:
-            return None
-    elif re.fullmatch(r"(?i)(?:what(?:'s| is) (?:still )?open|where did we leave off)[?.! ]*", prompt.strip()):
-        query = ""
-    else:
+    query = (match_[1] or "") if match_ else ""
+    returning = query.casefold() in {"original task", "original work", "main task", "parent task", "parent", "main discussion"}
+    if query.casefold() in {"coaching", "setup", "onboarding", "area setup", "stakeholder profile setup"}:
+        return None
+    if not match_ and not re.fullmatch(r"(?i)(?:what(?:'s| is) (?:still )?open|where did we leave off)[?.! ]*", prompt.strip()):
         return None
     try:
-        result = resume(private, query)
+        with storage.writer_lock(private):
+            result = return_candidates(private) if returning else resume(private, query)
+            if not result or result["status"] == "no-current-match":
+                return None
+            if payload is not None:
+                bind_active(private, client, payload, work=result.get("work"))
+            return result
     except (ValueError, OSError, RuntimeError):
         return {"status": "unavailable"}
-    return result if result["status"] != "no-current-match" else None
 
 
 def check_workspace(private):

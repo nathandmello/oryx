@@ -12,6 +12,7 @@ import test_conversation
 from onboarding_fixtures import reviewed_setup
 import context_advice
 import overrides
+import records
 import session_journal
 import turn_intent
 import work_handoffs
@@ -19,6 +20,7 @@ import work_handoffs
 
 class SessionWorkflowTests(unittest.TestCase):
     turn = test_conversation.ConversationTests.turn
+    cli = test_conversation.ConversationTests.cli
 
     def setUp(self):
         reviewed_setup(self)
@@ -116,6 +118,89 @@ class SessionWorkflowTests(unittest.TestCase):
         events = session_journal.read_session(self.work, client.lower(), session)["events"]
         return [row for row in events if row["turn_id"] == turn]
 
+    def work_turn(self, client, session, turn, prompt):
+        fields = {"turn_id": turn} if client == "Codex" else {}
+        result = self.turn(client, "UserPromptSubmit", session, prompt=prompt, **fields)
+        self.turn(client, "Stop", session, last_assistant_message="The duty roster is pencilled in.", **fields)
+        return result["hookSpecificOutput"]["additionalContext"]
+
+    def enter_other_product(self):
+        records.create(self.root, "company-context", "context/company/overview.md")
+        records.create(self.root, "product-context", "context/products/invoices/overview.md", "Invoices")
+        self.cwd = self.work / "workspace/initiatives/invoices"
+        self.cwd.mkdir(parents=True, exist_ok=True)
+
+    def test_selected_handoff_survives_generic_turns_without_recording(self):
+        self.enter_other_product()
+        records.create(self.root, "product-context", "context/products/harbour/overview.md", "Harbour")
+        chosen = self.save_handoff("Harbour review")
+        other = self.save_handoff("Harbour staffing")
+        request = "Please pick back up our Harbour review."
+        self.assertFalse(session_journal.status(self.work)["enabled"])
+        for client in ("Codex", "Claude"):
+            with self.subTest(client=client):
+                sid = "default-journal-" + client
+                self.turn(client, "SessionStart", sid)
+                prompts = (request, "Continue.", "Can we continue?", "Please make it more concise.", "Can you make it shorter?")
+                for i, prompt in enumerate(prompts):
+                    context = self.work_turn(client, sid, str(i), prompt)
+                    self.assertIn(chosen["id"], context)
+                    self.assertIn("Check the support rota.", context)
+                    self.assertNotIn(other["id"], context)
+                    if i:
+                        snapshots = [json.loads(line) for line in context.splitlines() if line.startswith("{")]
+                        self.assertIn("harbour", [row["scope"].get("product") for row in snapshots if "conversation" in row])
+                for delegated in ("Continue.", "Resume Harbour staffing."):
+                    nested = self.turn(client, "UserPromptSubmit", sid, agent_id="worker", prompt=delegated)
+                    context = nested["hookSpecificOutput"]["additionalContext"]
+                    self.assertNotIn(chosen["id"], context)
+                    self.assertNotIn(other["id"], context)
+                self.assertIn(chosen["id"], self.work_turn(client, sid, "after-worker", "Continue."))
+                fresh = self.work_turn(client, sid + "-fresh", "first", "Continue.")
+                self.assertIn(chosen["id"], fresh)
+                self.assertIn(other["id"], fresh)
+                state = b"\n".join(p.read_bytes() for p in (self.work / ".state").rglob("*") if p.is_file())
+                for text in (request, "Please make it more concise.", "The duty roster is pencilled in."):
+                    self.assertNotIn(text.encode(), state)
+                self.assertFalse(session_journal.location(self.work).exists())
+                self.assertEqual(session_journal.read_session(self.work, client.lower(), sid)["events"], [])
+                switched = self.work_turn(client, sid, "switch", "Switch to product/invoices.")
+                self.assertNotIn(chosen["id"], switched)
+                later = self.work_turn(client, sid, "later", "Continue.")
+                self.assertIn(chosen["id"], later)
+                self.assertIn(other["id"], later)
+
+    def test_named_native_resume_applies_the_saved_mode_to_later_turns(self):
+        self.enter_other_product()
+        self.save_handoff("Harbour staffing")
+        record, step = "workspace/problems/invoices.md", "Verify the dispatch labels."
+        records.create(self.root, "problem", record, "Export labels")
+        preview = self.cli("conversation", "checkpoint", "preview", record, payload={"mode": "quiet", "next_action": step})
+        self.cli("conversation", "checkpoint", "apply", record, payload=preview)
+        for client in ("Codex", "Claude"):
+            with self.subTest(client=client):
+                sid = "native-mode-" + client
+                turns = (("Resume the export labels.", "Quiet"), ("Continue.", "Quiet"),
+                         ("Expedite mode. Resume the export labels.", "Expedite"), ("What's next?", "Expedite"))
+                for i, (prompt, pace) in enumerate(turns):
+                    context = self.work_turn(client, sid, str(i), prompt)
+                    self.assertIn(record, context)
+                    self.assertIn(step, context)
+                    self.assertIn(pace + " mode is active", context)
+                    self.assertNotIn('"product": "invoices"', context)
+                switched = self.work_turn(client, sid, "switch", "Resume Harbour staffing.")
+                self.assertNotIn("Expedite mode is active", switched)
+                self.assertNotIn(record, switched)
+                self.assertNotIn('"product": "invoices"', switched)
+                resumed = self.work_turn(client, sid, "back", "Resume the export labels.")
+                self.assertIn("Quiet mode is active", resumed)
+                pending = sid + "-choose-pace-first"
+                with patch.object(self, "cwd", self.root):
+                    self.work_turn(client, pending, "pace", "Expedite mode.")
+                    chosen = self.work_turn(client, pending, "select", "Resume the export labels.")
+                self.assertIn("Expedite mode is active", chosen)
+                self.assertIn(step, chosen)
+
     def test_followup_scope_through_real_hooks_and_task_switches(self):
         session_journal.configure(self.work, enabled=True)
         first = self.save_handoff("Harbour review")
@@ -148,7 +233,6 @@ class SessionWorkflowTests(unittest.TestCase):
                     self.assertIsNone(self.exchange(client, sid, f"unrelated-{i}", unrelated)[0]["scope"])
 
     def test_restored_handoff_and_new_consent_require_a_new_resume(self):
-        session_journal.configure(self.work, enabled=True)
         checkpoint = self.save_handoff("Harbour review")
         scope = "work/handoff/" + checkpoint["id"]
         path = self.work / work_handoffs.FILE
@@ -156,6 +240,9 @@ class SessionWorkflowTests(unittest.TestCase):
         client, sid = "Codex", "scope-consent"
         def exchange(turn, prompt):
             return self.exchange(client, sid, turn, prompt)[0]["scope"]
+        self.work_turn(client, sid, "before-consent", "Resume Harbour review.")
+        session_journal.configure(self.work, enabled=True)
+        self.assertIsNone(exchange("first-consent", "Keep the existing pilot schedule."))
         self.assertEqual(exchange("resume", "Resume Harbour review."), scope)
         path.unlink()
         self.assertIsNone(exchange("deleted", "Keep the existing pilot schedule."))

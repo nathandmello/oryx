@@ -359,7 +359,7 @@ def _admit(db, private, client, session, payload, scope, now):
     return event
 
 
-def _visible(payload):
+def visible_turn(payload):
     source = payload.get("source")
     if isinstance(source, dict) or payload.get("origin") not in (None, "human", "user", "assistant", "client"):
         return False
@@ -379,7 +379,7 @@ def capture(private, client, payload, *, scope=None):
         event = payload.get("hook_event_name")
         session = payload.get("session_id")
         _admission.set(None)
-        if event not in ("SessionStart", "UserPromptSubmit", "Stop") or not _visible(payload):
+        if event not in ("SessionStart", "UserPromptSubmit", "Stop") or not visible_turn(payload):
             return
         _session(client, session)
         with _store(private, require_recording=True) as db:
@@ -472,7 +472,7 @@ def bind_turn_scope(private, client, payload, scope, *, previous=None):
     """Bind only the live, admitted submission after its existing work checkpoint resolves."""
     session = payload.get("session_id")
     if (client not in CLIENTS or not _identifier(session) or not _scope(scope)
-            or payload.get("hook_event_name") != "UserPromptSubmit" or not _visible(payload)):
+            or payload.get("hook_event_name") != "UserPromptSubmit" or not visible_turn(payload)):
         return None
     with _store(private) as db:
         if not _allowed(db, client, session):

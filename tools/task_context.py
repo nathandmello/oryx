@@ -288,7 +288,7 @@ def choose_scope(private, documents, prompt, cwd, previous, explicit, relationsh
     def with_relationship(scope):
         return {**scope, "stakeholders": True} if relationship and scope.get("product") else scope
 
-    if explicit:
+    if explicit is not None:
         return with_relationship(explicit), []
     if conversation.acknowledgement(prompt):
         return {}, []
@@ -565,7 +565,8 @@ def resolve_inventory(private, prompt, *, cwd, previous, explicit, explain, incl
             record_scope = resolved_artifact(work_record, docs)
             if scope and not scope_contains(record_scope, scope):
                 raise ValueError("Choose a work record in the current scope")
-            scope = scope or record_scope or None
+            if scope is None:
+                scope = record_scope or None
         result = resolve_current(private, prompt, location, prior, scope, explain, include_history, through,
                                  index, docs, loaded, stamps)
         if allow_profiles and result["status"] != "ambiguous":
@@ -696,7 +697,7 @@ def resolve_current(private, prompt, cwd, previous, explicit, explain, include_h
     risk_ids = set(re.findall(r"\brisk-[0-9a-f]{20}\b", prompt))
     journals = (live(name) for name, meta in docs.items() if meta["journal"])
     saved_reviews = evidence_reviews.stored(journals, through.isoformat())
-    if not scope and not explicit and len(risk_ids) == 1:
+    if not scope and explicit is None and len(risk_ids) == 1:
         requested = next(iter(risk_ids))
         review = saved_reviews.get(requested)
         if review is None:
@@ -1022,12 +1023,18 @@ def scope_contains(record_scope, scope):
     return all(value is None or scope.get(key) == value for key, value in record_scope.items())
 
 
+def pending_expedite(previous):
+    """The PM can choose a pace before identifying the work in this session."""
+    return (previous.get("mode") == "expedite" and previous.get("can_continue")
+            and not any(previous.get(key) for key in ("scope", "record", "handoff")))
+
+
 def turn_context(private, prompt, *, cwd=None, saved=None, explicit=None, work_record=None, include_history=False,
-                 explain=False, allow_profiles=True):
+                 explain=False, allow_profiles=True, continuing_work=False, suggest=True):
     """Resolve the current task separately from the turn's resumable work pointer."""
     previous = saved or {}
     mode_override, prompt = conversation.mode_request(prompt)
-    prior_scope = previous.get("scope", {})
+    prior_scope = {} if explicit == {} else previous.get("scope", {})
     if prior_scope:
         try:
             conversation.scope_key(prior_scope)
@@ -1087,12 +1094,10 @@ def turn_context(private, prompt, *, cwd=None, saved=None, explicit=None, work_r
     if checkpoint and not result["choices"] and not switched:
         can_continue = True
 
-    retains_mode = same_work and not selected_new_owner and not switched
+    retains_mode = (same_work or continuing_work) and not selected_new_owner and not switched
     if mode_override is None and retains_mode:
         mode_override = previous.get("mode")
-    if (mode_override is None and previous.get("mode") == "expedite" and previous.get("can_continue")
-            and not prior_scope and not previous.get("record") and scope and not switched):
-        # The PM may choose the pace before identifying the product for this work.
+    if mode_override is None and pending_expedite(previous) and (scope or explicit is not None) and not switched:
         mode_override = "expedite"
     work_mode = previous.get("work_mode") if retains_mode else None
     if checkpoint:
@@ -1116,11 +1121,11 @@ def turn_context(private, prompt, *, cwd=None, saved=None, explicit=None, work_r
         deferrals = []
     if not checkpoint and can_continue and active and not scope and not neutral:
         turn["scope_to_confirm"] = active
-    if not neutral and scope:
+    if suggest and not neutral and scope:
         offer = conversation.context_offer(prompt, result, deferrals, mode in {"quiet", "expedite"})
         if offer is not None:
             turn["suggestion"] = offer
-    if mode not in {"quiet", "expedite"}:
+    if suggest and mode not in {"quiet", "expedite"}:
         import company_onboarding
         cue = company_onboarding.followup(private, prompt, company_scope=scope.get("company"))
         if cue:

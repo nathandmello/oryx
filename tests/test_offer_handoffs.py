@@ -12,6 +12,7 @@ import unittest
 from unittest.mock import patch
 
 import test_pm
+import conversation
 import ingestion_signals
 import offer_queue
 import overrides
@@ -167,10 +168,28 @@ class OfferHandoffTests(unittest.TestCase):
     def test_plain_name_discovers_existing_work_without_a_saved_handoff(self):
         record = "workspace/problems/export.md"
         path = records.create(self.root, "problem", record, "Weekly export")
+        path.write_text(conversation.updated_text(path.read_text(), {"mode": "quiet"})[0])
         actual = handoff.for_prompt(self.work, "Continue working on the weekly export.")
         self.assertEqual(actual["work"]["record"], record)
         self.assertEqual(actual["work"]["revision"], sha256(path.read_bytes()).hexdigest())
+        self.assertEqual(actual["work"]["mode"], "quiet")
         self.assertIsNone(handoff.for_prompt(self.work, "Continue working on fulfilment."))
+
+    def test_reviewed_handoff_uses_its_owning_records_mode(self):
+        record = "workspace/problems/export.md"
+        path = records.create(self.root, "problem", record, "Weekly export")
+        path.write_text(conversation.updated_text(path.read_text(), {"mode": "quiet"})[0])
+        native = handoff.resume(self.work, "Weekly export")["work"]
+        owner = {key: native[key] for key in ("record", "revision")}
+        review = self.save(self.task("Export review", scope=native["scope"], owner=owner))
+        self.assertEqual(handoff.resume(self.work, "Export review")["work"]["mode"], "quiet")
+
+        child = self.save(self.task("Later question", scope=native["scope"],
+                                    parent={key: review[key] for key in ("id", "revision")}))
+        self.assertNotIn("mode", handoff.resume(self.work, "Later question")["work"])
+        returned = handoff.close(self.work, child["id"], {"approved": True, "scope": native["scope"],
+                                                         "revision": child["revision"]}, returning=True)
+        self.assertEqual(returned["parent"]["mode"], "quiet")
 
     def test_revoke_removes_names_from_ambiguous_lookup_and_hides_citation(self):
         name = "context/company/overview.md"
