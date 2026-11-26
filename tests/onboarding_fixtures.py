@@ -19,7 +19,7 @@ def define_fixture_frameworks(root):
     return frameworks
 
 
-def review_current_topic(private):
+def review_current_topic(private, *, offer_profiles=True):
     state = onboarding_review.status(private)
     stage = state["stage"]
     identifier = {}
@@ -36,6 +36,7 @@ def review_current_topic(private):
     onboarding_review.review(private, {
         "revision": state["revision"], "stage": stage, "topic": topic["id"],
         "outcome": "open", "pm_reply": "I don't know yet. Let's leave this open.", **identifier,
+        **({"offer_profiles": False} if not offer_profiles and stage in {"product", "area"} else {}),
     })
 
 
@@ -45,7 +46,7 @@ def reviewed_studio(root, private):
     for _ in range(sum(len(topics) for topics in frameworks.values())):
         if onboarding_review.status(private)["ready"]:
             return
-        review_current_topic(private)
+        review_current_topic(private, offer_profiles=False)
     if not onboarding_review.status(private)["ready"]:
         raise AssertionError("Reviewing every registered topic did not complete onboarding")
 

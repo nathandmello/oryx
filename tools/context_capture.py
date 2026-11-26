@@ -8,6 +8,7 @@ import re
 from urllib.parse import unquote, urlsplit
 
 import layout
+import ingestion_signals
 import records
 import filing
 import storage
@@ -55,7 +56,7 @@ def source_rows(inputs):
         raise ValueError("sources must be a list")
     result, seen = [], set()
     for source in inputs:
-        fields(source, ("reference", "date", "coverage"), ("checked_on", "text"))
+        fields(source, ("reference", "date", "coverage"), ("checked_on", "text", "ingestion"))
         reference = line(source["reference"], "Source reference")
         if not records.specific(reference) or "|" in reference or records.PLACEHOLDER.search(reference):
             raise ValueError("Use a source reference without table separators or placeholders")
@@ -80,7 +81,7 @@ def source_rows(inputs):
                 raise ValueError("Source date cannot follow Checked on")
         if "text" in source and (coverage == "unavailable" or not isinstance(source["text"], str) or not source["text"].strip()):
             raise ValueError("Supply only source text that was accessible and inspected")
-        result.append({key: value for key, value in source.items() if key != "text"})
+        result.append({key: value for key, value in source.items() if key not in ("text", "ingestion")})
     return result
 
 
@@ -673,6 +674,48 @@ def validate_decision_approval(entry, revision, checked_on):
             raise ValueError("Supply the PM, discussion reference and exact confirmation reply")
 
 
+def ingestion_reviews(private, sources, entries, single_excerpt):
+    """Dispatch only authorized original material, preserving isolated byte ranges."""
+    results = []
+    for index, source in enumerate(sources, 1):
+        if source["coverage"] == "unavailable":
+            continue
+        meta = source.get("ingestion", {})
+        reference = source["reference"]
+        allowed = {"kind", "scope", "retention", "observations", "purposes", "source_id", "revision",
+                   "event_id", "subject", "offset"}
+        if not isinstance(meta, dict) or meta.keys() - allowed:
+            results.append({"source": index, "status": "invalid-ingestion-options"})
+            continue
+        info = {"kind": "document", "scope": reference, "retention": "chat-only",
+                **{k: v for k, v in meta.items() if k != "observations"},
+                "reference": reference, "coverage": source["coverage"], "authorized": True}
+        original = source.get("text")
+        reads = [info if original is None else {**info, "text": original}]
+        if single_excerpt:
+            # Never manufacture an attributed original by concatenating prepared quotations.
+            reads = []
+            for quote in dict.fromkeys(row["quote"] for row in entries if row.get("source") == index and row.get("quote")):
+                if not original or original.count(quote) != 1:
+                    continue
+                start = original.index(quote)
+                if start and original[start - 1] != "\n" or start + len(quote) < len(original) and original[start + len(quote)] != "\n":
+                    continue
+                if type(info.get("offset", 0)) is not int:
+                    continue
+                # Include the inspected line separators so the range proves where the utterance begins.
+                left = start - 1 if start else start
+                right = min(start + len(quote) + 1, len(original))
+                reads.append({**info, "coverage": "partial", "text": original[left:right],
+                              "offset": info.get("offset", 0) + len(original[:left].encode())})
+        for part in reads:
+            envelope = {"source": part, "moment": "busy"}
+            if "observations" in meta:
+                envelope["observations"] = meta["observations"]
+            results.append({"source": index, **ingestion_signals.for_task(private, envelope)})
+    return results
+
+
 def route(payload, private, remit=None, *, single_excerpt=False, descriptive_intake=False):
     """Plan destinations and PM relevance independently from prepared excerpts."""
     fields(payload, ("sources", "entries"), ("responses",))
@@ -845,6 +888,7 @@ def route(payload, private, remit=None, *, single_excerpt=False, descriptive_int
             plan["risk_preview"] = risk_preview
     if responses:
         plan["responses"] = responses
+    plan["ingestion_reviews"] = ingestion_reviews(private, payload["sources"], entries, single_excerpt)
     return plan
 
 

@@ -69,7 +69,7 @@ After any authorized independent review or rehearsal, return the key objection a
 ## Compare and review
 
 Use the PM’s own confidence estimate if they give one. Discuss reversibility and time to learn.
-Offer the original confidence prompts as perspectives when appropriate.
+Use these prompts when they help the PM weigh a choice.
 
 - Above 80%, explore a reversible call with a review date. For a hard-to-reverse choice, ask who else should weigh in.
 - From 50% through 80%, consider what can be learned within a day or agree on a review point.
@@ -106,5 +106,3 @@ Keep scope across acknowledgments. Resolve explicit switches anew. Check evidenc
 
 Respect a declined offer until its agreed review point or material evidence change.
 When hooks are disabled, use the same playbook and manual task context.
-
-[Behavior reference by Andreas Kelm](https://github.com/andreaskelm/pm-brain/tree/52d55027c25f544ef6e55e9240be06340615c295)

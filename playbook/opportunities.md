@@ -127,5 +127,3 @@ The PM supplies open backlog limits, discovery limits, and capacity for each pla
 The supplied *Product Strategy Mindset* informs goal alignment, the four risks, experiments, and confidence. [Product strategy framework](framework.md).
 
 The supplied *Product Backlog & Discovery Workflow* informs intake, review cadence, and proportionate exceptions. The supplied *Product Prioritization — PM Handbook* informs commercial evidence and constrained planning. The Initiative Brief gate follows the PM's stated workflow.
-
-The skills use short entry points, focused discovery steps, and explicit human checkpoints. [BMAD Method skills](https://github.com/bmad-code-org/BMAD-METHOD/tree/e435a22574fe55722841086e5566420178b98df3/skills).

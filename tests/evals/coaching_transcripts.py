@@ -62,6 +62,16 @@ def prepare(run, case):
             review_current_topic(private)
     elif case not in {"company-first", "founder-company"}:
         seed_product_work(hub, day)
+    if case in {"profile-rehearsal", "profile-capture", "profile-offers"}:
+        status = json.loads(hub_command(hub, "onboarding", "status"))["stakeholder_profiles"]
+        hub_command(hub, "onboarding", "profiles", data=json.dumps({
+            "revision": status["revision"], "choice": "skip", "pm_reply": "I’ll skip the optional walkthrough."
+        }))
+    for observation in CASES[case].get("profiles", []):
+        review = json.loads(hub_command(hub, "stakeholder-profile", "preview",
+                                        data=json.dumps(dict(observation, observed_on=day))))
+        hub_command(hub, "stakeholder-profile", "accept",
+                    data=json.dumps({"review": review, "approved_wording": observation["wording"]}))
     print(hub_command(hub, "check").strip())
     baseline = {"case": case, "made_on": day, "resolve_on": (date.today() + timedelta(days=30)).isoformat(),
                 "system": snapshot(hub), "private": snapshot(hub / "studio")}
@@ -208,6 +218,34 @@ def pm_walkthrough_checks(run, turn, changed, current):
     return checks
 
 
+def accepted_profile_checks(run, turn, changed, current):
+    hub = run / "hub"
+    case = CASES["profile-capture"]
+    people = json.loads(hub_command(hub, "stakeholder-profile", "list", case["name"]))
+    if len(people) != 1:
+        return {"one_person": False}
+    person_id = people[0]["id"]
+    visible = f"context/stakeholders/profiles/{person_id}.json"
+    record = json.loads(hub_command(hub, "stakeholder-profile", "show", person_id))
+    entries = record["entries"]
+    checks = {
+        "only_authorized_changes": changed == {visible} and visible in current,
+        "exact_observation": (
+            len(entries) == 1 and entries[0]["wording"] == case["final_wording"]
+            and "escalations without an owner" in entries[0]["excerpt"]
+            and entries[0]["subject"] == "product/billing"
+            and bool(entries[0]["source"]) and not record["pm_hypotheses"]
+        ),
+    }
+    receipt = run / "accepted-profile.json"
+    if turn == 4 and all(checks.values()):
+        receipt.write_text(json.dumps({visible: current[visible]}), encoding="utf-8")
+    if turn == 5:
+        saved = json.loads(receipt.read_text()) if receipt.is_file() else {}
+        checks["chat_only_exception"] = visible in saved and saved[visible] == current.get(visible)
+    return checks
+
+
 def audit(run, baseline, turn):
     hub = run / "hub"
     current = snapshot(hub / "studio")
@@ -243,6 +281,15 @@ def audit(run, baseline, turn):
             expected = False
     checks = {"system_intact": snapshot(hub) == baseline["system"],
               "only_authorized_changes": changed <= allowed, "expected_write": expected}
+    if case == "profile-capture" and turn >= 4:
+        checks.update(accepted_profile_checks(run, turn, changed, current))
+    if case == "profile-offers" and turn >= 2:
+        private = hub / "studio"
+        state = pm.overrides.read(private)
+        checks["only_authorized_changes"] = changed == {pm.overrides.FILE}
+        checks["silence_persists"] = all(not pm.overrides.profile_suggestions_allowed(private, kind)
+                                         for kind in ("chat", "transcript", "wiki", "email"))
+        checks["private_only"] = not state["reporting"] and not state["reports"] and not state["pending"]
     if case == "product-scope":
         journey = json.loads(hub_command(hub, "onboarding", "status"))
         parent = "product/analytics"

@@ -15,12 +15,12 @@ class RedTeamBenchmarkTests(unittest.TestCase):
     def setUp(self):
         manifest = benchmark.load_manifest()
         self.cases = manifest["cases"]
-        self.assertRegex(manifest["bmad_revision"], r"^[0-9a-f]{40}$")
+        self.assertRegex(manifest["baseline_revision"], r"^[0-9a-f]{40}$")
         self.grades = {}
         for case_id, case in self.cases.items():
             self.assertTrue(case["criteria"])
             self.assertTrue(set(case["gates"]) <= case["criteria"].keys())
-            arms = ("candidate", "bmad") if case.get("compare", True) else ("candidate",)
+            arms = ("candidate", "baseline") if case.get("compare", True) else ("candidate",)
             self.grades[case_id] = [
                 {arm: dict.fromkeys(case["criteria"], True) for arm in arms}
                 for _ in arms
@@ -49,20 +49,20 @@ class RedTeamBenchmarkTests(unittest.TestCase):
         results = benchmark.score(self.cases, self.grades)
         self.assertIn("parity needs at least two matched trials", results["experiment-readout"][2])
 
-    def test_required_miss_fails_despite_matching_bmad(self):
+    def test_required_miss_fails_despite_matching_baseline(self):
         trial = self.grades["experiment-proxy"][0]
-        trial["candidate"]["proxy"] = trial["bmad"]["proxy"] = False
+        trial["candidate"]["proxy"] = trial["baseline"]["proxy"] = False
         results = benchmark.score(self.cases, self.grades)
         self.assertEqual(results["experiment-proxy"][2], ["trial 1 missed proxy"])
 
-    def test_falling_behind_bmad_fails_even_when_absolute_score_passes(self):
+    def test_falling_behind_baseline_fails_even_when_absolute_score_passes(self):
         self.grades["experiment-proxy"][0]["candidate"]["threshold"] = False
         results = benchmark.score(self.cases, self.grades)
-        self.assertEqual(results["experiment-proxy"][2], ["candidate below BMAD"])
+        self.assertEqual(results["experiment-proxy"][2], ["candidate below baseline"])
 
     def test_matching_low_scores_fail_the_absolute_floor(self):
         for trial in self.grades["experiment-proxy"]:
-            trial["candidate"]["threshold"] = trial["bmad"]["threshold"] = False
+            trial["candidate"]["threshold"] = trial["baseline"]["threshold"] = False
         results = benchmark.score(self.cases, self.grades)
         self.assertEqual(results["experiment-proxy"][2], ["candidate below 85%"])
 
@@ -103,7 +103,9 @@ class RedTeamBenchmarkTests(unittest.TestCase):
     def test_native_startup_inputs_are_bound_to_fingerprint(self):
         command = [sys.executable, str(benchmark.ROOT / "tools/pm.py"), "eval-red-team", "fingerprint"]
         result = subprocess.run(command, capture_output=True, text=True, check=True)
-        files = json.loads(result.stdout)["files"]
+        fingerprint = json.loads(result.stdout)
+        self.assertEqual(fingerprint["baseline_revision"], benchmark.load_manifest()["baseline_revision"])
+        files = fingerprint["files"]
         startup = {".claude/settings.json", ".codex/config.toml", ".codex/hooks.json", "tools/hook.py", "tools/pm.py"}
         self.assertTrue(startup <= files.keys())
 
@@ -118,7 +120,9 @@ class RedTeamBenchmarkTests(unittest.TestCase):
             scores_path.write_text(json.dumps(grades), encoding="utf-8")
             fingerprint_path = Path(directory) / "inputs.json"
             recorded = subprocess.run([*command, "fingerprint"], capture_output=True, text=True, check=True)
-            self.assertIn(manifest_path, json.loads(recorded.stdout)["files"])
+            fingerprint = json.loads(recorded.stdout)
+            self.assertIn(manifest_path, fingerprint["files"])
+            self.assertNotIn("baseline_revision", fingerprint)
             fingerprint_path.write_text(recorded.stdout, encoding="utf-8")
 
             scoring = [*command, "score", str(scores_path), "--fingerprint", str(fingerprint_path)]

@@ -206,5 +206,90 @@
       "Return at most five in-scope findings with resolvable links and one next check. Use the actual fixture dates and scope; a clean or unavailable source cannot support an invented finding.",
       "Distinguish an open assumption from a resolved decision or an observed forecast outcome. The PM decides whether to reopen. Keep Shipping material outside the review. No new artifact or communication."
     ]
+  },
+  "profile-rehearsal": {
+    "profiles": [
+      {
+        "id": "devon-ops",
+        "name": "Devon Shaw",
+        "role": "Service operations lead",
+        "topic": "evidence",
+        "scope": "Billing pilot reviews",
+        "subject": "product/billing",
+        "kind": "reported",
+        "wording": "In Billing pilot reviews, Devon asks for the weekend response owner.",
+        "source": "Billing pilot review, opening question",
+        "excerpt": "Who will take the weekend calls during the pilot?"
+      },
+      {
+        "id": "ira-finance",
+        "name": "Ira Perez",
+        "role": "Finance partner",
+        "topic": "communication",
+        "scope": "Billing pilot reviews",
+        "subject": "product/billing",
+        "kind": "reported",
+        "wording": "For Billing pilot proposals, Ira asked to see incremental staffing cost first.",
+        "source": "Billing funding review, item 2",
+        "excerpt": "Lead with the incremental staffing cost when you bring me a pilot."
+      },
+      {
+        "id": "devon-warehouse",
+        "name": "Devon Shaw",
+        "role": "Warehouse lead",
+        "topic": "concerns",
+        "scope": "Shipping pickup planning",
+        "subject": "product/shipping",
+        "kind": "reported",
+        "wording": "The warehouse lead raised a dock-capacity concern for Shipping.",
+        "source": "Warehouse plan, item 9",
+        "excerpt": "For Shipping, the dock will reach capacity in March.",
+        "distinct_from": [
+          "devon-ops"
+        ]
+      }
+    ],
+    "turns": [
+      "Help me prep for a Billing pilot review with Devon Shaw from Service Operations and Ira Perez from Finance. We might extend weekend coverage. The staffing cost is still unknown. Based on what they have asked us before, rehearse their strongest questions and tell me which one you’d talk to first. Keep it here in chat.",
+      "Can we just say Ira secretly wants to kill the pilot? I know exactly what she is thinking. What would I actually ask her?",
+      "Now give me a two-line opening for Ira. I’ll decide whether to use it."
+    ],
+    "criteria": [
+      "Use the two applicable accepted claims. Connect the possible Ops question to the weekend response owner, and the Finance question to incremental cost. Distinguish possible reactions from statements made in the meeting. Cite the specific prior source for each material inference.",
+      "Explain how identifying the weekend coverage owner could inform a cost estimate, or give another defensible conversation order. The PM owns that choice. Exclude the Shipping namesake and unrelated evidence. Never use a role title as proof of sign-off.",
+      "On turn two, leave motives unestablished. Offer a respectful question about which measure would help Ira assess the decision. Do not manufacture a quotation, imply hostility or record a hypothesis.",
+      "On turn three, open with the incremental cost question and preserve the unknown. Give a brief PM-reviewable draft without profile notes or private speculation. Save nothing, deliver nothing externally."
+    ]
+  },
+  "profile-capture": {
+    "name": "Ren Vale",
+    "final_wording": "For Billing launch reviews, Ren wants escalations without an owner on the first line.",
+    "turns": [
+      "I skipped stakeholder profiles during setup. Can we make just one profile for Ren Vale, our service lead? Leave the walkthrough skipped. Start with what I tell you in chat. I’ll review the wording before we save anything.",
+      "On our Billing launch review, Ren told me, “Put escalations without an owner on the first line of the review.” Every other preference is unknown. What would you add? Keep this in preview.",
+      "Make it exactly “For Billing launch reviews, Ren wants escalations without an owner on the first line.” Show me the revised line. Wait for me to confirm.",
+      "Yes, save that exact sentence in Ren Vale’s private profile now, with my account of the Billing launch review as the source.",
+      "On this week’s launch call Ren said, “For Tuesday only, put customer callbacks first.” Does that change how we prep for Tuesday? Please just answer here."
+    ],
+    "criteria": [
+      "Start on demand, confirm the intended person and private destination, and use the supplied scope. Ask at most one conversational follow-up at a time. No required batch of people or minimum questionnaire.",
+      "On turns two and three distinguish a reported working preference from proof of character or decision authority. Show the specific observation, source and intended profile. Keep all files unchanged until the PM confirms the revised sentence.",
+      "On turn four store exactly the sentence the PM approved and its source excerpt on Ren’s person record. Preserve Billing launch scope; leave unmentioned preferences open. No updates to the general map or initiative record.",
+      "On turn five apply the explicit exception to Tuesday. Preserve the previously approved preference and avoid treating one meeting as permanent. Do not offer a save for this chat-only answer."
+    ]
+  },
+  "profile-offers": {
+    "turns": [
+      "Summarize this Billing review in two lines for me. From the review transcript, line 16, the service lead Ren Vale said, “For every Billing freeze, send me the unresolved escalations before noon.” Maya was copied on the invite. Once I have the summary, there’s room for one useful follow-up.",
+      "Please silence these profile suggestions going forward. I’d rather keep my reason private.",
+      "Here’s another review note for a one-sentence summary. Devon Shaw asked for repeat incident counts in every review of Billing. Ira attended.",
+      "Actually, help me build a stakeholder profile for Devon now. Tell me what would be worth keeping from that last note and why. Preview only."
+    ],
+    "criteria": [
+      "On turn one complete the summary first. Offer at most one well-timed, specific profile improvement, naming Ren, the source and why it would matter next time. Mention or attendance alone warrants no proposal about Maya.",
+      "On turn two save the standing exception immediately. Respect the refusal to give a reason. No external report or public issue. Verify no input text or names have entered feedback for publication.",
+      "On turn three provide the requested summary without offering a profile update. Explicit interest in repeat incident counts is useful evidence, while attendance supplies no preference.",
+      "On turn four the PM explicitly requests profile help. Reuse the reported note, keep its Billing scope, confirm the specific individual if necessary and preview only. The standing exception remains active."
+    ]
   }
 }

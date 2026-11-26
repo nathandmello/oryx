@@ -31,17 +31,14 @@ Usage or repeat purchases can inform a product-market fit assessment for that of
 
 Use a framework only when it helps explain the business or surface one material uncertainty. Tailor follow-ups to the PM's words and Studio preferences.
 
-These two gstack habits apply to founders and PMs at any level. Choose a follow-up only when it clarifies the account.
-
-- **Office Hours.** Clarify who buys, their current alternative, or what they agreed to. If Sales reports interest from three accounts, ask “What have those accounts agreed to so far?” Attribute the answer to its source. [Startup diagnostic](https://github.com/nathandmello/gstack/blob/702a1a9b698080aca72503f5feed9ed8cd552348/office-hours/sections/phase-2a-startup-diagnostic.md#L81-L110)
-- **CEO Review.** Clarify what a number counts or where an existing trade-off applies. If a PM says enterprise sales are on hold, ask “Is that company-wide or specific to your team?” Capture the scope they can confirm. [CEO review principles](https://github.com/nathandmello/gstack/blob/702a1a9b698080aca72503f5feed9ed8cd552348/plan-ceo-review/SKILL.md#L536-L543)
+- When Sales reports interest, ask “Did any of those accounts agree to a next step?” Capture the answer and who reported it.
+- When a figure is ambiguous, ask what it counts. If enterprise sales are on hold, clarify which teams the decision covers.
 
 Use answers already given. If the PM heard a decision secondhand, preserve the attribution and any uncertainty about its scope or rationale.
 
 **For later workflows.** Observed workarounds, prototype use and surprising behavior can inform product context.
 Choosing a first paid offering, comparing target markets or testing a future market thesis belongs in strategy.
 When the choice is settled, company intake can document its business scope and the decision owner’s stated reason.
-[Office Hours product and future-fit prompts](https://github.com/nathandmello/gstack/blob/702a1a9b698080aca72503f5feed9ed8cd552348/office-hours/sections/phase-2a-startup-diagnostic.md#L120-L146) · [CEO Review future-state mapping](https://github.com/nathandmello/gstack/blob/702a1a9b698080aca72503f5feed9ed8cd552348/plan-ceo-review/SKILL.md#L844-L857)
 
 | Framework | When to use it | Follow-up or common misuse |
 | --- | --- | --- |

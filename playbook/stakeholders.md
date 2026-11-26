@@ -24,6 +24,8 @@ After setup, `pm.py task-context "Show the stakeholder map"` retrieves accepted 
 “Who approves Billing renewals?” also retrieves Billing evidence when the product is known.
 Use entries that cover the decision. Leave authority open where the sources only establish reporting or collaboration.
 
+Use a [stakeholder profile](stakeholder-profiles.md) for approved observations about working with a person. The map remains the source for scoped relationships.
+
 ## Sharing a Studio across versions
 
 Update each client before sharing a Studio that contains this map. Version 0.11.0 can still read and edit the PM profile.

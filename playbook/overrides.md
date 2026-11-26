@@ -43,6 +43,8 @@ Apply the rule immediately and on subsequent relevant turns. Both clients receiv
 Use the effective rules from the list command when prompt hooks are unavailable.
 The private repository stores rules, reporting receipts, and retired rules in `studio/customizations/rules.json`.
 
+Silence profile prompts immediately with `pm.py override profile-suggestions off`. Use `--source transcript` for a narrower request. Offer optional feedback afterwards.
+
 ## Add a workflow
 
 For “When I say Friday handoff, draft my update,” save the name, trigger, and requested steps.

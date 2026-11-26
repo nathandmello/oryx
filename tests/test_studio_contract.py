@@ -139,6 +139,12 @@ class StudioContractTests(unittest.TestCase):
         hub.submit(hub.setup_event(), hub.capture(), hub.describe(), hub.metric(), hub.target(),
                    hub.decision("evaluate"), hub.decision("defer", revisit="Interview panel reopens."))
         signed = hub.ledger.read_bytes()
+        claim = {"id": "taylor", "name": "Taylor Park", "role": "Finance lead",
+                 "topic": "evidence", "kind": "reported", "subject": "general", "scope": "Pricing reviews",
+                 "source": "PM account", "observed_on": "2025-10-01", "attribution": "PM", "replaces": None,
+                 "excerpt": "For pricing reviews Taylor asks about unit costs.", "wording": "Taylor asks about unit costs."}
+        review = self.command("stakeholder-profile", "preview", payload=claim)
+        self.command("stakeholder-profile", "accept", payload={"review": review, "approved_wording": claim["wording"]})
         source = saved_checkout(self.work)
         git(self.root, "clone", "-q", "--no-local", str(source), str(self.work))
         self.assertFalse((self.work / "customizations").exists())  # Git omits empty directories.
@@ -203,6 +209,12 @@ class StudioContractTests(unittest.TestCase):
             "criterion": "Five pilot customers sign renewals."})
         identifier = action("review forecast apply", payload=forecast)["id"]
         self.assertEqual(action("review forecast show", "--product", "example")[0]["id"], identifier)
+
+        self.assertFalse(action("workspace journal show")["enabled"])
+        self.assertIn("status", action("workspace handoff show"))
+        self.assertIn("offers", action("workspace suggestions show"))
+        person = action("context stakeholder-profile show", "taylor")
+        self.assertEqual(person["entries"][0]["wording"], claim["wording"])
 
         original = action("workspace preferences show")
         action("workspace preferences preview", "--layout", "prose")

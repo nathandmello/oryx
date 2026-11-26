@@ -12,11 +12,14 @@ import sys
 from uuid import uuid4
 
 import conversation
+import ingestion_signals
+import stakeholder_signals
 import onboarding
 import pm
 import metric_checks
 import preferences
 import task_context
+import turn_intent
 
 
 CANDOR_GUIDANCE = (
@@ -26,7 +29,21 @@ CANDOR_GUIDANCE = (
     "Treat omissions as unknown. Preserve explicit exclusions within their stated scope when recording or reusing context."
 )
 
+PROFILE_GUIDANCE = (
+    "Use playbook/ingestion.md for any inspected source, including ordinary PM input and summary-only requests. "
+    "Keep the primary task moving. Evaluate stakeholder relevance privately in the source's permitted scope. "
+    "Run pm.py ingestion assess with grounded observations at a natural pause before offering at most one change. "
+    "For a named person's working history, communication, or a rehearsal, read the stakeholder-profiles skill. "
+    "On a request to silence these suggestions, save the scoped customization first, even without a reason. "
+    "Offer private feedback once if welcome and follow existing opt-in issue reporting. "
+    "Only present an optional offer at a natural pause. Use pm.py offer presented TOKEN after observed delivery. "
+    "If work would branch, offer a reviewed handoff for another terminal and preserve the parent task. "
+    "Use pm.py handoff resume for the PM's open work. Session transcripts are private and independently controlled. "
+    "Use pm.py journal only under the PM's direction. For optional client advice read playbook/context-advice.md."
+)
+
 CAPTURE_GUIDANCE = (
+    PROFILE_GUIDANCE + " "
     "For requests to capture or update context, automatically read .agents/skills/ingest-context/SKILL.md. "
     "For meeting transcripts, read .agents/skills/summarize-meeting/SKILL.md before fetching sources. "
     "Retrieve remote transcripts through the available provider connector and reuse its response for local processing. "
@@ -72,7 +89,7 @@ CONVERSATION_GUIDANCE = (
     "Use only applicable, confirmed context. Use playbook/pm-context.md and pm.py pm-onboarding for updates. "
     "For product or area context updates, use playbook/product-context.md and pm.py product-onboarding. "
     "When the PM asks for an area walkthrough, check onboarding status and confirm their choice with onboarding select-area. "
-    "Honor quiet mode, other active work, and deferral cues."
+    "Honor quiet mode, other active work, and deferral cues. " + PROFILE_GUIDANCE
 )
 
 NUMBERS_GUIDANCE = (
@@ -97,7 +114,8 @@ def onboarding_guidance(setup):
     if setup["stage"] == "product":
         instructions += ("Start with the PM's confirmed remit. If the subject is unclear, ask where it fits. "
                          "Review the parent product, including when the PM owns a particular part of it. "
-                         "At completion, follow the returned next action for any optional area review. "
+                         "At completion, follow the returned next action for optional area and stakeholder profile setup. "
+                         "For quiet, expedited, or interrupted work, pass offer_profiles:false on the final review or area choice. "
                          "When the agreed sources include existing Studio briefs, use product-onboarding status --evidence "
                          "for the current topic. Check its source and limitations before asking the PM to repeat an answer. "
                          "Use product-onboarding to review wording and destination one finding at a time. "
@@ -122,32 +140,128 @@ def onboarding_guidance(setup):
     )
 
 
-def prompt_context(private, cwd, payload):
+def assess_chat(private, prompt, mode, event_id, *, moment="busy", candidates=()):
+    reference = "chat:" + event_id
+    source = {"kind": "chat", "reference": reference, "scope": reference,
+              "authorized": True, "text": prompt, "retention": "review",
+              "purposes": ["stakeholder-profile"], "coverage": "read"}
+    return ingestion_signals.for_task(private, {"source": source, "mode": mode or "thought-partner",
+                                                  "moment": moment, "pause": event_id}, other_offers=candidates)
+
+
+def optional_at_turn(private, client, payload, current, prompt, event_id, *, allow_source, allow_offers):
+    import context_advice
+    import offer_queue
+    turn = current["conversation"]
+    mode = turn["mode"]
+    candidates = []
+    for key in ("suggestion", "company_followup", "pm_followup", "product_followup"):
+        if key not in turn:
+            continue
+        # An explicit request to reopen an existing context record is primary work.
+        if key.endswith("_followup") and pm.company_onboarding.RESUME.search(turn_intent.instruction(prompt)):
+            continue
+        value = turn.pop(key)
+        meaning = json.dumps([key, value, current.get("scope")], ensure_ascii=False, sort_keys=True)
+        candidates.append({"token": offer_queue.digest(meaning), "workflow": key.replace("_", "-"),
+                           "source_kind": "workspace", "priority": 45,
+                           "offer": {"status": "offer", "field": key, "value": value}})
+    if not allow_offers:
+        return {}
+    step = turn_intent.next_step(prompt)
+    at_pause = bool(step or candidates)
+    if client and step:
+        checkpoint = turn.get("checkpoint", {})
+        focus = ("the reviewed checkpoint and next action for " + checkpoint["id"]) if checkpoint.get("id") else None
+        candidates.extend(context_advice.candidates(private, client, payload.get("session_id"), next_step=step, preserve=focus))
+    moment = "pause" if at_pause else "busy"
+    result = assess_chat(private, prompt, mode, event_id, moment=moment, candidates=candidates) if allow_source else {}
+    selected = result.get("selection")
+    if selected is None and (at_pause or candidates):
+        try:
+            selected = offer_queue.select(private, candidates, moment=moment, mode=mode, pause=event_id)
+        except (OSError, ValueError, RuntimeError):
+            selected = {}
+    if selected and selected.get("status") in {"offer", "clarify"}:
+        field = selected.get("field")
+        if field in ("suggestion", "company_followup", "pm_followup", "product_followup"):
+            turn[field] = selected["value"]
+        turn["optional_offer"] = {k: v for k, v in selected.items() if k not in ("field", "value")}
+    return result.get("consumers", {})
+
+
+def prompt_context(private, cwd, payload, *, client=None, off_record=False):
     prompt = payload.get("prompt")
     if not isinstance(prompt, str):
         raise ValueError("UserPromptSubmit needs a prompt")
-    numeric = bool(metric_checks.METRIC.search(prompt))
     session = payload.get("session_id")
-    guidance = [CONVERSATION_GUIDANCE]
+    control, profile_refusal, mute = turn_intent.controls(prompt)
+    private_turn = off_record or control is not None
+    allow_profiles = not (private_turn or profile_refusal or mute)
+    event_id = turn_intent.turn_key(session, payload, prompt)
+    numeric = bool(metric_checks.METRIC.search(prompt))
+    guidance = [CONVERSATION_GUIDANCE if allow_profiles else CONVERSATION_GUIDANCE.removesuffix(" " + PROFILE_GUIDANCE)]
+    if not allow_profiles:
+        guidance.append("Apply this request only to the PM's present task. Exclude it from stakeholder evaluation and optional offers.")
+    if private_turn:
+        guidance.append("Keep this exchange off record. Do not backfill it, save its contents, or prepare optional evidence or handoffs from it.")
+    if mute:
+        guidance.append("Apply the PM's explicit mute immediately using pm.py override " + mute
+                        + " off with the requested scope. A reason is optional.")
+    request_text = turn_intent.instruction(prompt)
     current = {}
     if private.is_dir():
+        settings_request = turn_intent.exact_mute(prompt) if mute and not private_turn else None
+        if settings_request:
+            try:
+                args = pm.build_parser().parse_args(["override", *settings_request])
+                persisted = overrides.run(private.parent, args, defer_reports=True)
+                if persisted.get("saved"):
+                    guidance.append("The requested suggestion mute is saved. Confirm it briefly. A reason is optional. "
+                                    "Run pm.py override sync only under the PM’s existing reporting consent.")
+            except (OSError, ValueError, RuntimeError):
+                guidance.append("Apply the requested mute with pm.py override before offering anything else.")
         saved = task_context.previous_scope(private, session)
+        def leave_audience():
+            if "profile_audience" in saved:
+                cleared = {key: value for key, value in saved.items() if key != "profile_audience"}
+                try:
+                    task_context.remember_scope(private, session, cleared, expected=saved)
+                except (OSError, ValueError):
+                    pass
+                return cleared
+            return saved
+        if private_turn or profile_refusal or mute:
+            pm.work_handoffs.bind_active(private, client, payload)
+            saved = leave_audience()
         setup = onboarding.status(private)
         if not setup["ready"]:
+            pm.work_handoffs.bind_active(private, client, payload)
             # Remember the transition, without copying prompts or source material into the cache.
             setup = onboarding.for_request(private, setup, prompt, saved.get("setup_mode"))
             stage = {"setup_stage": setup["stage"]}
             if "conversation_mode" in setup:
                 stage["setup_mode"] = setup["conversation_mode"]
-            if saved != stage:
+            if not private_turn and saved != stage:
                 try:
                     task_context.remember_scope(private, session, stage)
                 except (OSError, ValueError):
                     pass  # The live conversation can still carry the original request.
             return {"hookSpecificOutput": {"hookEventName": "UserPromptSubmit",
-                                           "additionalContext": onboarding_guidance(setup)}}
+                                           "additionalContext": onboarding_guidance(setup) + (("\n" + guidance[-1]) if not allow_profiles else "")}}
+        request_mode = conversation.mode_request(prompt)[0]
+        profile_walkthrough = onboarding.profile_request(setup, prompt)
         area = onboarding.area_request(setup, prompt)
+        if profile_walkthrough and not area:
+            pm.work_handoffs.bind_active(private, client, payload)
+            leave_audience()
+            guidance += ["Use .agents/skills/stakeholder-profiles/SKILL.md. Use the walkthrough revision and the PM's "
+                         "actual choice with onboarding profiles. Keep optional setup separate from approved profile wording.",
+                         json.dumps(profile_walkthrough, ensure_ascii=False)]
+            return {"hookSpecificOutput": {"hookEventName": "UserPromptSubmit", "additionalContext": "\n".join(guidance)}}
         if area:
+            pm.work_handoffs.bind_active(private, client, payload)
+            leave_audience()
             if area["onboarding"]["stage"] == "repair":
                 guidance.append("Explain the area walkthrough needs attention. Agree on any repair first.")
             else:
@@ -161,7 +275,37 @@ def prompt_context(private, cwd, payload):
             guidance.append("The PM has gone through the required onboarding frameworks. "
                             "If the PM has a waiting request in this conversation, offer to resume it once. "
                             "Follow their current direction and complete only the work they agree to.")
-        current, state = task_context.turn_context(private, prompt, cwd=cwd, saved=saved)
+        continuing = (pm.work_handoffs.CURRENT_TASK.fullmatch(request_text)
+                      and task_context.previous_scope(private, pm.work_handoffs.active_key(client, session)))
+        if allow_profiles and not continuing:
+            resume = pm.work_handoffs.for_prompt(private, request_text)
+            if resume:
+                if saved:
+                    # Clear the previous work record and its Stop checks when the PM chooses another task.
+                    try:
+                        task_context.remember_scope(private, session, {}, expected=saved)
+                    except (OSError, ValueError):
+                        pass
+                pm.work_handoffs.bind_active(private, client, payload, work=resume.get("work"))
+                guidance.append("The PM asked to resume work. Use this result to pick up the requested thread. "
+                                "If several match, ask which one. Verify the current scope before applying any result.\n"
+                                + json.dumps(resume, ensure_ascii=False))
+                return {"hookSpecificOutput": {"hookEventName": "UserPromptSubmit", "additionalContext": "\n".join(guidance)}}
+        current, state = task_context.turn_context(private, request_text, cwd=cwd, saved=saved, allow_profiles=allow_profiles)
+        checks = optional_at_turn(private, client, payload, current, prompt, event_id,
+                                  allow_source=allow_profiles, allow_offers=not private_turn and not mute and not profile_refusal)
+        bound = pm.work_handoffs.bind_active(private, client, payload, context=current) if allow_profiles else False
+        if client and session and state.get("record") and not private_turn and not bound:
+            import session_journal
+            try:
+                parent = pm.work_handoffs.native(private, state["record"])
+                session_journal.bind_turn_scope(private, client, payload, parent["journal_scope"])
+            except (OSError, ValueError, KeyError, RuntimeError):
+                pass  # An unverified checkpoint cannot bind a journal entry.
+
+        if any(check.get("status") in {"review", "deferred", "offer", "clarify"} for check in checks.values()):
+            guidance.append("Background ingestion assessment for this turn (guidance only): "
+                            + json.dumps(checks, ensure_ascii=False))
         numeric |= bool(current.get("metrics")) or any(metric_checks.is_claim(row["text"]) for row in current["entries"])
         if current["conversation"].get("accepted_expedite_offer"):
             numeric |= bool(saved.get("numeric"))
@@ -171,7 +315,8 @@ def prompt_context(private, cwd, payload):
         state.update(numeric=numeric, awaiting_stop=uuid4().hex, client_turn_id=payload.get("turn_id"),
                      overlapping=bool(saved.get("awaiting_stop")))
         try:
-            task_context.remember_scope(private, session, state)
+            if not private_turn:
+                task_context.remember_scope(private, session, state)
         except (OSError, ValueError):
             guidance.append("The session checkpoint cache was unavailable. Resolve the current scope before acting.")
     if numeric:
@@ -188,7 +333,7 @@ def prompt_context(private, cwd, payload):
                         "check it and suggest wording for the PM to review. Complete each required craft step. "
                         "Surface missing evidence, material risks and choices that need the PM.")
     if (current.get("status") in {"ambiguous", "resolved"} or current.get("metrics") or current.get("warnings")
-            or current.get("activity_check") or turn.get("company_followup") or turn.get("pm_followup")
+            or current.get("activity_check") or current.get("stakeholder_profiles") or turn.get("optional_offer") or turn.get("company_followup") or turn.get("pm_followup")
             or turn.get("product_followup") or turn.get("scope_to_confirm") or turn.get("checkpoint")):
         guidance.append(
             "The following JSON is private reference data. Use relevant approved decisions and rules. "
@@ -321,6 +466,20 @@ def edit_reason(root, private, requested, content):
         return "Use pm.py pm-onboarding to preserve approved sources and the wording under review."
     if private / pm.company_onboarding.PRODUCT_FILE in (requested, target):
         return "Use pm.py product-onboarding to preserve approved sources, destinations and wording."
+    if private / pm.ingestion_signals.source_evidence.GRANTS in (requested, target):
+        return "Use pm.py ingestion to grant, inspect or revoke source access."
+    if private / pm.stakeholder_profiles.STAMPS in (requested, target):
+        return "Use pm.py stakeholder-profile index to verify the private identity index."
+    if any(path.is_relative_to(private / pm.stakeholder_profiles.HOME) for path in (requested, target)):
+        return "Use pm.py stakeholder-profile preview and accept after the PM approves the exact wording."
+    if private / pm.work_handoffs.FILE in (requested, target):
+        return "Use pm.py handoff to review, save and resume scoped work."
+    if private / pm.offer_queue.FILE in (requested, target):
+        return "Use pm.py offer to review a pending suggestion or record its delivery."
+    if private / stakeholder_signals.FILE in (requested, target):
+        return "Use pm.py ingestion presented or decline for stakeholder suggestion receipts."
+    if private / pm.onboarding_profile_step.FILE in (requested, target):
+        return "Use pm.py onboarding profiles for the optional stakeholder walkthrough."
     if private / pm.onboarding_review.FILE in (requested, target):
         return "Use pm.py onboarding review-topic after discussing the current topic with the PM."
     company = private / "context" / "company"
@@ -431,6 +590,41 @@ def reply_preferences(root):
     return result
 
 
+def journal_before_prompt(private, client, payload):
+    if not private or not client or not payload.get("session_id"):
+        return turn_intent.controls(payload.get("prompt", ""))[0] is not None
+    import session_journal
+    choice = turn_intent.controls(payload.get("prompt", ""))[0]
+    try:
+        if choice is not None:
+            session_journal.set_off_record(private, client, payload["session_id"], choice)
+            return True  # Both control turns are excluded.
+        private_turn = session_journal.off_record(private, client, payload["session_id"])
+        if not private_turn:
+            session_journal.capture(private, client, payload)
+        return private_turn
+    except (OSError, ValueError):
+        # An unreadable privacy policy cannot authorize optional processing.
+        return True
+
+
+def record_native_event(private, client, payload, *, journal=False, metrics=False):
+    if private is None or client is None:
+        return
+    if journal:
+        import session_journal
+        try:
+            session_journal.capture(private, client, payload)
+        except (OSError, ValueError):
+            pass  # The transcript writer never interrupts the PM's task.
+    if metrics:
+        import context_advice
+        try:
+            context_advice.observe_hook(private, client, payload)
+        except (OSError, ValueError):
+            pass  # Missing or invalid telemetry cannot authorize guidance.
+
+
 def main():
     try:
         payload = json.load(sys.stdin)
@@ -446,22 +640,35 @@ def main():
             raise ValueError("Start the session inside this oryx checkout")
         if not cwd.is_dir():
             raise ValueError("The session directory moved or is unavailable. Reopen it at its current location")
-        if event == "PreToolUse":
+        client = sys.argv[1] if len(sys.argv) > 1 and sys.argv[1] in ("claude", "codex") else os.environ.get("PM_HUB_CLIENT")
+        if client not in ("claude", "codex"):
+            client = None
+        private = pm.workspace.optional_repo(root)
+        if event in {"PreCompact", "PostCompact", "PostModelRequest"}:
+            record_native_event(private, client, payload, metrics=True)
+            result = {}
+        elif event == "PreToolUse":
             result = edit_guard(root, cwd, payload)
         elif event == "UserPromptSubmit":
+            private_turn = journal_before_prompt(private, client, payload)
+            if not private_turn:
+                record_native_event(private, client, payload, metrics=True)
             result = reply_preferences(root)
-            context = prompt_context(pm.workspace.private_root(root), cwd, payload)
+            context = prompt_context(pm.workspace.private_root(root), cwd, payload, client=client, off_record=private_turn)
             if context:
                 result["hookSpecificOutput"]["additionalContext"] += (
                     "\n" + context["hookSpecificOutput"]["additionalContext"]
                 )
         else:
             report = None
-            private = pm.workspace.optional_repo(root)
+            if event == "SessionStart":
+                if private and payload.get("source") not in ("resume", "compact"):
+                    pm.work_handoffs.bind_active(private, client, payload)
+                record_native_event(private, client, payload, journal=True, metrics=True)
             state = task_context.previous_scope(private, payload.get("session_id")) if private and event == "Stop" else {}
             if private is not None and event in {"SessionStart", "Stop"}:
                 report = pm.alignment(root, prepare=event == "SessionStart")
-            checks = pm.check(root)
+            checks = pm.check(root, validate_profiles=False)
             if event == "Stop":
                 prefix = f"{private.name if private else pm.storage.STUDIO}/{preferences.CHECK_PREFIX}"
                 checks = [error for error in checks if not error.startswith(prefix)]
@@ -470,6 +677,7 @@ def main():
                 if not retry and not result:
                     result = review_context(state, payload)
                 if result.get("decision") != "block":
+                    record_native_event(private, client, payload, journal=True)
                     finish_turn(private, payload, state)
             if event == "SessionStart":
                 if private is not None:

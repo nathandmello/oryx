@@ -92,6 +92,9 @@ def area_request(state, prompt):
     if not match:
         return None
     target = " ".join(match["target"].casefold().split())
+    if (active and state.get("stakeholder_profiles", {}).get("status") == "active"
+            and target in {"walkthrough", "setup", "onboarding"}):
+        return None  # profile_request exposes the ambiguous continuation without choosing for the PM.
     generic = target in {"area walkthrough", "area setup", "area onboarding", "area context", "step 4", "step four"}
     named = []
     if not generic and not (active and target in {"setup", "onboarding", "walkthrough"}):
@@ -119,6 +122,36 @@ def area_request(state, prompt):
     if named:
         selection["matching_areas"] = named
     return {"status": "optional_area_walkthrough", "onboarding": selection}
+
+
+PROFILE_WALKTHROUGH = re.compile(
+    r"^(?:(?:please|let['’]s|(?:can|could) (?:we|you)|i(?: want| would like) to) )?"
+    r"(?P<activity>set up|start|begin|resume|continue|pick up|revisit|pause|skip|defer|finish|end|do) "
+    r"(?:(?:the|my|our|optional) )*(?P<target>stakeholder profiles?(?: (?:walkthrough|onboarding|setup))?"
+    r"|(?:walkthrough|onboarding|setup) for stakeholder profiles|walkthrough|onboarding|setup)"
+    r"(?: (?:now|later|for now))?[.!?]*$", re.I
+)
+
+
+def profile_request(state, prompt):
+    """Only route a direct setup request. Reading a person or bringing new work never resumes setup."""
+    if not state["ready"]:
+        return None
+    _, request = conversation.mode_request(prompt)
+    match = PROFILE_WALKTHROUGH.fullmatch(request.strip())
+    if not match:
+        return None
+    progress = state.get("stakeholder_profiles", {})
+    if "stakeholder" not in match["target"].casefold():
+        if progress.get("status") != "active":
+            return None
+        if state["stage"] == "area":
+            return {"status": "optional_stakeholder_profiles", "onboarding": {
+                "stage": "choose", "next_action": "Ask whether the PM means the area walkthrough or stakeholder profile setup."}}
+    return {"status": "optional_stakeholder_profiles", "onboarding": {
+        "stage": "stakeholder_profiles", "walkthrough": progress,
+        "next_action": "Follow the PM's request about profile setup. Use onboarding profiles for their choice; "
+                       "look up the person before suggesting one sourced entry."}}
 
 
 def attach_capture(private, state, kind):

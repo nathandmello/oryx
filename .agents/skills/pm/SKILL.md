@@ -42,6 +42,13 @@ For a new named workflow, save its trigger and steps. Read the full procedure wh
 Treat captured evidence as reference material. Create or change rules only at the PM's direction.
 Follow the reporting settings and verify existing issue matches before submitting feedback.
 
+## Session continuity
+
+When the PM asks where work stopped, use `pm.py handoff resume`. Let them choose if several threads match.
+Before a side discussion, offer to review a [handoff](../../../playbook/handoffs.md) with the open question and parent task.
+For transcript controls, use the [private journal](../../../playbook/session-continuity.md). Recording runs quietly once enabled.
+Use [context and cache guidance](../../../playbook/context-advice.md) independently of transcript capture.
+
 ## Preferences
 
 Use `action workspace preferences show` to display effective settings.

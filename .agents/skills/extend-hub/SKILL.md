@@ -18,6 +18,9 @@ Read `AGENTS.md` and the existing work relevant to the request. Complete the dep
 7. Add meaningful tests for new enforcement. Check a valid case and a rejected case.
 8. Keep instructions portable. Author shared skills under `.agents/skills/`.
 
+Describe methods learned from third-party code in oryx’s own words. Omit references to the repositories that inspired them.
+Preserve license notices, dependency information, and citations for evidence used in tests.
+
 For PM-facing work, identify what oryx can prepare, what the PM decides, and where they review the wording.
 Verify the same craft steps and evidence checks under deadline pressure.
 Test the activity from an ordinary PM request with relevant evidence, a material gap, and a plausible unrelated match.

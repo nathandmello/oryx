@@ -64,10 +64,10 @@ def load_manifest(path=MANIFEST):
 def input_fingerprint(manifest, manifest_path, manifest_bytes):
     files = {name: hashlib.sha256((ROOT / name).read_bytes()).hexdigest() for name in INPUT_FILES}
     files[manifest_path] = hashlib.sha256(manifest_bytes).hexdigest()
-    return {
-        "bmad_revision": manifest["bmad_revision"],
-        "files": files,
-    }
+    fingerprint = {"files": files}
+    if "baseline_revision" in manifest:
+        fingerprint["baseline_revision"] = manifest["baseline_revision"]
+    return fingerprint
 
 
 def render_prompt(case):
@@ -108,7 +108,7 @@ def score(cases, grades):
     for case_id, case in cases.items():
         trials = grades[case_id]
         paired = case.get("compare", True)
-        expected_arms = {"candidate", "bmad"} if paired else {"candidate"}
+        expected_arms = {"candidate", "baseline"} if paired else {"candidate"}
         if not isinstance(trials, list) or not trials:
             raise ValueError(f"{case_id}: supply a nonempty list of graded trials")
 
@@ -129,8 +129,8 @@ def score(cases, grades):
             misses.append("parity needs at least two matched trials")
         if totals["candidate"] * 100 < possible * MINIMUM_PERCENT:
             misses.append(f"candidate below {MINIMUM_PERCENT}%")
-        if paired and totals["candidate"] < totals["bmad"]:
-            misses.append("candidate below BMAD")
+        if paired and totals["candidate"] < totals["baseline"]:
+            misses.append("candidate below baseline")
         results[case_id] = (totals, possible, misses)
     return results
 
@@ -145,7 +145,8 @@ def run(args):
         return 0
 
     if args.eval_action == "list":
-        print(f"BMAD revision {manifest['bmad_revision']}")
+        if "baseline_revision" in manifest:
+            print(f"Oryx baseline revision {manifest['baseline_revision']}")
         for case_id, case in cases.items():
             print(f"{case_id} ({'comparison' if case.get('compare', True) else 'PM workflow'})")
         return 0

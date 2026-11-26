@@ -5,7 +5,7 @@ from functools import partial
 import hashlib
 import json
 import re
-from urllib.parse import urlsplit
+from ingestion_signals import within_scope
 
 import context_capture as capture
 import layout
@@ -399,26 +399,6 @@ def validate_gap(gap, kind="company"):
         capture.line(gap[field], field)
 
 
-def source_target(reference):
-    link = re.fullmatch(r"\[[^\]\n]+\]\((<[^>\n]+>|[^\s)]+)\)", reference)
-    return link[1].strip("<>") if link else reference
-
-
-def within_scope(scope, reference):
-    """Bind the actual reference to an exact source or an approved HTTPS subtree."""
-    actual = source_target(reference)
-    allowed = source_target(scope)
-    if actual == allowed:
-        return True
-    base, candidate = urlsplit(allowed), urlsplit(actual)
-    if (base.scheme != "https" or not base.netloc or base.username is not None or base.query or base.fragment
-            or not base.path.endswith("/") or candidate.scheme != base.scheme
-            or candidate.netloc != base.netloc or not candidate.path.startswith(base.path)):
-        return False
-    return (not {".", ".."}.intersection(candidate.path.split("/"))
-            and not re.search(r"\\|%(?:2e|2f|5c|25)", candidate.path, re.I))
-
-
 def fingerprint(path):
     return hashlib.sha256(path.read_bytes()).hexdigest() if path.exists() else None
 
@@ -550,6 +530,7 @@ def change(root, operation, payload, owner, lint, kind="company"):
             raise ValueError(f"The review revision is missing or stale. Read {kind}-onboarding status")
         storage.require_visible(private, checkpoint(kind))
         data = {key: value for key, value in payload.items() if key != "revision"}
+        assessments = None
         if operation == "plan":
             validate_plan(data, kind)
             if kind == "product":
@@ -578,7 +559,8 @@ def change(root, operation, payload, owner, lint, kind="company"):
                 raise ValueError("There is no pending finding to discard")
             state["pending"] = None
         elif operation == "propose":
-            state["pending"], _ = prepare(private, state, data, kind=kind)
+            state["pending"], plan = prepare(private, state, data, kind=kind)
+            assessments = plan["ingestion_reviews"]
         elif operation in {"defer", "gap"}:
             if kind == "product":
                 capture.fields(data, (*GAP_FIELDS, "destination"))
@@ -622,4 +604,7 @@ def change(root, operation, payload, owner, lint, kind="company"):
             raise ValueError(f"Unknown {kind} onboarding operation")
         state["revision"] += 1
         storage.replace_text(private / checkpoint(kind), original, json.dumps(state, indent=2, ensure_ascii=False) + "\n")
-        return view(private, state, kind, show_pending=operation == "propose")
+        result = view(private, state, kind, show_pending=operation == "propose")
+        if assessments is not None:
+            result["ingestion_reviews"] = assessments
+        return result

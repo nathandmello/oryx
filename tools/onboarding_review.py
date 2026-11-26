@@ -4,6 +4,7 @@ import json
 
 import context_capture as capture
 import layout
+import onboarding_profile_step
 import storage
 
 
@@ -214,6 +215,7 @@ def view(private, frameworks, state):
             result["next_action"] = ("Reuse the confirmed remit. Clarify the parent if needed. After the PM chooses, "
                                      "use onboarding select-product. An unassigned or unknown scope can stay open.")
     elif result["ready"]:
+        result["stakeholder_profiles"] = onboarding_profile_step.status(private)
         parent = state.get("product_selection")
         if parent and "/area/" in parent:
             # A finished v0.13 mixed pass keeps Studio unlocked. It attests to neither
@@ -299,9 +301,34 @@ def select_product(private, payload):
         return view(private, frameworks, state)
 
 
+def profile_offer_allowed(payload):
+    allowed = payload.get("offer_profiles", True)
+    if type(allowed) is not bool:
+        raise ValueError("Set offer_profiles to true or false")
+    return allowed
+
+
+def profiles(private, payload):
+    """An explicitly requested optional pass can start even with an area still open."""
+    with storage.writer_lock(private):
+        result = status(private)
+        if not result["ready"]:
+            raise ValueError("Review the parent product before starting optional stakeholder profiles")
+        choice = onboarding_profile_step.choose(private, payload)
+        result["stakeholder_profiles"] = choice
+        if choice["status"] == "active":
+            result["next_action"] = (
+                "Use the stakeholder profile guide. Ask which person the PM wants to start with. "
+                "Review one sourced observation at a time; the PM can pause or finish whenever they like.")
+        else:
+            result["next_action"] = "Return to the PM's request."
+        return result
+
+
 def select_area(private, payload):
     """Opt into one owned area after parent review, or leave the optional pass for later."""
-    capture.fields(payload, ("revision", "subject", "pm_reply"))
+    capture.fields(payload, ("revision", "subject", "pm_reply"), ("offer_profiles",))
+    allowed = profile_offer_allowed(payload)
     with storage.writer_lock(private):
         original, state = read(private)
         check_response(payload, state)
@@ -334,14 +361,16 @@ def select_area(private, payload):
             if subject in deferred:
                 deferred.remove(subject)
         write(private, original, state)
-        return view(private, frameworks, state)
+        result = view(private, frameworks, state)
+        return onboarding_profile_step.offer(private, result, allowed) if subject is None else result
 
 
 def review(private, payload):
     fields = ("revision", "stage", "topic", "outcome", "pm_reply")
     if isinstance(payload, dict) and payload.get("stage") in ("product", "area"):
         fields += ("subject",)
-    capture.fields(payload, fields)
+    capture.fields(payload, fields, ("offer_profiles",))
+    allowed = profile_offer_allowed(payload)
     if payload["outcome"] not in OUTCOMES:
         raise ValueError("Choose reviewed, open, or not_applicable for the current topic")
     with storage.writer_lock(private):
@@ -383,4 +412,6 @@ def review(private, payload):
         result = view(private, frameworks, state)
         if stage == "product" and result["ready"] and result["area_offers"]:
             result["next_action"] = "Offer the PM a separate, optional review of their area. They can return to their request now."
+        elif stage in ("product", "area") and result["stage"] == "ready":
+            onboarding_profile_step.offer(private, result, allowed)
         return result

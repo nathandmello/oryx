@@ -12,6 +12,7 @@ from urllib.parse import urlsplit
 
 import conversation
 import preferences
+import profile_retrieval
 import evidence_reviews
 import context_index
 import context_search
@@ -87,6 +88,7 @@ def private_files(private, domain):
     for path in storage.inventory(private):
         relative = path.relative_to(private)
         if (relative.parts[0] in domain and relative.name != "README.md" and relative.suffix == ".md"
+                and relative.parts[:3] != ("context", "stakeholders", "profiles")
                 and not any(part.startswith(".") or part in {"sources", "secrets"} for part in relative.parts)
                 and relative.as_posix() not in excluded and path.resolve() == path and path.is_file() and os.access(path, os.R_OK)):
             yield relative, path
@@ -294,8 +296,9 @@ def choose_scope(private, documents, prompt, cwd, previous, explicit, relationsh
     artifacts = re.findall(r"(?:(?:studio|private|workspace)/)?((?:context|workspace)/[\w./-]+?\.(?:md|json))\b", prompt)
     known = [scope for name in artifacts if (name.endswith(".md") or layout.initiative_work_identity(name))
              and (scope := resolved_artifact(name, documents))]
-    for value in re.findall(r"\bproduct/([a-z0-9-]+)(?:/area/([a-z0-9-]+))?", prompt):
-        known.append({"product": value[0], "area": value[1] or None, "initiative": None})
+    for product, level, child in re.findall(r"\bproduct/([a-z0-9-]+)(?:/(area|initiative)/([a-z0-9-]+))?", prompt):
+        known.append({"product": product, "area": child if level == "area" else None,
+                      "initiative": child if level == "initiative" else None})
     for product, doc in overview.items():
         identifier = doc["id"]
         if identifier and (match := re.search(r"\b" + re.escape(identifier) + r"/([a-z0-9-]+)\b", prompt)):
@@ -548,7 +551,7 @@ def resolve(private, prompt="", *, cwd=None, previous=None, explicit=None, expla
 
 
 def resolve_inventory(private, prompt, *, cwd, previous, explicit, explain, include_history,
-                      work_record=None, new_owner=None):
+                      work_record=None, new_owner=None, allow_profiles=True, prior_audience=None, audience_state=None):
     prompt = CUSTOMIZATION_PATH.sub(" ", prompt)
     through = as_of(prompt)
 
@@ -565,6 +568,24 @@ def resolve_inventory(private, prompt, *, cwd, previous, explicit, explain, incl
             scope = scope or record_scope or None
         result = resolve_current(private, prompt, location, prior, scope, explain, include_history, through,
                                  index, docs, loaded, stamps)
+        if allow_profiles and result["status"] != "ambiguous":
+            current_scope = result["scope"]
+            audience_scope = prior_audience.get("scope", {}) if isinstance(prior_audience, dict) else {}
+            prior_matches = not current_scope or same_scope(current_scope, audience_scope)
+            saved = prior_audience if isinstance(prior_audience, dict) and prior_matches and not new_owner and not SWITCH.match(prompt) else None
+            continues = bool(saved and (profile_retrieval.continuation(prompt) or saved.get("clarify")))
+            profile_scope = current_scope or (audience_scope if continues else {})
+            profiles = profile_retrieval.for_task(private, prompt, profile_scope, through, tokens, IDENTIFIER,
+                                                  prior=saved, remember=audience_state)
+            if profiles:
+                if continues and not current_scope and profile_scope and profiles["status"] in {"clarify", "resolved"}:
+                    result = resolve_current(private, prompt, location, prior, profile_scope, explain, include_history,
+                                             through, index, docs, loaded, stamps)
+                if audience_state:
+                    audience_state["scope"] = result["scope"]
+                if profiles["status"] == "resolved":
+                    attach_stakeholder_evidence(result, profiles, docs, loaded, stamps, private, through)
+                result["stakeholder_profiles"] = profiles
         if result["status"] != "ambiguous" and conversation.strategy_activity(prompt, result["scope"].get("product")):
             result["activity_check"] = conversation.strategy_prerequisite(result)
         return result, docs
@@ -578,6 +599,48 @@ def resolve_inventory(private, prompt, *, cwd, previous, explicit, explain, incl
             loaded = context_documents(private, through=through)
             docs = {name: routing_metadata(doc) for name, doc in loaded.items()}
             return collect(context_index.Index(), docs, loaded, {})
+
+
+def attach_stakeholder_evidence(result, profiles, docs, loaded, stamps, private, through):
+    """Return narrow evidence from each owning record. A profile title cannot grant decision rights."""
+    scope, activity = result["scope"], profiles["activity"]
+    product, initiative = scope.get("product"), scope.get("initiative")
+    if not product or activity == "capture":
+        return
+    def names_person(statement, person):
+        return mentions(statement, person["name"]) and (not person.get("shared_name") or mentions(statement, person["role"]))
+
+    if activity != "authority":
+        for person in profiles["people"]:
+            positions = []
+            for row in result["entries"]:
+                meta = docs.get(row["record"], {})
+                if (initiative and meta.get("product") == product and meta.get("initiative") == initiative
+                        and names_person(row["text"].split("[S", 1)[0], person) and
+                        row.get("evidence_status") in {"source statement", "recorded decision"} and row.get("sources")):
+                    positions.append(row)
+            if positions:
+                person["initiative_evidence"] = positions[:2]
+    if layout.STAKEHOLDERS not in docs or activity == "position":
+        return
+    meta = docs[layout.STAKEHOLDERS]
+    if meta.get("due") and meta["due"] < through.isoformat():
+        return
+    doc = live_document(private, layout.STAKEHOLDERS, loaded, stamps, through)
+    product_labels = (product, docs.get(layout.product(product), {}).get("title", product))
+    rows = linked_entries(doc, {scope.get("area")}, through)
+    saved_reviews = evidence_reviews.stored([doc], through.isoformat())
+    for row in rows:
+        if row["section"] != "Decision roles" or evidence_status(row) != "source statement" or not sources_checked(row, through):
+            continue
+        statement = row["text"].split("[S", 1)[0]
+        if not any(mentions(statement, label) for label in product_labels) or next(shared_row_reviews(row, saved_reviews), None):
+            continue
+        if len(json.dumps(row, ensure_ascii=False)) > 1500:
+            continue
+        for person in profiles["people"]:
+            if len(person.get("decision_roles", [])) < 2 and names_person(statement, person):
+                person.setdefault("decision_roles", []).append(row)
 
 
 def relevant_company_questions(private, prompt):
@@ -959,7 +1022,8 @@ def scope_contains(record_scope, scope):
     return all(value is None or scope.get(key) == value for key, value in record_scope.items())
 
 
-def turn_context(private, prompt, *, cwd=None, saved=None, explicit=None, work_record=None, include_history=False, explain=False):
+def turn_context(private, prompt, *, cwd=None, saved=None, explicit=None, work_record=None, include_history=False,
+                 explain=False, allow_profiles=True):
     """Resolve the current task separately from the turn's resumable work pointer."""
     previous = saved or {}
     mode_override, prompt = conversation.mode_request(prompt)
@@ -984,9 +1048,12 @@ def turn_context(private, prompt, *, cwd=None, saved=None, explicit=None, work_r
     selected_owner = work_record or (named[1] if named else None)
     selected_new_owner = selected_owner is not None and selected_owner != previous.get("record")
     checkpoint = conversation.read_checkpoint(private, work_record) if work_record is not None else None
+    audience_state = {}
     result, docs = resolve_inventory(private, prompt, cwd=cwd, explicit=explicit, explain=explain,
                                      previous=prior_scope if can_continue else None, include_history=include_history,
-                                     work_record=work_record, new_owner=selected_owner if selected_new_owner else None)
+                                     work_record=work_record, new_owner=selected_owner if selected_new_owner else None,
+                                     allow_profiles=allow_profiles, prior_audience=previous.get("profile_audience"),
+                                     audience_state=audience_state)
     if selected_new_owner and not resolved_artifact(selected_owner, docs):
         prior_scope = {}
     scope = result["scope"]
@@ -1073,7 +1140,8 @@ def turn_context(private, prompt, *, cwd=None, saved=None, explicit=None, work_r
     record = previous.get("record") if same_work and not scope and not selected_new_owner else None
     if checkpoint:
         record = checkpoint["record"]
-    return result, {"scope": active, "can_continue": can_continue, "record": record,
+    return result, {**({"profile_audience": audience_state} if audience_state else {}),
+                    "scope": active, "can_continue": can_continue, "record": record,
                     "mode": mode_override, "work_mode": work_mode, "binding": [
                         {"record": row["record"], "section": row["section"]}
                         for row in result["entries"] if row["binding"]

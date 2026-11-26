@@ -120,7 +120,9 @@ class OnboardingHookTests(unittest.TestCase):
                 expected = self.cli("task-context", learning)
                 for client in ("Codex", "Claude"):
                     route, _ = self.prompt(client, client, learning)
-                    if stage == "ready":
+                    if stage == "ready" and client == "Claude":
+                        self.assertNotIn("company_followup", route.get("conversation", {}))
+                    elif stage == "ready":
                         self.assertIn(gap["next_action"], route["conversation"]["company_followup"])
                         self.assertEqual(route["conversation"]["company_followup"],
                                          expected["conversation"]["company_followup"])
@@ -140,7 +142,7 @@ class OnboardingHookTests(unittest.TestCase):
                         result = self.cli("task-context", prompt)
                         self.assertNotIn("company_followup", result["onboarding"])
                     while onboarding_review.status(self.work)["stage"] == stage:
-                        review_current_topic(self.work)
+                        review_current_topic(self.work, offer_profiles=False)
 
     def test_pm_topic_resumes_without_raw_edits_and_reuses_an_agreed_gap(self):
         while onboarding_review.status(self.work)["stage"] == "company":
@@ -208,15 +210,17 @@ class OnboardingHookTests(unittest.TestCase):
                         route, guidance = self.prompt(client, client + stage + str(len(prompt)), prompt)
                         results.append(route)
                         self.assertNotIn(gap["question"], guidance)
-                    for result in results:
+                    for index, result in enumerate(results):
                         turn = result.get("conversation" if stage == "ready" else "onboarding", {})
-                        self.assertEqual("pm_followup" in turn, offer)
-                        if offer:
+                        # The catalog previews the cue. The first native client reserves it.
+                        expected = offer and (stage != "ready" or index < 2)
+                        self.assertEqual("pm_followup" in turn, expected)
+                        if expected:
                             self.assertIn("pm-onboarding status --gap 1/1", turn["pm_followup"])
                         for value in (gap["question"], gap["why"], gap["next_action"]):
                             self.assertNotIn(value, json.dumps(result))
             while stage != "ready" and onboarding_review.status(self.work)["stage"] == stage:
-                review_current_topic(self.work)
+                review_current_topic(self.work, offer_profiles=False)
 
     def test_setup_pace_suppresses_offers_until_coaching_resumes_in_the_same_session(self):
         gap = {"question": "How do merchants handle deposits?", "why": "Qualify the market.",
@@ -351,7 +355,7 @@ class OnboardingHookTests(unittest.TestCase):
         self.assertIn("product-onboarding", hook.edit_reason(self.root, self.work, note, ""))
         progress = self.cli("onboarding", "status")
         paused = self.cli("onboarding", "select-area", payload={
-            "subject": None, "revision": progress["revision"], "pm_reply": "Let's leave the plugin walkthrough here."})
+            "subject": None, "revision": progress["revision"], "pm_reply": "Let's leave the plugin walkthrough here.", "offer_profiles": False})
         self.assertEqual(paused["area_offers"], [])
         self.assertIn("route-context", hook.edit_reason(self.root, self.work, note, ""))
         for client in ("Codex", "Claude"):
@@ -362,8 +366,34 @@ class OnboardingHookTests(unittest.TestCase):
             ]
             for prompt, expected in prompts:
                 result, guidance = self.prompt(client, client + prompt, prompt)
-                self.assertEqual("product_followup" in result["conversation"], expected)
+                self.assertEqual("product_followup" in result["conversation"], expected and client == "Codex")
                 self.assertNotIn(gap["question"], guidance)
+
+    def test_on_demand_profiles_agree_across_cli_and_both_clients_without_resuming_on_unrelated_work(self):
+        while onboarding_review.status(self.work)["stage"] == "company":
+            review_current_topic(self.work)
+        self.confirm_owner("product/billing")
+        while not onboarding_review.status(self.work)["ready"]:
+            review_current_topic(self.work)
+        initial = self.cli("onboarding", "status")
+        self.assertEqual(initial["stakeholder_profiles"]["status"], "offered")
+        revision = initial["stakeholder_profiles"]["revision"]
+        self.cli("onboarding", "profiles", payload={
+            "revision": revision, "choice": "skip", "pm_reply": "I'll skip the profile walkthrough."})
+        prompt = "Let's set up stakeholder profiles."
+        route = self.cli("task-context", prompt)
+        self.assertEqual(route["status"], "optional_stakeholder_profiles")
+        self.assertEqual(route["onboarding"]["walkthrough"]["status"], "skipped")
+        for client in ("Claude", "Codex"):
+            actual, _ = self.prompt(client, client, prompt)
+            self.assertEqual(actual, route)
+        resumed = self.cli("onboarding", "profiles", payload={
+            "revision": revision + 1, "choice": "start", "pm_reply": "Yes, let's start with the product lead."})
+        self.assertEqual(resumed["stakeholder_profiles"]["status"], "active")
+        for client in ("Claude", "Codex"):
+            other, _ = self.prompt(client, client, "Show the roadmap.")
+            self.assertNotEqual(other.get("status"), "optional_stakeholder_profiles")
+        self.assertEqual(self.cli("onboarding", "status")["stakeholder_profiles"], resumed["stakeholder_profiles"])
 
     def test_corrupt_optional_review_leaves_the_hub_open(self):
         while not onboarding_review.status(self.work)["ready"]:

@@ -37,6 +37,19 @@ A null subject records a skip or pause. Use `area_options` when the PM asks to r
 Review the six topics for that area. Use the parent brief as background with permission. Ask what differs for the area’s users, journey, and contribution.
 Keep area results tied to their population. Confirm the team’s directory name and file area findings in their own brief.
 
+## Optional stakeholder profiles
+
+After the product walkthrough, offer the area choice first when it applies. Completing or deferring the area also leads to the profile option.
+Offer this once at the handoff. Respect quiet or expedited requests and give waiting work priority.
+For those cases, pass `offer_profiles: false` on the final topic review or area deferral.
+
+> Would it help to start a profile for someone you work with?
+
+The PM can start, come back later, or skip it. Send their actual reply to `onboarding profiles` with `choice` and `stakeholder_profiles.revision` as `revision`.
+Use `start`, `later`, `skip`, or `finish`. An explicit request can start or resume setup after any earlier choice.
+
+Choose one person together. Review one sourced detail at a time with the [profile guide](stakeholder-profiles.md). Resume the PM’s work when they’re ready.
+
 ## Review and save findings
 
 Offer conversation, the PM’s own writing, or a bounded source check. Agree on purpose, sources and destinations before inspecting material.

@@ -66,3 +66,12 @@ A large cold search can reach the optional scoring time limit. The resolver retu
 The PM does not need to rebuild an index or start a service.
 
 See the [model provenance and license](../tools/search_model/README.md).
+
+## Look up people for a task
+
+For a meeting, message, or rehearsal, task context can resolve the named recipients by name or role.
+When a name fits several people, ask which person the PM means. A person mentioned in quoted material cannot select a profile.
+
+The lookup returns current approved observations and reports for the selected task, with their source, date, and applicability.
+Use general observations and those matching the resolved product, area, or initiative. Preserve the limits alongside the wording.
+If an entry's scope is unknown, clarify it before reuse. Consult the [profile workflow](stakeholder-profiles.md) for a direct lookup or review.

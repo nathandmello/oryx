@@ -1,5 +1,6 @@
 """Keep private workflow changes and retire only exact, verified equivalents."""
 
+import argparse
 import hashlib
 import json
 import re
@@ -19,10 +20,24 @@ FEEDBACK_REPOS = (f"{REPO_OWNER}/pm-hub", f"{REPO_OWNER}/oryx")
 # Core uses these same defaults when building turn guidance. Exact scope and
 # behavior equality is deliberately conservative for natural-language rules.
 DEFAULTS_FILE = "playbook/workflow-defaults.json"
+PROFILE_TARGET = "stakeholder-profile-suggestions"
+ADVICE_TARGET = "context-advice"
+OPTIONAL_TARGET = "optional-suggestions"
+PROFILE_ALL = "All sources"
+PROFILE_ON = "Offer useful stakeholder profile suggestions at a natural pause."
+PROFILE_OFF = "Silence unsolicited stakeholder profile suggestions."
+PREFERENCES = {
+    "profile-suggestions": (PROFILE_TARGET, PROFILE_ON, PROFILE_OFF),
+    "context-advice": (ADVICE_TARGET, "Offer context advice at a natural pause.", "Silence unsolicited context advice."),
+    "optional-suggestions": (OPTIONAL_TARGET, "Allow optional workflow suggestions.", "Silence optional workflow suggestions."),
+}
 # Only these maintainer-authored strings can leave the workspace automatically.
 KNOWN_REPORTS = {
     ("weekly-review-order", "Weekly reviews", "Put pending decisions first."):
         ("Configurable weekly review order", "Support placing pending decisions first."),
+    (PROFILE_TARGET, PROFILE_ALL, PROFILE_OFF):
+        ("Control stakeholder profile suggestions",
+         "Let PMs silence unsolicited stakeholder profile suggestions while keeping profiles available on request."),
 }
 
 
@@ -175,6 +190,63 @@ def reconcile(private, release, apply):
 def effective_rules(private, state):
     entries, _ = workflow_snapshot(private, state)
     return {target: rule_text(scopes) for target, scopes in entries.items()}
+
+
+def suggestions_allowed(private, preference, source=None):
+    """Apply source-specific and general customization rules to unsolicited offers."""
+    scope = "Source: " + layout.slug(source) if source is not None else PROFILE_ALL
+    try:
+        _, state = read(private)
+        rules, problem = workflow_snapshot(private, state)
+    except (OSError, ValueError):
+        return False  # Optional prompts can wait until the private settings are readable.
+    target, on, _ = PREFERENCES[preference]
+    scopes = rules.get(target, {})
+    for authority in ("personal", "company", "core"):
+        for candidate in (scope, PROFILE_ALL):
+            rule = scopes.get(candidate)
+            if rule and rule["source"] == authority:
+                return rule["behavior"] == on
+    return not problem
+
+
+def profile_suggestions_allowed(private, source=None):
+    return suggestions_allowed(private, "profile-suggestions", source)
+
+
+def context_advice_allowed(private, source=None):
+    return suggestions_allowed(private, "context-advice", source)
+
+
+def profile_preference_args(args, state):
+    """Use ordinary workspace overrides, including their locking, delivery and receipts."""
+    target, on, off = PREFERENCES[args.operation]
+    scope = "Source: " + args.source if args.source is not None else PROFILE_ALL
+    key = target + ("-" + args.source if args.source else "")
+    personal = state["rules"]
+    for existing, rule in personal.items():
+        if rule.get("target", existing) == target and rule["scope"] == scope:
+            key = existing
+            break
+    else:
+        base = key
+        suffix = 1
+        while key in personal:
+            suffix += 1
+            key = f"{base}-{suffix}"
+    if args.mode == "inherit":
+        return argparse.Namespace(operation="remove", id=key)
+    behavior = off if args.mode == "off" else on
+    if args.source is None:
+        # A request covering every source also supersedes prior personal exceptions.
+        superseded = {name for name, rule in personal.items()
+                      if rule.get("target", name) == target and rule["scope"].startswith("Source: ")
+                      and rule["behavior"] in (on, off) and rule["behavior"] != behavior}
+        for name in superseded:
+            del personal[name]
+        state["pending"] = [item for item in state["pending"] if item["id"] not in superseded]
+    return argparse.Namespace(operation="set", id=key, target=target, scope=scope,
+                              behavior=behavior, move_scope=False, steps=None)
 
 
 def guidance(private):
@@ -330,6 +402,10 @@ def add_commands(commands):
     show.add_argument("--personal-id", action="store_true", help="Look up the personal rule ID even if a target shares its name")
     subs.add_parser("remove").add_argument("id", type=layout.slug)
     subs.add_parser("sync")
+    for preference in PREFERENCES:
+        suggestions = subs.add_parser(preference, help="Set the private rule for these optional suggestions")
+        suggestions.add_argument("mode", choices=("off", "on", "inherit"))
+        suggestions.add_argument("--source", type=layout.slug, help="Apply only to input from this source kind")
     put = subs.add_parser("set")
     put.add_argument("id", type=layout.slug)
     put.add_argument("--target", type=layout.slug, help="Stable behavior ID shared by rules for different scopes")
@@ -346,7 +422,7 @@ def add_commands(commands):
     send.add_argument("--approved", action="store_true")
 
 
-def run(root, args):
+def run(root, args, *, defer_reports=False):
     private = workspace.optional_repo(root)
     if private is None:
         raise ValueError("Run pm.py init-workspace before using workflow overrides")
@@ -379,6 +455,9 @@ def run(root, args):
             original = save(private, original, state)
 
         item = None
+        profile_preference = args.operation in PREFERENCES
+        if profile_preference:
+            args = profile_preference_args(args, state)
         if args.operation == "set":
             if not args.scope.strip() or not args.behavior.strip():
                 raise ValueError("Supply the scope and desired behavior")
@@ -398,7 +477,8 @@ def run(root, args):
                 state["pending"] = [row for row in state["pending"] if row["id"] != args.id]
             state["rules"][args.id] = rule
             validate_rules(state["rules"])
-            public = KNOWN_REPORTS.get((target, rule["scope"], rule["behavior"]))
+            report_scope = PROFILE_ALL if profile_preference else rule["scope"]
+            public = KNOWN_REPORTS.get((target, report_scope, rule["behavior"]))
             if state["reporting"] and public:
                 item = {"id": args.id, "title": public[0], "body": public[1], "issue": None, "reviewed": False}
         elif args.operation == "remove":
@@ -442,6 +522,12 @@ def run(root, args):
         if args.operation != "sync":
             checkpoint()
         result = {"saved": True, "reporting": state["reporting"]}
+        if profile_preference:
+            result["rule_id"] = args.id
+            if defer_reports:
+                if item:
+                    result["report_pending"] = "The approved public description is queued for override sync."
+                return result
         batch = list(state["pending"]) if args.operation == "sync" else []
         if item:
             batch = [item]

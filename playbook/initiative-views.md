@@ -95,5 +95,3 @@ If evidence is pending, give `follow_up` an `on` date and an `action`. The due v
 The supplied *Product Backlog & Discovery Workflow*, sections 1 and 7, informs problem, audience, source, and revisit fields. The [backlog template](../templates/views/backlog.json) reserves rank for signed selections.
 The supplied *Product Strategy Mindset*, section 7, frames the roadmap around outcomes and horizons. The *Product Prioritization — PM Handbook*, section 4, informs trade-offs and capacity decisions.
 The [roadmap template](../templates/views/roadmap.json) links each selection to its planning record and metric IDs.
-
-The skills borrow BMAD’s practice of routing by intent and naming the next workflow. [BMAD Product Manager skill at the reviewed revision](https://github.com/bmad-code-org/BMAD-METHOD/blob/e435a22574fe55722841086e5566420178b98df3/skills/method/bmad-agent-pm/SKILL.md).

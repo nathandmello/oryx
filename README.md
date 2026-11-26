@@ -55,6 +55,10 @@ Step 3 covers the product as it works today. If you own a plugin, you still star
 
 If you own part of that product, oryx offers an optional step 4 for your area. You can review it now, come back later, or skip it. Its findings go in a separate brief. [Product walkthrough](playbook/product-context.md)
 
+After product or area setup, oryx offers to help you build a stakeholder profile. Start with one person, skip it, or return whenever it helps.
+Ask “Where did we leave off?” to resume saved work in either client. [Work handoffs](playbook/handoffs.md)
+You can enable [private session transcripts](playbook/session-continuity.md) and manage [context tips](playbook/context-advice.md) separately.
+
 ## Make it yours
 
 “Going forward, start each weekly review with decisions you need from me.” Say it once and oryx saves the rule in your private workspace. The rule takes priority for that part of the review. You can also change a brief template, add a confidence column to your roadmap, or keep a different view for leadership. [Workflow rules](playbook/overrides.md) · [Templates, fields, and views](playbook/customization.md)

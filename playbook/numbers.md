@@ -38,9 +38,7 @@ Use the [approved reporting window](metrics.md#confirm-the-reporting-window) as 
 
 For `proportion` and `cohort_ratio`, provide `current` with `numerator`, `denominator`, and `denominator_basis`. Set `numerator_subset` for a proportion after checking membership. Set `same_cohort` for a cohort ratio after verifying the opening cohort on both sides. A cohort ratio can exceed 100%.
 
-| Reference | Adapted practice |
+| Reference | What to check |
 | --- | --- |
 | [UK Government Data Quality Framework](https://www.gov.uk/government/publications/the-government-data-quality-framework/the-government-data-quality-framework-guidance) | Validity, completeness, uniqueness, accuracy, consistency, and timeliness |
 | [SEC guidance on KPIs](https://www.sec.gov/files/rules/interp/2020/33-10751.pdf) | Define calculation, assumptions, and changes in methods |
-| [OpenAI analyze-data-quality](https://github.com/openai/role-specific-plugins/blob/main/plugins/data-analytics/skills/analyze-data-quality/SKILL.md) | Test grain, freshness, joins, and source disagreements |
-| [Anthropic validate-data](https://github.com/anthropics/knowledge-work-plugins/blob/main/data/skills/validate-data/SKILL.md) | Check denominator shifts, partial periods, weighting, and reasonableness |

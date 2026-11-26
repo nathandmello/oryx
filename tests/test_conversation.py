@@ -92,9 +92,13 @@ class ConversationTests(unittest.TestCase):
                 _, guidance = self.prompt(client, client + prompt, prompt)
                 self.assertNotIn(gap["question"], guidance)
             _, guidance = self.prompt(client, client, "Here's Finance's latest operating review.")
-            self.assertIn(gap["question"], guidance)
-            self.assertIn(gap["next_action"], guidance)
-            self.assertIn("Check whether the cue occurred", guidance)
+            if client == "Codex":
+                self.assertIn(gap["question"], guidance)
+                self.assertIn(gap["next_action"], guidance)
+                self.assertIn("Check whether the cue occurred", guidance)
+            else:
+                # A reserved suggestion is shared across terminals, even if delivery is uncertain.
+                self.assertNotIn(gap["question"], guidance)
         self.assertEqual((self.work / "workspace/onboarding/company.json").read_bytes(), before)
 
     def test_active_source_plan_resumes_and_routes_native_company_edits_to_review(self):

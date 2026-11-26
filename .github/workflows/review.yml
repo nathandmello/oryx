@@ -21,4 +21,6 @@ jobs:
           persist-credentials: false
       - run: python3 tools/release_review.py
         env:
+          ORYX_STUDY_REVIEWER_PUBLIC_KEY: ${{ vars.ORYX_STUDY_REVIEWER_PUBLIC_KEY }}
+          ORYX_STUDY_PINS: ${{ vars.ORYX_STUDY_PINS }}
           GH_TOKEN: ${{ github.token }}

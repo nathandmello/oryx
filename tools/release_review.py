@@ -7,6 +7,8 @@ import sys
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
+import release_qualification
+
 
 BROWSER_WORKFLOW_FILES = {
     ".agents/skills/manage-initiative-work/SKILL.md",
@@ -70,14 +72,21 @@ def joint_clearance(pr, summary, api):
     return any(r["content"] == "+1" and r["created_at"] > summary["updated_at"] for r in reactions)
 
 
-def browser_impact(pr, api):
+def changed_files(pr, api):
     count = pr["changed_files"]
+    if type(count) is not int or not 0 <= count <= 3000:
+        raise ValueError("Cannot verify all changed paths for this release")
     files = {}
     for page in range(1, (count + 99) // 100 + 1):
         for changed in api(f"pulls/{pr['number']}/files?per_page=100&page={page}"):
             files[changed["filename"]] = changed
     if len(files) != count:
         raise ValueError("Could not verify all changed paths for the browser impact check")
+    return files
+
+
+def browser_impact(pr, api, *, files=None):
+    files = changed_files(pr, api) if files is None else files
     paths = files.keys() | {item["previous_filename"] for item in files.values() if item.get("previous_filename")}
     if not (paths & BROWSER_WORKFLOW_FILES or any(path.startswith("tools/local_ui/") for path in paths)):
         return
@@ -178,6 +187,7 @@ def publication(pr, branch, sha, api):
     review(pr, api)
     if not (pr["merged"] and pr["base"]["ref"] == branch and pr["merge_commit_sha"] == sha):
         raise ValueError("Select the merged pull request for this commit and default branch")
+    release_qualification.check(pr, changed_files(pr, api), api)
     tree = api("git/commits/" + sha)["tree"]["sha"]
     if api("git/commits/" + pr["head"]["sha"])["tree"]["sha"] != tree:
         raise ValueError("The merged tree differs from the reviewed tree")
@@ -201,7 +211,9 @@ def main():
     for ref in ("base", "head"):
         if current[ref]["sha"] != submitted[ref]["sha"]:
             raise ValueError("The pull request commits changed. Run review on the current pull request")
-    browser_impact(current, github)
+    files = changed_files(current, github)
+    browser_impact(current, github, files=files)
+    release_qualification.check(current, files, github)
     review(current, github)
     latest = github(endpoint)
     if (latest["head"]["sha"], latest["base"]["sha"], latest["body"]) != (

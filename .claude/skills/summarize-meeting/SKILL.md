@@ -8,7 +8,7 @@ argument-hint: "<initiative> <meeting title, date range, source link, or transcr
 
 Keep transcript work direct. Use the [conversation guide](../../../playbook/conversation.md) for an ensuing consequential product decision.
 
-Adapted from [Summarize Meeting by Tom Rochette](https://github.com/tomzx/agents/blob/main/skills/summarize-meeting/SKILL.md). See the [MIT license](LICENSE).
+See the [license and copyright notice](LICENSE).
 
 ## Identify the initiative and meetings
 
@@ -53,7 +53,10 @@ Start with the title, meeting date, duration, and permitted participant informat
 
 Combine related topics in long meetings. Cite the source and a timestamp, segment, or line range for material claims. Preserve uncertainty and disagreements.
 
-If conflicting accounts affect a decision, owner, or deadline, ask which account to use before filing that claim.
+A direct correction can resolve an earlier secondhand account. Preserve the correction and its source.
+If a material conflict remains, ask which account applies before filing.
+For authorized stakeholder assessment, pass the original permitted passages through the [ingestion adapter](../../../playbook/ingestion.md).
+Keep the main summary focused. Review optional profile wording separately at a natural pause.
 
 ## File initiative context
 
