@@ -52,6 +52,7 @@ Start with the title, meeting date, duration, and permitted participant informat
 | Key quotes | Include brief, permitted verbatim quotes when the wording matters. |
 
 Combine related topics in long meetings. Cite the source and a timestamp, segment, or line range for material claims. Preserve uncertainty and disagreements.
+For a scheduling decision, reuse the source’s timing phrase with its qualifiers in the proposed wording. Leave any exact time open unless someone agreed to it.
 
 A direct correction can resolve an earlier secondhand account. Preserve the correction and its source.
 If a material conflict remains, ask which account applies before filing.
