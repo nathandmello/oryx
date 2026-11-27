@@ -2,7 +2,6 @@
 
 ## Where the rules live
 
-[AGENTS.md](../AGENTS.md) requires this convention for shared slash command changes.
 This playbook defines the naming and compatibility rules.
 [commands.json](commands.json) defines the paths, aliases, and routes that the menu and checker use.
 The [extend-hub skill](../.agents/skills/extend-hub/SKILL.md) directs contributors here for each change.
