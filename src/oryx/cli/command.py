@@ -396,8 +396,9 @@ def check_workspace(root: Path, system_texts: dict[str, str], *, validate_profil
     if storage.selected_workspace(root) == private:
         from oryx.governance import cli as governance_cli
         from oryx.review import store as review_store
+        from oryx.capabilities import roadmap_edit
         from oryx.workspace import adoption
-        for validator in (adoption.checked_paths, review_store.checked_paths, workflow_cli.checked_paths,
+        for validator in (adoption.checked_paths, review_store.checked_paths, workflow_cli.checked_paths, roadmap_edit.checked_paths,
                           governance_cli.checked_paths):
             try:
                 admitted.update(validator(private))

@@ -95,14 +95,14 @@ def read_body():
 
 
 def main(argv=None):
-    args=arguments(argv, ("local","scope","sync","read","owner","resolve","report","reviews","github-status","github-reviews","github-policy","github-verify","github-merge","github-transfer","github-reconcile","github-record"))
+    args=arguments(argv, ("local","scope","sync","read","owner","resolve","report","reviews","github-status","github-reviews","github-policy","github-verify","github-merge","github-propose","github-transfer","github-reconcile","github-record"))
     try:
         body=read_body()
         if args.operation=="local":
             result=local_scope(private_root(args.workspace),body)
         elif args.operation.startswith("github-"):
             from .github import run
-            needs_private=args.operation=="github-transfer" or (args.operation=="github-reconcile" and "id" in body)
+            needs_private=args.operation in {"github-propose", "github-transfer"} or (args.operation=="github-reconcile" and "id" in body)
             result=run(args.operation,body,private_root(args.workspace) if needs_private else None)
         else:
             result=request(args.operation,body)

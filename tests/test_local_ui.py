@@ -220,6 +220,9 @@ class LocalUITests(unittest.TestCase):
         self.assertEqual(fixture.ledger.read_bytes(), original)
         comparison = self.call("comparison", {"product": "example", "cycle": cycle})
         self.assertEqual(review["documents"][0]["text"], comparison["text"])
+        self.assertFalse((fixture.work / comparison["path"]).exists())
+        # A separate browser command can reopen the staged wording before approval.
+        self.assertEqual(local_ui.roadmap_edit.comparison(fixture.root, "example", cycle)["text"], comparison["text"])
         self.assertFalse(comparison["approved"])
         self.assertTrue(self.call("catalog", {})["can_approve"])
         self.call("approve", {"id": review["revision"]}, failure="Review a current proposal")

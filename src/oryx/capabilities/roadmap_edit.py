@@ -1,6 +1,8 @@
 """Prepare browser roadmap edits for PM review."""
 
 from datetime import date
+import json
+import os
 import re
 
 from oryx.capabilities import customizations
@@ -202,12 +204,77 @@ def comparison_template(root, product):
             "revision": initiative_store.digest(initiative_store.canonical(inputs))}
 
 
+def draft_path(root, product, cycle):
+    private = storage.private_root(root)
+    home = ".oryx/staging/roadmaps" if storage.selected_workspace(root) is not None else ".state/roadmap-drafts"
+    path = private / home / layout.slug(product) / (layout.slug(cycle) + ".json")
+    if path.resolve() != path:
+        raise ValueError("Use an unredirected planning draft")
+    return path
+
+
+def read_draft(path):
+    if not os.path.lexists(path):
+        return None, None
+    if path.resolve() != path or not path.is_file() or path.stat().st_size > 2 * 1024 * 1024:
+        raise ValueError("Use a bounded, unredirected planning draft")
+    original = path.read_text(encoding="utf-8")
+    draft = storage.json_input(original)
+    if (not isinstance(draft, dict) or set(draft) != {"base", "text"}
+            or not isinstance(draft["text"], str)
+            or not isinstance(draft["base"], str)
+            or draft["base"] != "absent" and not re.fullmatch(r"[a-f0-9]{64}", draft["base"])):
+        raise ValueError("Invalid staged comparison")
+    return original, draft
+
+
+def stage_comparison(root, product, cycle, prepared):
+    path = draft_path(root, product, cycle)
+    target, original, draft = prepared
+    private = storage.private_root(root)
+    base = "absent" if original is None else initiative_store.digest(original.encode("utf-8"))
+    with storage.writer_lock(private):
+        live = target.read_bytes() if target.is_file() else None
+        if target.resolve() != target or live != (original.encode("utf-8") if original is not None else None):
+            raise ValueError("The comparison changed before staging")
+        previous, _ = read_draft(path)
+        storage.replace_text(path, previous, json.dumps({"base": base, "text": draft}) + "\n",
+                             mode=0o600, durable=True)
+
+
+def checked_paths(private):
+    directory = private / ".oryx/staging/roadmaps"
+    if directory.resolve() != directory:
+        raise ValueError("Use an unredirected planning draft directory")
+    if not directory.exists():
+        return set()
+    if not directory.is_dir():
+        raise ValueError("Use a planning draft directory")
+    found = set()
+    for product in directory.iterdir():
+        if product.is_symlink() or not product.is_dir():
+            raise ValueError("Invalid staged planning product")
+        layout.slug(product.name)
+        for draft in product.iterdir():
+            if draft.suffix != ".json":
+                raise ValueError("Invalid staged planning cycle")
+            layout.slug(draft.stem)
+            read_draft(draft)
+            found.add(draft.relative_to(private).as_posix())
+    return found
+
+
 def comparison(root, product, cycle):
     _, register = snapshot(root, product)
     target, original = read_comparison(root, product, cycle)
+    revision = initiative_store.digest(original.encode("utf-8")) if original is not None else "absent"
+    approved = cycle in register.cycles
+    if not approved:
+        _, pending = read_draft(draft_path(root, product, cycle))
+        if pending and pending["base"] == revision:
+            original = pending["text"]
     sections = comparison_sections(original) if original else {}
-    return {"revision": initiative_store.digest(original.encode("utf-8")) if original is not None else "absent",
-            "approved": cycle in register.cycles, "text": original,
+    return {"revision": revision, "approved": approved, "text": original,
             "sections": sections, "order": list(sections),
             "path": target.relative_to(storage.private_root(root)).as_posix()}
 

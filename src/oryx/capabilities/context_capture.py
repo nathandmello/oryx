@@ -1086,7 +1086,9 @@ def insert_entries(text, selected, sources, private, target, leads=None):
     return text
 
 
-def apply_profile(root, private, target, selected, sources, lint, publish):
+def apply_profile(root, private, target, selected, sources, lint, publish=None):
+    if publish is None:
+        publish = storage.replace_text
     if any(row["scope"] != "pm" or row["section"] not in pm_profile.TOPICS.values() for row in selected):
         raise ValueError("Choose a PM topic before writing to the PM profile")
     original = target.read_bytes().decode("utf-8") if target.exists() else None

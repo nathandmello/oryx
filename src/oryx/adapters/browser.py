@@ -104,6 +104,8 @@ class App:
                 documents.append({"path": path, "text": contents, "revision": reference["sha256"]})
             titles = {event["initiative"]: register.items[event["initiative"]]["title"]
                       for event in changes if "initiative" in event}
+            if comparison is not None:
+                roadmap_edit.stage_comparison(self.root, product, body["cycle"], comparison)
             identifier = secrets.token_urlsafe(24)
             public = {"id": identifier, "product": product, "revision": proposal["revision"], "changes": changes,
                       "documents": documents, "titles": titles}

@@ -729,6 +729,12 @@
       "effect": "remote-read",
       "cli": ["governance", "github-record"],
       "example": []
+    },
+    "workspace github propose": {
+      "summary": "Review exact content and the enrolled audience before opening a GitHub draft.",
+      "effect": "remote-write",
+      "cli": ["governance", "github-propose"],
+      "example": []
     }
   }
 }

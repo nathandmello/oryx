@@ -1,6 +1,8 @@
 """Governed GitHub.com reads and head-bound merges under the acting customer credential."""
 import base64
 import binascii
+from datetime import datetime, timezone
+import hashlib
 import os
 from pathlib import Path, PurePosixPath
 import re
@@ -77,6 +79,20 @@ class GitHubAPI:
         data=canonical({"query":REVIEW_QUERY,"variables":variables}) if variables is not None else None
         return self._request(path,data,"POST" if data else "GET")
 
+    def lookup(self,path):
+        try:
+            return self.fetch(path)
+        except FileNotFoundError:
+            return None
+
+    def create(self,slug,kind,body):
+        owner,name=slug.split("/")
+        routes={"tree":"git/trees","commit":"git/commits","ref":"git/refs","draft":"pulls"}
+        if kind not in routes:
+            raise ValueError("Unsupported GitHub proposal effect")
+        path=f"/repos/{identifier(owner)}/{identifier(name)}/{routes[kind]}"
+        return self._request(path,canonical(body),"POST")
+
     def merge(self,slug,number,head):
         owner,name=slug.split("/")
         path=f"/repos/{identifier(owner)}/{identifier(name)}/pulls/{positive(number)}/merge"
@@ -90,6 +106,8 @@ class GitHubAPI:
             with self.http.open(req,timeout=15) as response:
                 return decode(response.read(LIMIT+1))
         except HTTPError as exc:
+            if method=="GET" and exc.code==404:
+                raise FileNotFoundError("Registered GitHub resource is absent or inaccessible") from exc
             if method=="PUT" and 400<=exc.code<500:
                 raise PermissionError(f"GitHub declined the merge (HTTP {exc.code}); reconcile the PR") from exc
             raise RuntimeError("GitHub response is uncertain; reconcile the PR") from exc
@@ -120,7 +138,7 @@ class Connection:
 
     def repo(self,scope):
         value=self.config[identifier(scope)]
-        shape(value,("slug","id","owner_id","branch","reports"),("protection","records"))
+        shape(value,("slug","id","owner_id","branch","reports"),("protection","records","destination_drafts","disclosure"))
         owner,name=value["slug"].split("/")
         path="/repos/"+identifier(owner)+"/"+identifier(name)
         identifier(value["branch"])
@@ -220,7 +238,8 @@ class Connection:
                     raise ValueError("Transfer must contain one commit rooted directly in destination history")
                 rid=record_paths[filename]
                 record=self.registered_record(reg,path,rid,head)
-                receipts.append({"record":rid,"path":filename,"source_revision":record["source_revision"]})
+                key="new_record" if rid in reg.get("destination_drafts",[]) else "record"
+                receipts.append({key:rid,"path":filename,"source_revision":record["source_revision"]})
                 continue
             if entry["status"] not in {"added","modified"} or filename not in reg["reports"]:
                 raise ValueError("Change requires owner review outside the supported structured-report policy")
@@ -301,7 +320,7 @@ class Connection:
         pr,dependencies=self.policy(path,reg,number,head)
         observed=self.verify_protection(path,reg,number,head,pr) if op=="github-verify" else {}
         for dep in dependencies:
-            if "record" in dep:
+            if "record" in dep or "new_record" in dep:
                 continue
             owner,owner_path,_=self.repo(dep["owner_scope"])
             if self.tip(owner_path,owner)!=dep["owner_revision"]:
@@ -401,6 +420,13 @@ def merge_state(client,reg,path,body):
 def reconcile_transfer(client,private,scope,rid):
     from oryx.sharing import transfer
     from storage import writer_lock
+    local=transfer.status(private,rid)
+    if local and local["status"]=="pending" and proposal_stage(private,local["proposal"]).is_file():
+        pending=read(proposal_stage(private,local["proposal"]))
+        if pending.get("intent",{}).get("operation")=="github-propose":
+            observed=resume_transfer_proposal(client,private,pending)
+            if observed["status"]=="pending-disclosure":
+                return observed
     binding=read(binding_path(private,rid))
     marker=verify_marker(private,binding)
     reg,path,_=client.repo(scope)
@@ -499,6 +525,334 @@ def run(op,body,private=None):
         settings=load_enrollment()
         return Connection(settings,GitHubAPI(),os.geteuid())
     client=connect()
+    if op=="github-propose":
+        return propose(client,private,body,reauthenticate=connect)
     if op in {"github-merge","github-transfer","github-reconcile"}:
         return effect(client,op,body,private,reauthenticate=connect)
     return client.perform(op,body)
+
+
+def pages(api,path):
+    entries=[]
+    for number in range(1,11):
+        separator="&" if "?" in path else "?"
+        page=api.fetch(path+separator+urlencode({"per_page":100,"page":number}))
+        if not isinstance(page,list):
+            raise PermissionError("GitHub did not provide a complete access inventory")
+        entries.extend(page)
+        if len(page)<100:
+            return entries
+    raise PermissionError("GitHub access inventory exceeds the supported bound")
+
+
+def disclosure_audience(client,reg,path,current):
+    anchor=shape(reg["disclosure"],("readers","apps","deploy_keys","other_readers","valid_until"))
+    expires=datetime.fromisoformat(anchor["valid_until"].replace("Z","+00:00"))
+    other=anchor["other_readers"]
+    if (expires.utcoffset() is None or datetime.now(timezone.utc)>=expires or
+            not isinstance(other,list) or any(not isinstance(name,str) or not name.strip() for name in other)):
+        raise PermissionError("Customer audience enrollment is invalid or expired")
+    for group in ("readers","apps","deploy_keys"):
+        if not isinstance(anchor[group],list) or sorted(set(map(positive,anchor[group])))!=sorted(anchor[group]):
+            raise ValueError("Invalid customer-enrolled audience identifiers")
+    if (current["visibility"]!="private" or current.get("allow_forking") is not False or current.get("forks_count")!=0
+            or current.get("archived") is not False or current.get("disabled") is not False):
+        raise PermissionError("Initial disclosure requires an active private destination without forks or forking")
+    owner=reg["slug"].split("/")[0]
+    if client.api.fetch(path+"/actions/permissions").get("enabled") is not False:
+        raise PermissionError("First disclosure needs a destination without automatic Actions access")
+    for endpoint in (path+"/hooks","/orgs/"+owner+"/hooks"):
+        if any(hook.get("active") is not False for hook in pages(client.api,endpoint)):
+            raise PermissionError("Active GitHub webhooks make this disclosure audience unverified")
+    people=[{"id":positive(row["id"]),"login":identifier(row["login"])} for row in pages(client.api,path+"/collaborators?affiliation=all")]
+    keys=[{"id":positive(row["id"]),"title":row["title"]} for row in pages(client.api,path+"/keys")]
+    # GitHub exposes organization installations with total_count. Include every installation
+    # including metadata readers, even when its selected repositories cannot be enumerated.
+    installations=client.api.fetch("/orgs/"+owner+"/installations?per_page=100")
+    if len(installations["installations"])!=installations["total_count"]:
+        raise PermissionError("Incomplete organization GitHub App installation inventory")
+    apps=[]
+    for app in installations["installations"]:
+        if app["account"]["id"]!=reg["owner_id"]:
+            raise PermissionError("Installation belongs to another GitHub organization")
+        apps.append({"id":positive(app["id"]),"app":identifier(app["app_slug"])})
+    for actual,key in ((people,"readers"),(apps,"apps"),(keys,"deploy_keys")):
+        actual.sort(key=lambda item:item["id"])
+        if [a["id"] for a in actual]!=sorted(anchor[key]):
+            raise PermissionError("Live GitHub audience differs from customer disclosure enrollment")
+    if client.account not in anchor["readers"]:
+        raise PermissionError("Current proposer is outside the permitted destination audience")
+    return {"readers":people,"app_installations":apps,"deploy_keys":keys,"other_enrolled_readers":sorted(other)}
+
+
+def proposal_stage(private,key,create=False):
+    if not isinstance(key,str) or not SHA.fullmatch(key):
+        raise ValueError("Invalid GitHub proposal commitment")
+    return directory(private,".oryx/staging/sharing",create)/(key+".json")
+
+
+def checked_draft(draft):
+    shape(draft,("organization","actor","intent","commitment"))
+    intent=draft["intent"]
+    shape(intent,("operation","scope","repository_id","owner_id","repository","branch","base","workspace_id","id",
+                  "source","filename","record","actor","author","last_updated","audience"))
+    if (intent["operation"]!="github-propose" or intent["source"] not in {"private","draft"}
+            or digest(canonical(intent))!=draft["commitment"] or draft["actor"]!=str(intent["actor"])
+            or draft["organization"]!="github-"+str(intent["owner_id"])):
+        raise ValueError("Invalid staged GitHub disclosure")
+    return intent
+
+
+def proposal_access(client,scope,rid):
+    if "propose" not in client.human_effects.get(scope,[]):
+        raise PermissionError("A separately enrolled human proposal account is required")
+    reg,path,current=client.repo(scope)
+    if current["permissions"].get("push") is not True or current.get("has_pull_requests") is False:
+        raise PermissionError("GitHub destination denies branch contribution or pull requests")
+    filename=relative_path(reg.get("records",{})[record_id(rid)])
+    if not filename.startswith("context/records/"):
+        raise ValueError("Disclose only to a registered record path")
+    return reg,path,filename,disclosure_audience(client,reg,path,current)
+
+
+def draft_input(client,private,body):
+    from oryx.sharing import transfer
+    from oryx.workspace.location import workspace_id
+    source=body.get("source")
+    shape(body,("scope","id","base","source","content","last_updated") if source=="draft" else ("scope","id","base","source"))
+    reg,path,filename,audience=proposal_access(client,body["scope"],body["id"])
+    if client.tip(path,reg)!=oid(body["base"]):
+        raise ValueError("Official GitHub base changed before staging")
+    if source=="draft" and body["id"] in reg.get("destination_drafts",[]):
+        from oryx.workspace.identity import load
+        if body["id"] in load(private)["records"]:
+            raise ValueError("This record is already privately owned; register and review an ownership transfer")
+        data=body["content"]
+        when=datetime.fromisoformat(body["last_updated"].replace("Z","+00:00"))
+    elif source=="private" and body["id"] not in reg.get("destination_drafts",[]):
+        if "transfer" not in client.human_effects.get(body["scope"],[]):
+            raise PermissionError("Private promotion requires the enrolled transfer permission")
+        row,raw,stamp=transfer.source(private,body["id"])
+        if row["id"]!=body["id"]:
+            raise ValueError("Supply the stable private source ID")
+        data=raw.decode("utf-8")
+        when=datetime.fromtimestamp(stamp,timezone.utc)
+    else:
+        raise ValueError("Choose the enrolled destination-first draft or private transfer source")
+    if not isinstance(data,str) or not data.strip() or len(data.encode())>250000 or when.utcoffset() is None:
+        raise ValueError("Review bounded UTF-8 record prose and its source timestamp")
+    record={"id":body["id"],"kind":"record","source_revision":digest(data.encode()),"content":data}
+    intent={"operation":"github-propose","scope":body["scope"],"repository_id":reg["id"],"owner_id":reg["owner_id"],
+            "repository":reg["slug"],"branch":reg["branch"],"base":body["base"],"workspace_id":workspace_id(private),
+            "id":body["id"],"source":source,"filename":filename,"record":record,"actor":client.account,"author":client.login,
+            "last_updated":when.astimezone(timezone.utc).isoformat(timespec="seconds"),"audience":audience}
+    key=digest(canonical(intent))
+    draft={"organization":"github-"+str(reg["owner_id"]),"actor":str(client.account),"intent":intent,"commitment":key}
+    save(proposal_stage(private,key,True),draft)
+    return draft
+
+
+def branch_name(draft):
+    return "oryx-proposal-"+draft["commitment"]
+
+
+def observe_proposal(client,reg,path,draft):
+    intent=checked_draft(draft)
+    branch=branch_name(draft)
+    ref=client.api.lookup(path+"/git/ref/heads/"+branch)
+    params=urlencode({"state":"all","head":reg["slug"].split("/")[0]+":"+branch,"base":intent["branch"],"per_page":2})
+    pulls=client.api.fetch(path+"/pulls?"+params)
+    if not isinstance(pulls,list) or len(pulls)>1:
+        raise ValueError("Uncertain or duplicate GitHub proposal; inspect the destination")
+    pr=pulls[0] if pulls else None
+    if pr and (pr["user"]["id"]!=intent["actor"] or pr["title"]!="Oryx record "+intent["id"]
+               or pr["body"]!="Reviewed Oryx proposal "+draft["commitment"] or pr["head"]["ref"]!=branch or pr["base"]["ref"]!=intent["branch"]
+               or pr["head"]["repo"]["id"]!=reg["id"] or pr["base"]["repo"]["id"]!=reg["id"]):
+        raise ValueError("GitHub returned a proposal for another repository or branch")
+    if ref and (ref["ref"]!="refs/heads/"+branch or ref["object"]["type"]!="commit"):
+        raise ValueError("GitHub proposal ref does not identify an ordinary commit")
+    head=oid(ref["object"]["sha"]) if ref else (oid(pr["head"]["sha"]) if pr else None)
+    if not head:
+        return {"status":"absent"}
+    if pr and pr["head"]["sha"]!=head:
+        raise ValueError("Existing PR or proposal branch changed")
+    verify_candidate(client,reg,path,draft,head)
+    result={"scope":intent["scope"],"repository_id":reg["id"],"base":intent["base"],"head":head,
+            "branch":branch,"commitment":draft["commitment"],"status":"branch"}
+    if pr:
+        if pr["state"] not in {"open","closed"}:
+            raise ValueError("Cannot establish GitHub proposal state")
+        result.update(pull=positive(pr["number"]),status=pr["state"],draft=pr["draft"])
+    return result
+
+
+def verify_candidate(client,reg,path,draft,head):
+    intent=draft["intent"]
+    commit=client.api.fetch(path+"/git/commits/"+oid(head))
+    if (commit["sha"]!=head or [p["sha"] for p in commit["parents"]]!=[intent["base"]]
+            or commit["message"]!="Reviewed Oryx proposal "+draft["commitment"]):
+        raise ValueError("Existing candidate differs from the reviewed destination history")
+    compare=client.api.fetch(path+"/compare/"+intent["base"]+"..."+head+"?per_page=1")
+    files=compare.get("files",[])
+    if (compare["status"]!="ahead" or compare["ahead_by"]!=1 or compare["behind_by"]!=0 or len(files)!=1
+            or files[0]["filename"]!=intent["filename"] or files[0]["status"]!="added"):
+        raise ValueError("Candidate carries changes outside the exact reviewed file addition")
+    data=canonical(intent["record"])
+    expected_blob=hashlib.sha1(b"blob "+str(len(data)).encode()+b"\0"+data).hexdigest()
+    if files[0].get("sha")!=expected_blob:
+        raise ValueError("Candidate blob differs from the exact reviewed bytes")
+    expected_email=str(intent["actor"])+"+"+intent["author"]+"@users.noreply.github.com"
+    date=datetime.fromisoformat(intent["last_updated"])
+    for key in ("author","committer"):
+        who=commit[key]
+        if (who["name"]!=intent["author"] or who["email"]!=expected_email
+                or datetime.fromisoformat(who["date"].replace("Z","+00:00"))!=date):
+            raise ValueError("Candidate Git metadata differs from the review")
+    if client.registered_record(reg,path,intent["id"],head)!=intent["record"]:
+        raise ValueError("Candidate bytes differ from the reviewed record")
+
+
+def disclosure_confirmation(draft):
+    with open("/dev/tty","r+",encoding="utf-8") as pm:
+        pm.write("This writes private material into a customer GitHub repository before merge.\n")
+        intent=draft["intent"]
+        metadata={"parents":[intent["base"]],"message":"Reviewed Oryx proposal "+draft["commitment"],
+                  "author_and_committer":{"name":intent["author"],"email":str(intent["actor"])+"+"+intent["author"]+"@users.noreply.github.com",
+                                          "date":intent["last_updated"]},"pull_title":"Oryx record "+intent["id"],
+                  "pull_body":"Reviewed Oryx proposal "+draft["commitment"]}
+        pm.write(canonical({"branch":branch_name(draft),"draft_pull_request":True,"review":draft,"metadata":metadata}).decode("ascii","backslashreplace")+"\n")
+        pm.write("Type DISCLOSE to allow these exact bytes, metadata, destination and readers: ");pm.flush()
+        return pm.readline().strip()=="DISCLOSE"
+
+
+def proposal_fence(private,draft):
+    from oryx.sharing import transfer
+    from storage import writer_lock
+    intent=draft["intent"]
+    with writer_lock(private):
+        marker=transfer.status(private,intent["id"])
+        if marker and marker["status"]!="closed":
+            if marker["proposal"]!=draft["commitment"] or marker["status"]!="pending":
+                raise ValueError("Resolve the other ownership transfer first")
+            return
+        row,data,_=transfer.source(private,intent["id"])
+        if (digest(data)!=intent["record"]["source_revision"] or row["workspace_id"]!=intent["workspace_id"]
+                or row["id"]!=intent["id"]):
+            raise ValueError("Private source changed before first disclosure")
+        value={"id":intent["id"],"workspace_id":row["workspace_id"],"source_path":row["path"],"source_revision":row["revision"],
+               "organization":draft["organization"],"scope":intent["scope"],"proposal":draft["commitment"],
+               "status":"pending","official_commit":None}
+        save(transfer.location(private,row["id"],True),value,expected=marker)
+
+
+def bind_observed(private,draft,result):
+    from oryx.sharing import transfer
+    from storage import writer_lock
+    intent=draft["intent"]
+    binding={k:intent[k] for k in ("scope","id","owner_id","repository_id","workspace_id","base")}
+    binding.update(pull=result["pull"],head=result["head"],source_revision=intent["record"]["source_revision"])
+    commitment=transfer_binding(binding)
+    with writer_lock(private):
+        marker=transfer.status(private,intent["id"])
+        if marker and marker["proposal"]==commitment:
+            return verify_marker(private,binding)
+        if (not marker or marker["proposal"]!=draft["commitment"] or marker["status"]!="pending"
+                or marker["workspace_id"]!=binding["workspace_id"] or marker["source_revision"]!=binding["source_revision"]):
+            raise ValueError("Cannot verify the private proposal's ownership fence")
+        path=binding_path(private,intent["id"],True)
+        prior=read(path) if path.exists() else None
+        save(path,binding,expected=prior)
+        value={**marker,"proposal":commitment}
+        save(transfer.location(private,intent["id"]),value,expected=marker)
+        return value
+
+
+def resume_transfer_proposal(client,private,draft):
+    intent=checked_draft(draft)
+    if "transfer" not in client.human_effects.get(intent["scope"],[]):
+        raise PermissionError("Customer transfer recovery permission unavailable")
+    reg,path,_=client.repo(intent["scope"])
+    if (reg["id"]!=intent["repository_id"] or reg["owner_id"]!=intent["owner_id"]
+            or reg["slug"]!=intent["repository"] or reg["branch"]!=intent["branch"]):
+        raise ValueError("Registered destination changed")
+    result=observe_proposal(client,reg,path,draft)
+    if "pull" not in result:
+        return {"status":"pending-disclosure","commitment":draft["commitment"]}
+    bind_observed(private,draft,result)
+    return result
+
+
+def propose(client,private,body,confirm=disclosure_confirmation,reauthenticate=None):
+    from oryx.workspace.location import workspace_id
+    if set(body)=={"commitment"}:
+        draft=read(proposal_stage(private,body["commitment"]))
+        if draft.get("commitment")!=body["commitment"]:
+            raise ValueError("Staged GitHub proposal differs from the requested review")
+    else:
+        draft=draft_input(client,private,body)
+    intent=checked_draft(draft)
+    if intent["workspace_id"]!=workspace_id(private):
+        raise ValueError("GitHub proposal belongs to another Workspace")
+    scope,rid=intent["scope"],intent["id"]
+    def authorized():
+        actor=reauthenticate() if reauthenticate else client
+        reg,path,filename,audience=proposal_access(actor,scope,rid)
+        if (actor.account!=intent["actor"] or actor.login!=intent["author"] or reg["id"]!=intent["repository_id"] or reg["owner_id"]!=intent["owner_id"]
+                or reg["slug"]!=intent["repository"] or reg["branch"]!=intent["branch"] or filename!=intent["filename"]
+                or ((intent["id"] in reg.get("destination_drafts",[]))!=(intent["source"]=="draft"))
+                or audience!=intent["audience"] or (intent["source"]=="private" and "transfer" not in actor.human_effects.get(scope,[]))):
+            raise PermissionError("Reviewed actor, destination, reader list or customer enrollment changed")
+        return actor,reg,path
+    actor,reg,path=authorized()
+    observed=observe_proposal(actor,reg,path,draft)
+    if "pull" in observed:
+        if intent["source"]=="private":
+            bind_observed(private,draft,observed)
+        return observed
+    def before_write():
+        actor,reg,path=authorized()
+        if actor.tip(path,reg)!=intent["base"]:
+            raise ValueError("Official destination base changed; inspect and review the current revision")
+        return actor,reg,path
+    before_write()
+    if not confirm(draft):
+        return {"status":"no-new-write",
+                "commitment":draft["commitment"]}
+    before_write()
+    if intent["source"]=="private":
+        proposal_fence(private,draft)
+    else:
+        from oryx.workspace.identity import load
+        if intent["id"] in load(private)["records"]:
+            raise ValueError("The staged draft now conflicts with an authoritative private record")
+    slug=reg["slug"]
+    branch=branch_name(draft)
+    if observed["status"]=="absent":
+        actor,reg,path=before_write()
+        base=actor.api.fetch(path+"/git/commits/"+intent["base"])
+        if base["sha"]!=intent["base"] or actor.api.lookup(path+"/contents/"+intent["filename"]+"?ref="+intent["base"]) is not None:
+            raise ValueError("Expected a new record on the reviewed official base")
+        data=canonical(intent["record"])
+        tree=actor.api.create(slug,"tree",{"base_tree":oid(base["tree"]["sha"]),"tree":[
+            {"path":intent["filename"],"mode":"100644","type":"blob","content":data.decode()}]})
+        actor,reg,path=before_write()
+        author={"name":intent["author"],"email":str(intent["actor"])+"+"+intent["author"]+"@users.noreply.github.com","date":intent["last_updated"]}
+        commit=actor.api.create(slug,"commit",{"message":"Reviewed Oryx proposal "+draft["commitment"],"tree":oid(tree["sha"]),
+            "parents":[intent["base"]],"author":author,"committer":author})
+        head=oid(commit["sha"])
+        verify_candidate(actor,reg,path,draft,head)
+        actor,reg,path=before_write()
+        observed=observe_proposal(actor,reg,path,draft)
+        if observed["status"]=="absent":
+            actor.api.create(slug,"ref",{"ref":"refs/heads/"+branch,"sha":head})
+    actor,reg,path=before_write()
+    observed=observe_proposal(actor,reg,path,draft)
+    if observed["status"]=="branch":
+        actor.api.create(slug,"draft",{"title":"Oryx record "+rid,"head":branch,"base":intent["branch"],
+                         "body":"Reviewed Oryx proposal "+draft["commitment"],"draft":True})
+        observed=observe_proposal(actor,reg,path,draft)
+    if "pull" not in observed:
+        raise ValueError("GitHub proposal is uncertain; reconcile the saved commitment")
+    if intent["source"]=="private":
+        bind_observed(private,draft,observed)
+    return observed
