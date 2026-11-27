@@ -101,3 +101,5 @@ python3 tools/pm.py check --system-only --command-base "$BASE_SHA"
 GitHub CI compares the proposed merge tree with the pull request base.
 Published paths and aliases must resolve with the same effect. Published CLI examples must still parse.
 Use a new path for a different effect. Keep the existing path available with its published behavior.
+
+[Resume guided work](guided-work.md) explains how to reopen a checked workflow step in either client.

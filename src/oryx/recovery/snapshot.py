@@ -21,7 +21,7 @@ BLOCK = 1024 * 1024
 
 
 def require_pm_terminal():
-    if "PM_HUB_PROTECTED_ROOT" in os.environ:
+    if "PM_HUB_PROTECTED_ROOT" in os.environ or "ORYX_PROPOSAL_HOST" in os.environ:
         raise ValueError("Use the PM terminal for offline Workspace recovery")
 
 

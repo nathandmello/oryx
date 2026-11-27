@@ -16,15 +16,15 @@ import test_conversation
 
 CORE = Path(__file__).resolve().parents[1]
 FUNCTIONS = {
-    "tools/hook.py": ["main", "prompt_context", "assess_chat"],
-    "tools/pm.py": ["main"],
-    "tools/ingestion_signals.py": ["for_task"],
-    "tools/source_evidence.py": ["material"],
-    "tools/evidence_spans.py": ["inspect"],
-    "tools/stakeholder_signals.py": ["evaluate", "validate_change"],
-    "tools/stakeholder_profiles.py": ["preview", "accept"],
-    "tools/task_context.py": ["turn_context"],
-    "tools/profile_retrieval.py": ["for_task"],
+    "src/oryx/adapters/host_hooks.py": ["main", "prompt_context", "assess_chat"],
+    "src/oryx/cli/command.py": ["main"],
+    "src/oryx/subscribers/ingestion.py": ["for_task"],
+    "src/oryx/capabilities/source_evidence.py": ["material"],
+    "src/oryx/capabilities/evidence_spans.py": ["inspect"],
+    "src/oryx/subscribers/stakeholder_signals.py": ["evaluate", "validate_change"],
+    "src/oryx/capabilities/stakeholder_profiles.py": ["preview", "accept"],
+    "src/oryx/capabilities/task_context.py": ["turn_context"],
+    "src/oryx/capabilities/profile_retrieval.py": ["for_task"],
 }
 SHARED_SKILL = Path(".agents/skills/stakeholder-profiles/SKILL.md")
 # Install this observer only on the test subprocess path. It records executed entry points,

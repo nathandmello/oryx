@@ -274,7 +274,7 @@ def check_private_dir(path):
 def locked(store):
     store.mkdir(mode=0o700, exist_ok=True)
     check_private_dir(store)
-    if any(p.name not in {".install.lock", STATE, "generations"} for p in store.iterdir()):
+    if any(p.name not in {".install.lock", STATE, "generations", "operations"} for p in store.iterdir()):
         raise ValueError("Core installation directory contains unrelated files")
     descriptor = os.open(store / ".install.lock", os.O_RDWR | os.O_CREAT | os.O_NOFOLLOW, 0o600)
     with os.fdopen(descriptor, "rb+") as lock:
@@ -300,7 +300,7 @@ def activate(store, active, previous):
             name.unlink(missing_ok=True)
 
 
-def install_locked(store, generations, archive, signature, key, previous, expected=None):
+def install_locked(store, generations, archive, signature, key, previous, expected=None, preactivate=None):
     identifier = uuid4().hex
     with tempfile.TemporaryDirectory(prefix=".prepare-", dir=generations) as temporary:
         prepared = Path(temporary)
@@ -319,6 +319,8 @@ def install_locked(store, generations, archive, signature, key, previous, expect
         core = bundle / "core"
         core.mkdir(mode=0o700)
         manifest = unpack(signed, core)
+        if preactivate is not None:
+            preactivate(core)
         if previous and previous["digest"] == digest:
             # A retry reuses healthy bytes. A new generation repairs local drift without touching a Workspace.
             existing = local_path(generations / previous["generation"] / "core")

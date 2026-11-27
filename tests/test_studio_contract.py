@@ -16,6 +16,42 @@ import test_pm
 from onboarding_fixtures import reviewed_setup
 
 
+# Guided commands are discovered at runtime. These deterministic contracts exercise format-2 data.
+RESTORED_ACTIONS = {
+    'workspace journal show',
+    'workspace handoff show',
+    'workspace suggestions show',
+    'workspace company apply',
+    'workspace company show',
+    'workspace company reset',
+    'context company show',
+    'context pm show',
+    'context stakeholder-profile show',
+    'context area show',
+    'context product show',
+    'strategy brief draft',
+    'strategy goal draft',
+    'discovery experiment draft',
+    'initiative record show',
+    'portfolio backlog show',
+    'portfolio roadmap show',
+    'portfolio decisions review',
+    'review decision show',
+    'review forecast show',
+    'review forecast preview',
+    'review forecast apply',
+    'workspace checkpoint show',
+    'workspace checkpoint preview',
+    'workspace checkpoint apply',
+    'workspace browser open',
+    'workspace health check',
+    'workspace preferences show',
+    'workspace preferences preview',
+    'workspace preferences set',
+    'workspace preferences reset',
+}
+
+
 def git(repository, *args):
     return subprocess.check_output(["git", "-C", str(repository), "-c", "user.name=Fixture PM",
                                     "-c", "user.email=pm@example.invalid", *args], text=True).strip()
@@ -223,7 +259,7 @@ class StudioContractTests(unittest.TestCase):
         self.assertIn("PASS", action("workspace health check"))
         self.check_browser_action()
         exercised.add("workspace browser open")
-        self.assertEqual(exercised, set(catalog))
+        self.assertEqual(exercised, RESTORED_ACTIONS | {name for name, entry in catalog.items() if "guide" in entry})
         self.assertEqual(hub.ledger.read_bytes(), signed)
         self.assertEqual(git(self.root, "ls-files", "--others", "--exclude-standard", "--", "studio"), "")
         self.assertFalse(any((self.root / name).exists() for name in ("private", "workspace")))

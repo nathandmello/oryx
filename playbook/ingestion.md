@@ -31,7 +31,9 @@ Use each original's stable ID. Link a recap to the same `event_id` only when the
 Use `subject` for an agreed product, area or initiative. An unspecified subject remains unknown.
 
 Use the inspected text for connector reads. For chat, identify the specific message with an opaque `chat:` reference.
-For a local document, use its Studio-relative path under `context/` or `workspace/`. Use a regular Markdown or text file.
+Use a Workspace-relative path to a regular Markdown or text file in a visible record directory.
+Oryx reads the cited bytes from that file, including evidence in an initiative or a newly added domain.
+Configuration, hidden files, private profiles, customizations and linked files cannot supply evidence.
 
 Set `coverage` to `read`, `partial` or `unavailable`. For a partial read, include the exact text and its UTF-8 byte offset.
 Supply the connector revision for partial remote reads. An incomplete speaker turn needs clarification.
@@ -40,6 +42,10 @@ Keep the permitted excerpt within 128 KiB. For longer sources, supply bounded ra
 Only name purposes the PM permits. Use `chat-only` when secondary review or pointer retention is outside that permission.
 A summary-only restriction, an off-record conversation or an explicit exclusion takes precedence over optional suggestions.
 Shared capture uses the same envelope through a source's `ingestion` options. Prepared claims alone cannot establish the original speaker.
+
+To withdraw a local document, run `oryx ingestion revoke-document SOURCE_ID PATH`.
+Personal search withholds that document and records citing it until you restore its use.
+Oryx rechecks a local source when the PM accepts its reviewed onboarding finding.
 
 ## Inspect and review
 

@@ -10,7 +10,7 @@ import zlib
 from . import snapshot
 
 
-def main():
+def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     actions = parser.add_subparsers(dest="action", required=True)
     inspect = actions.add_parser("inventory", help="Print a private, read-only filesystem inventory")
@@ -20,7 +20,7 @@ def main():
         operation.add_argument(source)
         operation.add_argument("destination")
         operation.add_argument("--expect", required=True, help="SHA-256 of the independently retained inventory")
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
     try:
         snapshot.require_pm_terminal()
         if args.action == "inventory":

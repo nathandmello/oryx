@@ -215,6 +215,7 @@ test("compare and approve a cycle, filter the board, and approve a drag change",
   await expect(button(review, "Approve on this computer")).toBeEnabled();
   await button(review, "Approve on this computer").click();
   await expect(review.getByText("Approval cancelled. You can review or approve again.")).toBeVisible();
+  expect(fs.existsSync(path.join(hub.root, "studio", "workspace", "roadmaps", "example", "customer-operations.md"))).toBe(false);
   expect(hub.cli(["roadmap", "--product", "example"])).toEqual([]);
   await button(review, "Approve on this computer").click();
   await expect(lane(page, "now").getByRole("heading", { name: "Renewal delays" })).toBeVisible();

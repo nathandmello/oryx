@@ -342,7 +342,10 @@ function editRoadmapFields(row, view) {
       const values = Object.fromEntries(Array.from(readers, ([key, read]) => [key, read()]).filter(([key, value]) =>
         JSON.stringify(value) !== JSON.stringify(row[key] ?? null) && !(row[key] == null && Array.isArray(value) && !value.length)));
       if (Object.keys(values).length) {
-        await api("roadmap-fields", { product: row.product, id: row.id, revision: view.revision, values });
+        const result = await api("roadmap-fields", { product: row.product, id: row.id, revision: view.revision, values });
+        if (["staged", "pending"].includes(result.state)) {
+          alert("Staged for PM review. Run oryx review decide " + result.id + " in the PM terminal, then refresh.");
+        }
       }
       dialog.close();
       await loadBoard();
@@ -740,6 +743,10 @@ function workRequest(command, scope, operation, extra = {}) {
 }
 
 function commitWork(result, message) {
+  if (["staged", "pending"].includes(result.state)) {
+    alert("Staged for PM review. Run oryx review decide " + result.id + " in the PM terminal, then refresh.");
+    return;
+  }
   state.list = result;
   render();
   alert(message);

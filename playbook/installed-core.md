@@ -63,3 +63,5 @@ Core rollback and Workspace recovery have separate outcomes. Preserve subsequent
 New external Workspaces store Core links as `oryx://core/` references. The stored path stays valid when the active release changes. Workspace records link to each other by relative path.
 
 Run `bin/oryx resource 'oryx://core/playbook/filing.md#when-a-section-earns-its-place'` from an installation. The command returns JSON with the current file path and optional heading anchor. A missing file or heading reports an error.
+
+For an existing format-2 Workspace, follow [the adoption and portable recovery instructions](record-adoption.md).
