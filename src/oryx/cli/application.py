@@ -42,7 +42,22 @@ def dispatch(root, args):
     return module.main(args[1:])
 
 
+def inspect_action(root, argv):
+    if argv[:2] not in (["action", "--describe"], ["action", "--catalog"]):
+        return None
+    from oryx.cli import catalog
+    try:
+        catalog.route(root, argv[1:])
+    except (OSError, ValueError) as exc:
+        print(f"FAIL: {exc}")
+        return 1
+    return 0
+
+
 def main(root):
+    discovered = inspect_action(root, sys.argv[1:])
+    if discovered is not None:
+        return discovered
     # Resolve relative legacy imports from this installation regardless of the invoking directory.
     sys.path.insert(0, os.fspath(root / "tools"))
     from oryx.cli import command

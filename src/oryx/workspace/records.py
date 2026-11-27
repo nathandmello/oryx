@@ -781,7 +781,7 @@ def create(root, kind, destination, title=None, owner="", filing_contract=None, 
     return target
 
 
-def draft_text(root, kind, target, title=None, owner="", product_parent=None, initiative_id=None):
+def draft_text(root, kind, target, title=None, owner="", product_parent=None, initiative_id=None, *, draft_token=None):
     source = root / "templates" / f"{kind}.md"
     if source.resolve() != source:
         raise ValueError("Templates must be regular files inside oryx")
@@ -805,7 +805,9 @@ def draft_text(root, kind, target, title=None, owner="", product_parent=None, in
     text = text.replace("{{title}}", title)
     if owner:
         text = text.replace("{{owner}}", owner)
-    text = text.replace("{{id}}", f"{kind}-{uuid4().hex[:12]}")
+    if draft_token is not None and not re.fullmatch(r"[a-f0-9]{12}", draft_token):
+        raise ValueError("Expected a stable token for the reviewed draft")
+    text = text.replace("{{id}}", f"{kind}-{draft_token or uuid4().hex[:12]}")
     text = text.replace("{{date and result}}", f"{date.today().isoformat()}: Draft created.")
     text = retarget_links(text, source, target, root)
     if kind in {"product-context", "initiative-context", "product-area-context"}:

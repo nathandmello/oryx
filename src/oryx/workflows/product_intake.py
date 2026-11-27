@@ -163,7 +163,7 @@ def finding(private, plan, entry):
     return entry, homes
 
 
-def scaffold(root, private, parent, lint, title=None, *, publish=None):
+def scaffold(root, private, parent, lint, title=None, *, publish=None, draft_token=None):
     """Only the accepted plan can create this empty structural parent. Leave personal work untouched."""
     if publish is None:
         publish = storage.replace_text
@@ -172,7 +172,7 @@ def scaffold(root, private, parent, lint, title=None, *, publish=None):
         return None
     storage.require_visible(private, parent)
     product = Path(parent).parts[2]
-    text = records.draft_text(root, "product-context", path, title=title or product.replace("-", " "))
+    text = records.draft_text(root, "product-context", path, title=title or product.replace("-", " "), draft_token=draft_token)
     errors = lint(root, path, text, destination_only=True)
     if errors:
         raise ValueError("Review the proposed parent product brief: " + ". ".join(errors))

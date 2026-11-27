@@ -7,9 +7,7 @@ from pathlib import Path
 import re
 from shlex import join
 
-import storage
-import workspace
-import overrides
+from oryx.workspace import storage
 
 
 CATALOG = "playbook/commands.json"
@@ -105,6 +103,8 @@ def expand_alias(catalog, args):
 
 
 def compatibility_errors(root, base, current, parser):
+    import workspace
+
     if not COMMIT.fullmatch(base):
         raise ValueError("Use the full SHA of a local base commit for the command comparison.")
     root = workspace.repo(root, "system")
@@ -209,6 +209,9 @@ def route(root, args, *, check_setup=None):
     else:
         result = {"command": path, "effect": "guided", "task": entry["summary"],
                   "guide": entry["guide"], "arguments": arguments}
+        import overrides
+        import workspace
+
         private = workspace.optional_repo(root)
         if private is not None:
             result["workflow_guidance"] = overrides.guidance(private)

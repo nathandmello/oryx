@@ -8,7 +8,9 @@ if (Path(__file__).resolve().parents[1] / "oryx-release-manifest.json").is_file(
 from _oryx_import import bind
 
 if __name__ == "__main__":
-    bind(__name__, "oryx.cli.command")
-    raise SystemExit(sys.modules[__name__].main())
+    root = Path(__file__).resolve().parents[1]
+    sys.path.insert(0, str(root / "src"))
+    from oryx.cli.application import main
+    raise SystemExit(main(root))
 else:
     bind(__name__, "oryx.cli.command")

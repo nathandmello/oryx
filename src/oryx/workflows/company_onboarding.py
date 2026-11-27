@@ -469,7 +469,7 @@ def prepare(private, state, data, *, restoring=False, kind="company"):
     return pending, plan
 
 
-def accept(root, private, state, owner, lint, kind="company", *, publish=None):
+def accept(root, private, state, owner, lint, kind="company", *, publish=None, draft_token=None):
     if publish is None:
         publish = storage.replace_text
     item = state["pending"]
@@ -509,7 +509,7 @@ def accept(root, private, state, owner, lint, kind="company", *, publish=None):
     if kind == "product" and current.get("creates_parent"):
         parent = private / current["creates_parent"]
         title = state["plan"].get("titles", {}).get(current["creates_parent"])
-        scaffold = product_intake.scaffold(root, private, current["creates_parent"], lint, title, publish=publish)
+        scaffold = product_intake.scaffold(root, private, current["creates_parent"], lint, title, publish=publish, draft_token=draft_token)
 
     if descriptive:
         lint = partial(lint, destination_only=True)
@@ -518,9 +518,9 @@ def accept(root, private, state, owner, lint, kind="company", *, publish=None):
             title = state["plan"].get("titles", {}).get(item["destination"])
             if not title and item["destination"] == layout.product(entry["product"]):
                 title = entry["product"].replace("-", " ")
-            return capture.apply(root, item["destination"], plan, owner, lint, descriptive_intake=True, title=title, publish=publish)
+            return capture.apply(root, item["destination"], plan, owner, lint, descriptive_intake=True, title=title, publish=publish, draft_token=draft_token)
         else:
-            return capture.apply(root, item["destination"], plan, owner, lint, descriptive_intake=descriptive, publish=publish)
+            return capture.apply(root, item["destination"], plan, owner, lint, descriptive_intake=descriptive, publish=publish, draft_token=draft_token)
     except (ValueError, OSError):
         # A failed first area write must not leave an unused shell. Never remove an edited parent.
         if parent and scaffold and not path.exists() and parent.is_file() and parent.read_bytes() == scaffold.encode():

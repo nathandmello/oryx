@@ -19,8 +19,9 @@ SCHEMA = 1
 
 
 def checked_workspace(root, write):
-    if write and os.environ.get("PM_HUB_PROTECTED_ROOT") is not None:
-        raise ValueError("Record workflow progress from the PM terminal")
+    if write:
+        from oryx.review.store import pm_only
+        pm_only()
     selected = storage.selected_workspace(root)
     if selected is None or selected != workspace.repo(root, "workspace"):
         raise ValueError("Select the personal Workspace before opening workflow progress")

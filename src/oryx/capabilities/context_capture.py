@@ -1125,7 +1125,7 @@ def apply_profile(root, private, target, selected, sources, lint, publish):
     return True
 
 
-def apply(root, destination, plan, owner, lint, *, descriptive_intake=False, title=None, publish=None):
+def apply(root, destination, plan, owner, lint, *, descriptive_intake=False, title=None, publish=None, draft_token=None):
     if publish is None:
         publish = storage.replace_text
     private = storage.private_root(root)
@@ -1165,7 +1165,7 @@ def apply(root, destination, plan, owner, lint, *, descriptive_intake=False, tit
         raise ValueError("Use the existing record's workflow, or select a typed context section")
     if original is None:
         parent = product_path(selected[0]["product"]) if kind == "initiative-context" else None
-        text = records.draft_text(root, kind, target, title=title, owner=owner, product_parent=parent)
+        text = records.draft_text(root, kind, target, title=title, owner=owner, product_parent=parent, draft_token=draft_token)
         if kind == "product-area-context":
             reason = selected[0].get("record", {}).get("reason") or "Maintain the confirmed scope's current product context."
             trigger = "Review when the scope, its users, or supporting evidence changes."

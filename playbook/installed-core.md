@@ -47,6 +47,10 @@ To restore the previous archive, use the independently provisioned trusted key.
 python3 "$TRUSTED_BOOTSTRAP" rollback --store "$INSTALL_STORE" --public-key "$PUBLISHER_PUBLIC_KEY"
 ```
 
+For a configured release channel, use `oryx release update` and `oryx release status`.
+Use `oryx release rollback` when an update also recorded Workspace version changes.
+The update command records the Core and Workspace recovery outcomes. It reports the status of any queued issue separately.
+
 Read the active Core path after a rollback. Use Workspace Git commands only for authorized private repository actions.
 For a local Workspace recovery inventory, run the following command on the machine that holds the work.
 
@@ -65,3 +69,5 @@ New external Workspaces store Core links as `oryx://core/` references. The store
 Run `bin/oryx resource 'oryx://core/playbook/filing.md#when-a-section-earns-its-place'` from an installation. The command returns JSON with the current file path and optional heading anchor. A missing file or heading reports an error.
 
 For an existing format-2 Workspace, follow [the adoption and portable recovery instructions](record-adoption.md).
+
+Use [local review](external-review.md) for staged wording and [guided work](guided-work.md) to continue a reviewed checkpoint.

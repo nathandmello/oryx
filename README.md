@@ -75,7 +75,10 @@ You can enable [private session transcripts](playbook/session-continuity.md) and
 | `customizations/` | Your standing rules, templates, fields, and views |
 | `README.md` · `settings.json` | Your session handoff and local configuration |
 | `playbook/` · `templates/` | Shared methods and starting points |
-| Core `bin/` · `tools/` | Commands, browser app, workspace setup, and checks |
+| Core `bin/` · `src/oryx/cli/` | Installed commands and action catalog routing |
+| Core `src/oryx/workflows/` · `src/oryx/capabilities/` | PM workflow steps and the operations they call |
+| Core `src/oryx/adapters/` · `src/oryx/workspace/` | Host and provider entry points, record identity and storage |
+| Core `tools/` | Compatible entry points, browser assets and Workspace seeds |
 | Core `.agents/` · `.claude/` · `.codex/` | Agent skills and client configuration |
 
 In a source checkout, Step 0 can restore committed work from your private GitHub repository. [Filing guide](playbook/filing.md) · [Git and remotes](playbook/git.md) · [Updates and recovery](playbook/updates.md)

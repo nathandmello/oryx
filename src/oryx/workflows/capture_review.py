@@ -105,6 +105,9 @@ def review_accept(root, private, state, owner, lint, kind, *, original, operatio
         raise ValueError(f"The finding remains pending. Open {kind}-onboarding {operation} in the PM terminal "
                          f"with --revision {state['revision']}" +
                          (" and --question with the exact open question" if question else "")) from error
+    # One original checkpoint identifies one finding. The generated record kind distinguishes
+    # a new product from its area. Dates, custom templates and source-dependent text are rerendered.
+    draft_token = store.sha(store.encoded([identity, kind, store.sha(original)]))[:12]
     pending = state["pending"]
     with terminal:
         # A new area may first need its own product brief. The native owner renders that
@@ -116,7 +119,7 @@ def review_accept(root, private, state, owner, lint, kind, *, original, operatio
                 def stage(target, prior, text):
                     raise Prepared(candidate(private, target, prior, text))
                 try:
-                    changed = company_onboarding.accept(root, private, state, owner, lint, kind, publish=stage)
+                    changed = company_onboarding.accept(root, private, state, owner, lint, kind, publish=stage, draft_token=draft_token)
                 except Prepared as result:
                     return result.record
                 if changed is not False:
