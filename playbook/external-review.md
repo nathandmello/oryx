@@ -36,7 +36,7 @@ On the original machine and filesystem, reopen the same proposal with `oryx revi
 An independently restored copy gets new filesystem identities. Select the untouched copy before running these commands.
 
 ```sh
-oryx review recover-copy --archive /private/backups/workspace.zip --expect INVENTORY_SHA256
+oryx review recover-copy --archive "$LOCAL_BACKUP" --expect INVENTORY_SHA256
 oryx review decide ID
 ```
 
