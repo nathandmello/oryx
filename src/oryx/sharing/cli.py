@@ -137,18 +137,17 @@ def main(argv=None):
         if op=="preview":
             result=prepare(private_root(args.workspace),body)
         elif op in {"review","merge"}:
+            from oryx.review.cli import confirm_effect
             required=("proposal","candidate","approve") if op=="review" else ("proposal","candidate")
             shape(body,required)
+            if op == "review" and type(body["approve"]) is not bool:
+                raise ValueError("Choose whether to approve the inspected proposal")
             candidate=request("inspect",{"proposal":body["proposal"]})
             if candidate["candidate"]!=body["candidate"]:
                 raise ValueError("Inspect the updated proposal before deciding")
-            with open("/dev/tty","r+",encoding="utf-8") as terminal:
-                terminal.write(json.dumps(candidate,indent=2,ensure_ascii=True)+"\n")
-                action=("APPROVE" if body["approve"] else "DECLINE") if op=="review" else "MERGE"
-                terminal.write(f"Type {action} to apply this exact decision: ")
-                terminal.flush()
-                if terminal.readline().strip()!=action:
-                    return _print({"status":"no-decision","candidate":candidate["candidate"]})
+            action = ("APPROVE" if body["approve"] else "DECLINE") if op == "review" else "MERGE"
+            if not confirm_effect("Review the exact proposal revision before recording your decision.", candidate, action):
+                return _print({"status":"no-decision","candidate":candidate["candidate"]})
             result=request(op,body)
         elif op=="export":
             result=export(private_root(args.workspace),body)
