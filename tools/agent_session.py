@@ -11,11 +11,14 @@ import first_run
 from initiative_store import APPROVAL_HOME
 import session_journal
 import workspace
+import storage
 
 
 def launch(root, client, *, context_statusline=False, setup=False):
     if context_statusline and client != "claude":
         raise ValueError("The optional native status line requires Claude Code")
+    if storage.selected_workspace(root) is not None:
+        raise ValueError("External Workspace agent sessions require the protected review writer. Use the local CLI for this candidate.")
     binary = shutil.which(client)
     if not binary:
         raise ValueError(f"Install {client} before starting a protected session")

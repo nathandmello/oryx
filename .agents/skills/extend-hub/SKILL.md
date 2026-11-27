@@ -1,70 +1,25 @@
 ---
 name: extend-hub
-description: Use automatically when changing shared oryx code or guidance, including fixes, instructions, playbooks, skills, templates, tools, and tests. Routine private PM record edits use their own workflow.
+description: Use when extending an Oryx workflow, method, setting or shared capability. Preserve existing PM decisions, source checks and review.
 ---
 
 # Extend oryx
 
-Read `AGENTS.md` and the existing work relevant to the request. Complete the dependency review for every shared change.
+Identify the PM outcome, who owns the change, the current route and the observable result.
 
-## Add or change a capability
+## Extend a private Workspace
 
-1. Define the immediate need and observable completion condition. Reuse an existing capability when it fits.
-2. Find the authoritative sources and artifact owners. Preserve the boundary with the configured delivery system.
-3. Choose the smallest complete change. Keep unrelated features outside its scope.
-4. Define the record format, source references, relationships, checkpoints, and review triggers that the work needs.
-5. Put judgment and method guidance in the skill. Put deterministic checks in scripts.
-6. Identify the questions an activity must answer. Specify which [scoped evidence](../../../playbook/context-search.md) it retrieves and which gaps need PM input.
-7. Add meaningful tests for new enforcement. Check a valid case and a rejected case.
-8. Keep instructions portable. Author shared skills under `.agents/skills/`.
+1. Read the [workflow rules](../../../playbook/overrides.md) and the existing guide for this outcome.
+2. Use a scoped standing rule for a recurring correction. Record the trigger and steps for a new private workflow.
+3. Store longer private procedures with Workspace customizations. Reference the selected private procedure from its rule.
+4. Use [templates, fields and views](../../../playbook/customization.md) for changes to personal drafts, roadmaps or checklists.
+5. Review the exact change with the PM. Preserve sources, product decisions, private values and existing unrelated rules.
+6. Invoke the new behavior from the PM's ordinary request. Check an in-scope example and an unrelated request.
+7. Open the result in the other host. Check the affected view or export when presentation changes.
 
-Describe methods learned from third-party code in oryx’s own words. Omit references to the repositories that inspired them.
-Preserve license notices, dependency information, and citations for evidence used in tests.
+Use the [command catalog](../../../playbook/commands.md) to discover the existing shared actions. Keep personal content in the selected Workspace.
 
-For PM-facing work, identify what oryx can prepare, what the PM decides, and where they review the wording.
-Verify the same craft steps and evidence checks under deadline pressure.
-Test the activity from an ordinary PM request with relevant evidence, a material gap, and a plausible unrelated match.
+## Extend shared Core
 
-For every shared slash command change, follow the [command convention](../../../playbook/commands.md).
-Register its path and target in the shared catalog. Preserve published paths with aliases when needed.
-Check discovery and execution through `pm.py action`. Compare with the base commit for an existing command change.
-
-## Dependency review
-
-1. Identify the changed behaviour, command, path, field, or term. Trace what defines it and what relies on it.
-2. Search for old and new names, including hidden project directories. Follow callers, links, examples, and tests.
-3. Compare those uses with the intended behaviour. Read related guidance even when it describes the behaviour in different words.
-4. Check the README, playbooks, skills, templates, workspace seeds, tools, hooks, CI, and tests wherever the change reaches them.
-5. Fix stale dependants in the same change. Check existing records and fresh workspace setup when a format or default changes.
-6. Review staged and unstaged changes, including new, renamed, and deleted files. Run `python3 tools/pm.py sync-skills` after skill changes.
-7. Run affected tests. Exercise changed instructions and examples through their normal entry points.
-8. Run `python3 tools/pm.py check`. In a system-only checkout, use `--system-only` and verify affected private workflows in a disposable workspace.
-9. Report what you traced and corrected. Name the checks you ran and any remaining gaps.
-
-## Review browser impact
-
-For changes to roadmap, task, or launch checklist workflows, trace both the terminal and browser entry points.
-Use the same records, workflow handlers, and validation in both interfaces.
-Update affected browser views or controls in the same change. Check existing records when fields or rules change.
-
-Add or update a [Playwright scenario](../../../playbook/local-ui.md#browser-tests) when the browser behavior changes.
-Use the required [Browser impact section](../../../playbook/local-ui.md#review-workflow-changes).
-Check the review gate's path list when moving a workflow entry point.
-
-## Prepare a release
-
-Test existing installations with arbitrary filenames, untracked records, missing evidence, and a second run when filing changes. Verify that original bytes remain recoverable.
-
-For each change, record its effect on installed workspaces in the release or pull request description. Follow [the release process](../../../playbook/git.md#existing-workspaces-at-release).
-
-Use [review-hub-upgrade](../review-hub-upgrade/SKILL.md) for user handoff. Explain benefits, audit existing records, and offer a choice before conversion.
-
-Verify direct shared Git pulls and released wrappers against the actual release version and private format.
-
-Follow [the prepublication gates](../../../playbook/git.md#codex-review-before-publication). Open ready for Codex code and security review. Merge the verified head after both reviews and required CI pass. Retest fixes and state verification limits.
-
-The PM's request authorises work within its scope. Ask only for a missing decision or an action outside that authority.
-
-Use the placement map in `README.md`. Create templates only for requested artifact types; a future activity alone is insufficient.
-
-For repository operations, read [the Git rules](../../../playbook/git.md). Keep private settings and PM records inside `studio/`.
+Work in an authorized development checkout for shared changes. Follow its `playbook/core-contributions.md` procedure for dependency review, browser impact and release checks.
+The verified installation serves the PM's current release while development proceeds separately.

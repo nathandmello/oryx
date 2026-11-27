@@ -58,8 +58,35 @@ def json_input(value):
 _repository_handles = ContextVar("pm_hub_repository_handles", default=())
 
 
+def selected_workspace(root):
+    """Use the package from this installation when an external Workspace is selected."""
+    if "ORYX_WORKSPACE" not in os.environ and "ORYX_WORKSPACE_ID" not in os.environ:
+        return None
+    package_root = str(Path(__file__).resolve().parents[1] / "src")
+    if package_root not in sys.path:
+        sys.path.insert(0, package_root)
+    from oryx.workspace.location import selected_path
+    return selected_path(root)
+
+
+def core_for(private):
+    """Find Core for an already selected Workspace without using the invoking directory."""
+    core = Path(__file__).resolve().parents[1]
+    selected = selected_workspace(core)
+    if selected is not None:
+        if selected != private:
+            raise ValueError("The caller supplied a different Workspace")
+        return core
+    return private.parent
+
+
 def private_root(root):
     """Choose one physical private checkout, including installations awaiting conversion."""
+    selected = selected_workspace(root)
+    if selected is not None:
+        return selected
+    if (root / "oryx-release-manifest.json").is_file():
+        raise ValueError("Set ORYX_WORKSPACE to the selected personal Workspace")
     if not root.is_dir():
         return root / STUDIO
     found = sorted(path for path in root.iterdir() if path.name.casefold() in PRIVATE_ROOTS)
@@ -161,7 +188,11 @@ def writer_lock(private):
 @contextmanager
 def _writer_locks(private):
     root = private.parent
-    if private.name.casefold() in PRIVATE_ROOTS and (root / "playbook/release.json").is_file():
+    if "ORYX_WORKSPACE" in os.environ or "ORYX_WORKSPACE_ID" in os.environ:
+        core_for(private)
+        with repository_lock(private):
+            yield
+    elif private.name.casefold() in PRIVATE_ROOTS and (root / "playbook/release.json").is_file():
         # The outer inode remains in place when the private checkout changes its name.
         with repository_lock(root):
             if private_root(root) != private:

@@ -50,10 +50,15 @@ def destination(root, role, settings):
             raise ValueError(f"{role}: origin differs from its confirmed destination; inspect fetch and push URLs")
         urls.extend(values)
     other = "workspace" if role == "system" else "system"
-    other_path = workspace.repo(root, other)
-    actual_other = subprocess.run(["git", "-C", str(other_path), "remote", "get-url", "--all", "origin"],
-                                  capture_output=True, text=True)
-    other_urls = actual_other.stdout.splitlines() + [settings["remotes"][other] or ""]
+    other_urls = [settings["remotes"][other] or ""]
+    # Installed Core has no Git remote. Preserve both destination checks for checkouts.
+    if other != "system" or os.path.lexists(root / ".git") or storage.selected_workspace(root) is None:
+        other_path = workspace.repo(root, other)
+        actual_other = subprocess.run(["git", "-C", str(other_path), "remote", "get-url", "--all", "origin"],
+                                      capture_output=True, text=True)
+        other_urls.extend(actual_other.stdout.splitlines())
+    else:
+        other_urls.append("https://github.com/nathandmello/oryx.git")
     if any(identity(url) == identity(other_url) for url in urls for other_url in other_urls if other_url):
         raise ValueError("System and workspace must use different remote repositories")
     if config(path, "remote.origin.mirror").casefold() == "true":
@@ -202,6 +207,22 @@ def adopt_private_migration(path, branch, incoming, settings):
         journal.unlink()
 
 
+def check_workspace_revision(root, path, revision):
+    """A remote handoff must preserve the selected Workspace identity."""
+    if storage.selected_workspace(root) is None:
+        return
+    from oryx.workspace.location import IDENTITY, workspace_id
+    name = IDENTITY.as_posix()
+    entry = workspace.git(path, "ls-tree", revision, "--", name)
+    if not entry.startswith("100644 blob "):
+        raise ValueError("The Git revision needs a regular Workspace identity")
+    blob = f"{revision}:{name}"
+    if int(workspace.git(path, "cat-file", "-s", blob)) > 1024:
+        raise ValueError("Invalid Workspace identity size")
+    if storage.json_input(workspace.git(path, "cat-file", "blob", blob)) != {"id": workspace_id(path)}:
+        raise ValueError("Git revision belongs to a different Workspace")
+
+
 def run(root, role, operation):
     path = workspace.repo(root, role)
     if operation == "status":
@@ -227,6 +248,7 @@ def run(root, role, operation):
         if role == "system":
             check_system_history(path, "HEAD")
         else:
+            check_workspace_revision(root, path, "HEAD")
             committed = subprocess.run(["git", "-C", str(path), "show", f"HEAD:{upgrades.LEDGER}"], capture_output=True)
             local = upgrades.read_state(path)[1]
             published = {} if committed.returncode else json.loads(committed.stdout)
@@ -242,6 +264,8 @@ def run(root, role, operation):
         return f"Pushed {role} branch {branch} to its confirmed origin."
     workspace.git(path, "fetch", "origin", f"refs/heads/{branch}")
     fetched = workspace.git(path, "rev-parse", "FETCH_HEAD^{commit}")
+    if role == "workspace":
+        check_workspace_revision(root, path, fetched)
     metadata_path = "playbook/release.json" if role == "system" else "settings.json"
     incoming = json.loads(workspace.git(path, "show", f"{fetched}:{metadata_path}"))
     if role == "system":

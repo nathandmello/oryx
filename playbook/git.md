@@ -1,6 +1,6 @@
 # Git and GitHub operations
 
-The outer checkout is the shared system repository. `studio/` is an independent Git repository, ignored by the system.
+For archives, see [installed Core](installed-core.md). System Git operations require a checkout. Its private repository defaults to `studio/`.
 
 Keep each repository's history, branches, staging area, and remotes separate. Open a [protected PM session](overrides.md) for workspace work. Run system updates from your terminal.
 
@@ -122,4 +122,4 @@ Merging to the default branch makes changes available to consumers who pull it. 
 | Merge | The agent may merge the exact reviewed SHA when both reviews and required CI pass. Respect repository protections. |
 | Publication | An authorised merge starts publication. Verify the tested tree and publish the version in the merged commit. |
 
-Require `check` and `review` before merging. Follow [release setup and recovery](publication.md).
+Require `check` and `review` before merging. Maintainers follow their checkout’s publication procedure.

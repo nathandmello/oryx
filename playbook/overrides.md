@@ -5,7 +5,7 @@ The PM can change how any skill works or teach oryx a new workflow in ordinary c
 
 ## Start a PM session
 
-Run from the outer checkout. Step 0 prepares your workspace.
+Archive candidates use the [local CLI](installed-core.md). For source checkouts:
 
 ```sh
 python3 tools/pm.py agent codex

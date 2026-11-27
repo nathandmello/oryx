@@ -6,7 +6,7 @@ argument-hint: "[domain] [subject] [verb] [arguments]"
 
 # oryx actions
 
-Run `python3 tools/pm.py action` from the root of the oryx checkout.
+Run `python3 tools/pm.py action` from the selected Core directory.
 If an action returns a setup step, lead the current walkthrough in conversation. Follow the [company](../../../playbook/company-context.md), [PM](../../../playbook/pm-context.md), or [product](../../../playbook/product-context.md) guide. The parent product comes first. An area owner can take an optional fourth step or resume their request.
 
 For `/pm` alone, show the available domains from `action`.

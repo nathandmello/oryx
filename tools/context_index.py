@@ -8,6 +8,8 @@ from pathlib import Path
 import stat
 import tempfile
 
+import storage
+
 try:
     import sqlite3
 except ImportError:  # Some Python distributions omit the optional SQLite extension.
@@ -22,7 +24,7 @@ def signature(path):
 def cache_path(private):
     if os.name == "posix":
         root = Path(tempfile.gettempdir()).resolve() / f"pm-hub-context-{os.getuid()}"
-        if private.parent in root.parents:
+        if root.is_relative_to(private) or root.is_relative_to(storage.core_for(private)):
             raise ValueError("Cache would be inside the installation")
         root.mkdir(mode=0o700, exist_ok=True)
         info = root.lstat()

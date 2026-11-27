@@ -8,7 +8,7 @@ Read [README.md](README.md). Save standing PM corrections as scoped [workspace o
 
 Guide [onboarding](playbook/company-context.md) through company, PM and parent product context. Offer area owners an optional fourth step.
 
-The shared system and `studio/` have independent Git histories. File evidence under `studio/context/` and working artifacts under `studio/workspace/`.
+File evidence under `context/` and work under `workspace/` in the [selected Workspace](playbook/installed-core.md). Source checkouts default to `studio/`.
 
 Read [the Git rules](playbook/git.md) before any commit, pull, push, remote change, or GitHub action.
 

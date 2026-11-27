@@ -4,6 +4,7 @@ from datetime import date
 from os.path import relpath
 from pathlib import Path
 from posixpath import normpath
+import os
 import re
 
 import layout
@@ -715,15 +716,35 @@ def validate(texts, *, legacy_structure=()):
 
 def retarget_links(text, source, target, root, copies=None):
     """Keep links to shared rules valid after a template enters the workspace."""
+    selected = None
+    if os.environ.get("ORYX_WORKSPACE") and root != Path(os.environ["ORYX_WORKSPACE"]):
+        selected = storage.selected_workspace(root)
+    resources = None
+
     def retarget(match):
+        nonlocal resources
         label, link = match.groups()
         parsed = urlsplit(link.strip("<>"))
         if parsed.scheme or parsed.netloc or not parsed.path:
             return match[0]
         linked = (source.parent / unquote(parsed.path)).resolve()
-        linked = (copies or {}).get(linked, linked)
         if root not in linked.parents and linked != root:
             raise ValueError("Template link leaves oryx")
+        linked = (copies or {}).get(linked, linked)
+        if selected is not None and target.is_relative_to(selected) and linked.is_relative_to(root):
+            if parsed.query:
+                raise ValueError("Use a Core resource path and optional heading without query parameters")
+            from oryx.workspace.resources import CoreResources
+            from conversion import markdown_anchors
+            uri = "oryx://core/" + linked.relative_to(root).as_posix()
+            if parsed.fragment:
+                uri += "#" + parsed.fragment
+            if resources is None:
+                resources = CoreResources(root)
+            resources.resolve(uri, markdown_anchors)
+            return f"[{label}]({uri})"
+        if not linked.is_relative_to(root) and (selected is None or not linked.is_relative_to(selected)):
+            raise ValueError("Template link leaves Core and the selected Workspace")
         relative_link = quote(Path(relpath(linked, target.parent)).as_posix())
         return f"[{label}]({urlunsplit(('', '', relative_link, parsed.query, parsed.fragment))})"
     return re.sub(r"\[([^\]\n]+)\]\((<[^>\n]+>|[^\s)]+)\)", retarget, text)

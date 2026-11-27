@@ -13,8 +13,11 @@ import re
 import subprocess
 from urllib.parse import unquote, urlsplit
 
+# Installed generations are immutable, including when invoked via the legacy script path.
+if (Path(__file__).resolve().parents[1] / "oryx-release-manifest.json").is_file():
+    sys.dont_write_bytecode = True
+
 import records
-import red_team_eval
 import workspace
 import git_ops
 import context_capture
@@ -61,6 +64,7 @@ import initiative_work
 import experiment_drafts
 
 ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / "src"))
 REQUIRED = (
     "AGENTS.md", "CLAUDE.md", "README.md", ".gitignore",
     "tools/pm.py", "tools/hook.py", "tools/workspace.py", "tools/git_ops.py",
@@ -106,7 +110,7 @@ REQUIRED = (
     "tests/red-team-evals/context-sections.json",
 )
 ROOT_FILES = {"LICENSE.md", "README.md", "AGENTS.md", "CLAUDE.md", ".gitignore"}
-ROOT_DIRS = {"playbook", "templates", "tools", "tests",
+ROOT_DIRS = {"bin", "src", "playbook", "templates", "tools", "tests",
              ".agents", ".claude", ".codex", ".github"}
 SKILL_SOURCE = Path(".agents/skills")
 SKILL_COPY = Path(".claude/skills")
@@ -205,6 +209,12 @@ def writing_errors(text: str) -> list[str]:
 
 def link_errors(root: Path, path: Path, text: str, planned=()) -> list[str]:
     errors = []
+    roots = (root,)
+    resources = None
+    if "ORYX_WORKSPACE" in os.environ:
+        private = storage.selected_workspace(root)
+        if private is not None and path.is_relative_to(private):
+            roots = (root, private)
     fence = None
     metadata = text.startswith("---\n")
     for line, unit in enumerate(text.splitlines(), 1):
@@ -224,11 +234,21 @@ def link_errors(root: Path, path: Path, text: str, planned=()) -> list[str]:
             continue
         unit = re.sub(r"`[^`]+`", "", unit)
         for match in LINK.finditer(unit):
-            target = urlsplit(unescape(match[2].strip("<>")))
+            raw = unescape(match[2].strip("<>"))
+            if raw.lower().startswith("oryx:"):
+                from oryx.workspace.resources import CoreResources
+                try:
+                    if resources is None:
+                        resources = CoreResources(root)
+                    resources.resolve(raw, conversion.markdown_anchors)
+                except (OSError, ValueError) as exc:
+                    errors.append(f"{line}: {exc}")
+                continue
+            target = urlsplit(raw)
             if target.scheme or target.netloc:
                 continue
             destination = (path.parent / unquote(target.path)).resolve() if target.path else path.resolve()
-            if root != destination and root not in destination.parents:
+            if not any(destination.is_relative_to(bound) for bound in roots):
                 errors.append(f"{line}: link leaves oryx: {match[2]}")
             elif not destination.exists() and destination not in planned:
                 errors.append(f"{line}: broken link: {match[2]}")
@@ -391,6 +411,8 @@ def check_workspace(root: Path, system_texts: dict[str, str], *, validate_profil
         if not path.is_file():
             continue
         parts = path.relative_to(private).parts
+        if rel == ".oryx/workspace.json" and storage.selected_workspace(root) == private:
+            continue  # selected_workspace validated the exact identity file and location.
         if len(parts) == 2 and parts[0] == initiative_store.APPROVAL_HOME and path.suffix == ".json":
             continue  # registrations() verifies the corresponding product history below.
         if (len(parts) == 3 and parts[:2] == ("workspace", "forecasts") and path.suffix == ".json"):
@@ -496,6 +518,19 @@ def check_workspace(root: Path, system_texts: dict[str, str], *, validate_profil
 
 def check(root: Path = ROOT, include_workspace=True, *, command_base=None, validate_profiles=True) -> list[str]:
     root = root.resolve()
+    if (root / "oryx-release-manifest.json").exists() and not os.path.lexists(root / ".git"):
+        from oryx.release.archive import check_runtime
+        try:
+            manifest = check_runtime(root)
+            if command_base is not None:
+                return ["Compare release command compatibility from the maintainer checkout"]
+            if not include_workspace:
+                return []
+            templates = {name: (root / name).read_text(encoding="utf-8") for name in manifest["files"]
+                         if name.startswith("templates/") and name.endswith(".md")}
+            return check_workspace(root, templates, validate_profiles=validate_profiles)
+        except (OSError, ValueError) as exc:
+            return [f"Installed Core: {exc}"]
     errors, texts, safe = [], {}, set()
     for path in inventory(root):
         rel = path.relative_to(root).as_posix()
@@ -678,7 +713,8 @@ def alignment(root, prepare=False, record=None, outcome=None, digest=None, note=
         changing = any(settings[key] != value for key, value in release.items())
         if not workspace.supports_update(settings, release):
             raise ValueError("Unsupported workspace version; inspect release compatibility before updating")
-        moving = private.name.casefold() != storage.STUDIO
+        selected = storage.selected_workspace(root)
+        moving = selected is None and private.name.casefold() != storage.STUDIO
         if moving:
             workspace.check_relocation(root, private)
         studio_moves = studio_layout.moves(private)
@@ -689,6 +725,8 @@ def alignment(root, prepare=False, record=None, outcome=None, digest=None, note=
         # Old filing transactions must finish with their accepted paths before layout planning.
         if prepare and (changing or old_layout or moving or studio_moves or review_pending or record or for_conversion
                         or not {upgrades.RULE, upgrades.STUDIO_GUIDES} <= set(state) or not upgrades.scan_marker(private).exists()):
+            if selected is not None:
+                raise ValueError("This Workspace requires a verified upgrade or recovery before alignment")
             recovery = snapshots.ensure(root, release["system_version"], layout_change=old_layout or moving, studio_change=bool(studio_moves))
         if prepare and studio_moves:
             studio_layout.relocate(private, studio_moves)
@@ -702,6 +740,8 @@ def alignment(root, prepare=False, record=None, outcome=None, digest=None, note=
             layout_plan = layout_upgrade.run(private, apply=False)
         if prepare:
             if layout_plan["changed"] or layout_upgrade.pending(private):
+                if not recovery and selected is not None:
+                    raise ValueError("This Workspace has a pending layout change requiring verified recovery")
                 if not recovery:
                     recovery = snapshots.ensure(root, release["system_version"], layout_change=True)
                 layout_plan = layout_upgrade.run(private, apply=True)
@@ -741,6 +781,10 @@ def alignment(root, prepare=False, record=None, outcome=None, digest=None, note=
 
     if not prepare:
         return inspect(workspace.repo(root, "workspace"))
+    if storage.selected_workspace(root) is not None:
+        private = workspace.repo(root, "workspace")
+        with storage.writer_lock(private):
+            return inspect(private)
     # Resolve the private path after locking the outer checkout. A second client can
     # enter during the directory rename and must pick up the same private Git history.
     with storage.repository_lock(root):
@@ -756,7 +800,8 @@ def prepare_private_write(root):
     private = workspace.repo(root, "workspace")
     settings = workspace.settings(root, compatible=False)
     state = upgrades.read_state(private)[1]
-    if (private.name.casefold() != storage.STUDIO or studio_layout.moves(private) or any(settings[key] != value for key, value in workspace.release(root).items())
+    moving = storage.selected_workspace(root) is None and private.name.casefold() != storage.STUDIO
+    if (moving or studio_layout.moves(private) or any(settings[key] != value for key, value in workspace.release(root).items())
             or not layout_upgrade.complete(private) or layout_upgrade.pending(private)
             or not {upgrades.RULE, upgrades.STRUCTURE_RULE, upgrades.STUDIO_GUIDES} <= set(state) or conversion.pointer(private).exists()):
         alignment(root, prepare=True)
@@ -947,7 +992,9 @@ def build_parser():
     git.add_argument("role", choices=("system", "workspace"))
     git.add_argument("operation", choices=("status", "fetch", "pull", "push"))
     conversation.add_commands(commands)
-    red_team_eval.register(commands)
+    if (ROOT / "tools/red_team_eval.py").is_file() and not (ROOT / "oryx-release-manifest.json").exists():
+        import red_team_eval
+        red_team_eval.register(commands)
     return parser
 
 
@@ -1168,9 +1215,13 @@ def main() -> int:
             print(json.dumps(report, indent=2, ensure_ascii=False))
             return 0
         if args.command == "init-workspace":
-            workspace.initialise(ROOT, args.owner, args.delivery_system)
-            print("Initialised studio/ as a separate Git repository. No remote, commit, or push was created.")
-            print("Start a protected session with pm.py agent codex or pm.py agent claude. Your first request starts onboarding.")
+            private = workspace.initialise(ROOT, args.owner, args.delivery_system)
+            if storage.selected_workspace(ROOT) is None:
+                print("Initialised studio/ as a separate Git repository. No remote, commit, or push was created.")
+                print("Start a protected session with pm.py agent codex or pm.py agent claude. Your first request starts onboarding.")
+            else:
+                print(f"Selected Workspace {private}.")
+                print("Run bin/oryx onboarding status from this installation to review your first setup step.")
             return 0
         if args.command == "git":
             if args.operation == "push":
@@ -1215,7 +1266,7 @@ def main() -> int:
                     if company_onboarding.active(private, kind="pm"):
                         raise ValueError("Review and accept the proposed profile with pm-onboarding")
                     created = pm_profile.create(private, args.title)
-                print(f"Created {created.relative_to(ROOT)}.")
+                print(f"Created {created.relative_to(private) if not created.is_relative_to(ROOT) else created.relative_to(ROOT)}.")
                 return 0
             with storage.writer_lock(private):
                 if company_onboarding.product_capture_owns(private, args.path):
@@ -1239,7 +1290,7 @@ def main() -> int:
                     raise ValueError("Filing details apply to supporting context notes")
                 created = records.create(ROOT, args.kind, args.path, args.title, owner=settings["owner"], filing_contract=contract,
                                          product_parent=parent, initiative_id=initiative_id)
-            print(f"Created {created.relative_to(ROOT)} as a draft.")
+            print(f"Created {created.relative_to(private) if not created.is_relative_to(ROOT) else created.relative_to(ROOT)} as a draft.")
             return 0
         if args.command == "area-context":
             private = workspace.repo(ROOT, "workspace")
@@ -1278,7 +1329,7 @@ def main() -> int:
                 if fallback is not None:
                     metric_registry.day(fallback)
                 labels = ("current", "baseline") if payload.get("kind") in ("growth", "percentage_points") else ("current",)
-                private = workspace.optional_repo(ROOT) or ROOT / storage.STUDIO
+                private = workspace.optional_repo(ROOT) or workspace.private_root(ROOT)
                 definitions = {
                     label: metric_registry.effective(ROOT, private, payload.get("product"),
                                                      metric_checks.observation_day(payload.get(label), fallback)).get(key)
@@ -1298,7 +1349,7 @@ def main() -> int:
                     private = workspace.repo(ROOT, "workspace")
                 result = metric_registry.set_definition(ROOT, private, args.id, args.product, request, args.write)
             else:
-                private = workspace.optional_repo(ROOT) or ROOT / storage.STUDIO
+                private = workspace.optional_repo(ROOT) or workspace.private_root(ROOT)
                 result = metric_registry.effective(ROOT, private, args.product, args.as_of)
                 if args.operation == "show":
                     if args.id not in result:
@@ -1345,7 +1396,7 @@ def main() -> int:
                 raise onboarding.SetupRequired(setup)
             if args.write is not None:
                 settings = prepare_private_write(ROOT)
-            private = workspace.optional_repo(ROOT) or ROOT / storage.STUDIO
+            private = workspace.optional_repo(ROOT) or workspace.private_root(ROOT)
             entries = payload.get("entries") if isinstance(payload, dict) else None
             active_product = not setup and company_onboarding.entries_in_product_round(private, entries)
             if active_product and kind != "product":
@@ -1407,6 +1458,7 @@ def main() -> int:
             print(f"Updated {sync_skills()} Claude skill file(s).")
             return 0
         if args.command == "eval-red-team":
+            import red_team_eval
             return red_team_eval.run(args)
         if not args.system_only and workspace.private_root(ROOT).is_dir() and workspace.settings(ROOT, compatible=False)["workspace_format"] == 1:
             report = alignment(ROOT)

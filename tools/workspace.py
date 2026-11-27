@@ -3,6 +3,7 @@
 import json
 import os
 import sys
+import tempfile
 from pathlib import Path
 import re
 import subprocess
@@ -10,7 +11,7 @@ from urllib.parse import urlsplit
 
 import records
 import upgrades
-from storage import PRIVATE_PATHSPECS, STUDIO, private_root, rename_exclusive
+from storage import PRIVATE_PATHSPECS, STUDIO, private_root, rename_exclusive, selected_workspace
 
 
 def git(path, *args):
@@ -159,19 +160,53 @@ def read_settings(path):
 
 def initialise(root, owner="", delivery_system="Delivery workspace"):
     root = root.resolve()
+    selected = selected_workspace(root)
+    if selected is not None:
+        return initialise_selected(root, selected, owner, delivery_system)
     repo(root, "system")
     path = private_root(root)
     if path.exists() or path.is_symlink():
         raise ValueError("The private directory already exists; preserve it and inspect its repository before setup")
     require_studio_boundary(root)
     path.mkdir()
+    return seed(root, path, owner, delivery_system)
+
+
+def initialise_selected(root, path, owner, delivery_system):
+    from oryx.workspace.location import create_identity
+    if "PM_HUB_PROTECTED_ROOT" in os.environ:
+        raise ValueError("Create or select a Workspace from the PM terminal")
+
+    def existing():
+        confirmed = repo(root, "workspace")
+        metadata = settings(root)
+        if metadata["owner"] != owner or metadata["delivery_system"] != delivery_system:
+            raise ValueError("An existing Workspace has different setup settings")
+        return confirmed
+
+    if path.exists():
+        return existing()
+    with tempfile.TemporaryDirectory(dir=path.parent, prefix=".oryx-setup-") as scratch:
+        pending = Path(scratch) / "workspace"
+        pending.mkdir(mode=0o700)
+        seed(root, pending, owner, delivery_system, destination=path)
+        create_identity(pending)
+        try:
+            rename_exclusive(pending, path)
+        except FileExistsError:
+            return existing()
+    return existing()
+
+
+def seed(root, path, owner, delivery_system, destination=None):
     git(path, "init", "--initial-branch=main")
     metadata = dict(release(root), owner=owner, delivery_system=delivery_system,
                     remotes={"system": None, "workspace": None})
     (path / "settings.json").write_text(json.dumps(metadata, indent=2) + "\n", encoding="utf-8")
+    read_settings(path / "settings.json")
     seed = root / "tools/workspace-seed"
     sources = sorted(seed.rglob("*"))
-    copies = {source.resolve(): path / source.relative_to(seed)
+    copies = {source.resolve(): (destination or path) / source.relative_to(seed)
               for source in sources if source.is_file() and not source.is_symlink()}
     for source in sources:
         if source.is_symlink():
@@ -180,7 +215,7 @@ def initialise(root, owner="", delivery_system="Delivery workspace"):
             continue
         target = path / source.relative_to(seed)
         target.parent.mkdir(parents=True, exist_ok=True)
-        text = records.retarget_links(source.read_text(encoding="utf-8"), source, target, root, copies)
+        text = records.retarget_links(source.read_text(encoding="utf-8"), source, (destination or path) / source.relative_to(seed), root, copies)
         with target.open("x", encoding="utf-8") as output:
             output.write(text)
     (path / "customizations").mkdir(exist_ok=True)

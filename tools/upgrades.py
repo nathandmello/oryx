@@ -84,13 +84,13 @@ def review_path(private, name, *, markdown=True):
 
 
 def installed_seed(private, name):
-    seed = private.parent / "tools" / "workspace-seed"
+    seed = storage.core_for(private) / "tools" / "workspace-seed"
     source = seed / name
     if not source.is_file():
         # This starter was retired when working artifacts moved under workspace/.
         return ""
     copies = {path: private / path.relative_to(seed) for path in seed.rglob("*") if path.is_file()}
-    return records.retarget_links(source.read_text(encoding="utf-8"), source, private / name, private.parent, copies)
+    return records.retarget_links(source.read_text(encoding="utf-8"), source, private / name, storage.core_for(private), copies)
 
 
 def candidates(private, inventory, *, restored_layout=False, scan_guides=True):

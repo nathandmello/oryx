@@ -317,7 +317,7 @@ def needs_plan_review(private, doc):
     if not product_name or not (private / layout.initiative_register(product_name)).exists():
         return False
     try:
-        _, _, register = initiative_store.read(private.parent, product_name)
+        _, _, register = initiative_store.read(storage.core_for(private), product_name)
         for item in register.items.values():
             if initiative and item["id"].split("/", 1)[1] != initiative:
                 continue

@@ -47,8 +47,10 @@ def digest(value):
 
 def external_file(root, value, label):
     path = Path(value)
-    if not path.is_absolute() or path.resolve() != path or path.is_relative_to(root) or not path.is_file():
-        raise ValueError(f"{label} must be a regular file outside the oryx checkout")
+    selected = storage.selected_workspace(root)
+    if (not path.is_absolute() or path.resolve() != path or path.is_relative_to(root)
+            or selected is not None and path.is_relative_to(selected) or not path.is_file()):
+        raise ValueError(f"{label} must be a regular file outside Core and the selected Workspace")
     return path
 
 

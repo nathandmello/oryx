@@ -422,7 +422,7 @@ def dependent_moves(private, docs, moves):
 
 
 def known_seed(private, destination):
-    path = private.parent / "tools/workspace-seed" / destination
+    path = storage.core_for(private) / "tools/workspace-seed" / destination
     if path.is_file():
         return upgrades.installed_seed(private, destination)
     return None
@@ -548,7 +548,7 @@ def plan(private):
         migrated = writes[new]["text"]
         kind = records.MARKER.match(migrated)
         if kind and kind[1] in records.CONTEXT_KINDS:
-            template = private.parent / "templates" / f"{kind[1]}.md"
+            template = storage.core_for(private) / "templates" / f"{kind[1]}.md"
             if template.is_file() and records.structure_errors(
                 kind[1], migrated, records.heading_order(kind[1], template.read_text(encoding="utf-8"))
             ):

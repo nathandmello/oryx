@@ -15,6 +15,7 @@ import layout
 import metric_registry
 import outcome_evidence
 import records
+import storage
 from initiative_events import HORIZONS, IN_DEFINITION, PHASES, RATIONALE_MARK, decision_rationale, iso_date, text
 
 BACKLOG_FIELDS = {
@@ -261,7 +262,7 @@ def trace(product, register, identifier=None, *, private):
         "product": {"id": register.setup["references"]["product_id"], "path": register.setup["product_context"]},
     }
     files = {"register": layout.initiative_register(product)}
-    definitions = metric_registry.effective(private.parent, private, product)
+    definitions = metric_registry.effective(storage.core_for(private), private, product)
     current = {key: row for key, event in register.metrics.items()
                if (row := metric_registry.current_for_snapshot(definitions, event))}
     if identifier is None:

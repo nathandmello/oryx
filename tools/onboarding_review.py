@@ -242,7 +242,7 @@ def view(private, frameworks, state):
 
 
 def status(private):
-    return view(private, manifest(private.parent), read(private, for_status=True)[1])
+    return view(private, manifest(storage.core_for(private)), read(private, for_status=True)[1])
 
 
 def write(private, original, state):
@@ -280,7 +280,7 @@ def select_product(private, payload):
     with storage.writer_lock(private):
         original, state = read(private)
         check_response(payload, state)
-        frameworks = manifest(private.parent)
+        frameworks = manifest(storage.core_for(private))
         current = snapshot(frameworks, state)
         if current["stage"] not in {"product", "ready"} or frameworks["product"] is None:
             raise ValueError("Complete company and PM setup before choosing a product walkthrough")
@@ -332,7 +332,7 @@ def select_area(private, payload):
     with storage.writer_lock(private):
         original, state = read(private)
         check_response(payload, state)
-        frameworks = manifest(private.parent)
+        frameworks = manifest(storage.core_for(private))
         current = view(private, frameworks, state)
         if not current["ready"]:
             raise ValueError("Complete the parent product walkthrough before reviewing an area")
@@ -376,7 +376,7 @@ def review(private, payload):
     with storage.writer_lock(private):
         original, state = read(private)
         check_response(payload, state)
-        frameworks = manifest(private.parent)
+        frameworks = manifest(storage.core_for(private))
         current = view(private, frameworks, state)
         stage = current["stage"]
         if stage == "ready" or not current["stage_available"] or payload["stage"] != stage:

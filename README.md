@@ -28,10 +28,10 @@ The local browser app lets you present the roadmap, review priorities, and work 
 
 Install Git, Python 3.9 or later, and either Codex CLI or Claude Code. On Linux or WSL2, protected sessions need bubblewrap with working user namespaces. On macOS, they use `sandbox-exec`.
 
-1. Clone this repository using GitHub’s **Code** button and open a terminal in the checkout.
-2. Start a protected session with your preferred client.
+1. For the archive candidate, use the local CLI in [Install Core](playbook/installed-core.md). The steps below apply to source checkouts.
+2. Clone this repository. Open a terminal in the checkout and start your preferred client.
 
-   | Client | Run from the checkout |
+   | Client | Run from Core |
    | --- | --- |
    | Codex CLI | `python3 tools/pm.py agent codex` |
    | Claude Code | `python3 tools/pm.py agent claude` |
@@ -66,19 +66,19 @@ You can enable [private session transcripts](playbook/session-continuity.md) and
 
 ## Placement
 
-**Core** is the shared software. Your private workspace is a separate Git repository inside `studio/`. A protected session lets your agent edit private drafts and read the core software and your initiative approval receipts. Core updates and your work have separate Git histories.
+**Core** ships software. Your selected Workspace has its own Git history. A source checkout defaults to `studio/`. Paths below start at their owner.
 
 | Location | What lives there |
 | --- | --- |
-| `studio/context/` | Company, PM, stakeholder and product context, sources, and meeting notes |
-| `studio/workspace/` | Discovery briefs, experiments, planning comparisons, and launch work |
-| `studio/customizations/` | Your standing rules, templates, fields, and views |
-| `studio/README.md` · `studio/settings.json` | Your session handoff and local configuration |
+| `context/` | Company, PM, stakeholder and product context, sources, and meeting notes |
+| `workspace/` | Discovery briefs, experiments, planning comparisons, and launch work |
+| `customizations/` | Your standing rules, templates, fields, and views |
+| `README.md` · `settings.json` | Your session handoff and local configuration |
 | `playbook/` · `templates/` | Shared methods and starting points |
-| `tools/` · `tests/` | Commands, browser app, workspace setup, and checks |
-| `.agents/` · `.claude/` · `.codex/` · `.github/` | Agent skills, client configuration, and CI |
+| Core `bin/` · `tools/` | Commands, browser app, workspace setup, and checks |
+| Core `.agents/` · `.claude/` · `.codex/` | Agent skills and client configuration |
 
-To resume on another machine, run Step 0 and choose your existing private GitHub repository. [Filing guide](playbook/filing.md) · [Git and remotes](playbook/git.md) · [Updates and recovery](playbook/updates.md)
+In a source checkout, Step 0 can restore committed work from your private GitHub repository. [Filing guide](playbook/filing.md) · [Git and remotes](playbook/git.md) · [Updates and recovery](playbook/updates.md)
 
 For a walkthrough from a customer signal to a roadmap decision, start with the [worked example](playbook/opportunities.md#worked-example). For the rules that guide both agents, read the [project constitution](AGENTS.md).
 

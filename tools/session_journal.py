@@ -15,6 +15,7 @@ import time
 from uuid import uuid4
 
 import journal_native
+import storage
 
 
 _admission = ContextVar("oryx_journal_current_submission", default=None)
@@ -70,10 +71,10 @@ def _secure(path, *, directory):
         raise ValueError("Use private journal storage owned and accessible only by the current user")
 
 
-def _journal_home(*, exclude=None, provision=False):
+def _journal_home(*, exclude=(), provision=False):
     state = Path(os.environ.get("XDG_STATE_HOME") or Path.home() / ".local" / "state")
     base = state / "oryx" / "journals"
-    if (not state.is_absolute() or base.resolve() != base or (exclude is not None and base.is_relative_to(exclude))
+    if (not state.is_absolute() or base.resolve() != base or any(base.is_relative_to(path) for path in exclude)
             or any((p / ".git").is_file() or (p / ".git" / "HEAD").is_file() for p in (base, *base.parents))):
         raise ValueError("Place local continuity storage outside Git repositories and installation backups")
     if provision:
@@ -92,7 +93,7 @@ def read_only_mount(path):
 
 def protected_home(private):
     """Return a mask target, or prove the namespace is absent on a read-only mount."""
-    base = _journal_home(exclude=private.parent)
+    base = _journal_home(exclude=(storage.core_for(private), private))
     for directory in (base, *base.parents):
         try:
             info = directory.lstat()
@@ -104,7 +105,7 @@ def protected_home(private):
             return base
         if read_only_mount(directory):
             return None
-        return _journal_home(exclude=private.parent, provision=True)
+        return _journal_home(exclude=(storage.core_for(private), private), provision=True)
     raise ValueError("Cannot verify the local journal filesystem")
 
 
@@ -140,7 +141,7 @@ def _location(private, *, provision=False, require_recording=False):
     # A privacy-only store can remember explicit pauses on other filesystems. It cannot grant recording consent.
     instance = f":{identity.st_dev}:{identity.st_ino}:{birth or 'privacy-only'}"
     key = hashlib.sha256(os.fsencode(private) + instance.encode()).hexdigest()
-    folder = _journal_home(exclude=private.parent, provision=provision) / key
+    folder = _journal_home(exclude=(storage.core_for(private), private), provision=provision) / key
     if provision:
         folder.mkdir(mode=0o700, exist_ok=True)
     if os.path.lexists(folder):

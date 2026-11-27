@@ -16,7 +16,7 @@ Use `/pm DOMAIN SUBJECT VERB [arguments]`. Use the same arguments after the skil
 Enter a domain to see its subjects. Enter a domain and subject to see the available actions.
 Add `--help` to a complete command to see its purpose, example, and options.
 
-From the oryx checkout root, use `python3 tools/pm.py action` in place of `/pm`.
+From Core, run `python3 tools/pm.py action` in place of `/pm`. The [installed launcher](installed-core.md) also accepts `action`.
 Use `action --catalog` for the machine-readable catalog.
 Use `action --describe DOMAIN SUBJECT VERB` for one action's route and effect.
 

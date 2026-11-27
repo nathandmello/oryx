@@ -1,16 +1,20 @@
 """Guide and check oryx work through Codex and Claude hooks."""
 
-import json
 import errno
+import json
 import os
-
-import overrides
 from os.path import abspath
 from pathlib import Path
 import re
 import sys
 from uuid import uuid4
 
+# Installed generations are immutable, including when invoked via the legacy script path.
+if (Path(__file__).resolve().parents[1] / "oryx-release-manifest.json").is_file():
+    sys.dont_write_bytecode = True
+
+import storage
+import overrides
 import conversation
 import ingestion_signals
 import stakeholder_signals
@@ -226,7 +230,7 @@ def prompt_context(private, cwd, payload, *, client=None, off_record=False):
         if settings_request:
             try:
                 args = pm.build_parser().parse_args(["override", *settings_request])
-                persisted = overrides.run(private.parent, args, defer_reports=True)
+                persisted = overrides.run(storage.core_for(private), args, defer_reports=True)
                 if persisted.get("saved"):
                     guidance.append("The requested suggestion mute is saved. Confirm it briefly. A reason is optional. "
                                     "Run pm.py override sync only under the PM’s existing reporting consent.")

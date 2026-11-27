@@ -44,7 +44,10 @@ def github_target(root, private, create):
         raise ValueError("Enter a GitHub repository as owner/name")
     url = f"https://github.com/{name}.git"
     settings = workspace.settings(root, compatible=False) if private else None
-    system_urls = origin_urls(root)
+    checkout = os.path.lexists(root / ".git")
+    system_urls = origin_urls(root) if checkout or not storage.selected_workspace(root) else []
+    if not checkout and storage.selected_workspace(root):
+        system_urls.append("https://github.com/nathandmello/oryx.git")
     existing = origin_urls(private) if private else []
     if settings:
         system_urls.append(settings["remotes"]["system"])
@@ -78,13 +81,17 @@ CREDENTIAL = "credential.https://github.com.helper"
 
 
 def restore(root, url):
-    workspace.require_studio_boundary(root)
     target = workspace.private_root(root)
-    staging = root / ".state"
-    if staging.is_symlink():
-        raise ValueError("Workspace restore needs a local staging directory")
-    workspace.git(root, "check-ignore", "--", ".state/first-run")
-    staging.mkdir(mode=0o700, exist_ok=True)
+    selected = storage.selected_workspace(root)
+    if selected is not None:
+        staging = target.parent
+    else:
+        workspace.require_studio_boundary(root)
+        staging = root / ".state"
+        if staging.is_symlink():
+            raise ValueError("Workspace restore needs a local staging directory")
+        workspace.git(root, "check-ignore", "--", ".state/first-run")
+        staging.mkdir(mode=0o700, exist_ok=True)
     with tempfile.TemporaryDirectory(dir=staging) as temporary:
         checkout = Path(temporary) / "restore"
         subprocess.run(
@@ -95,6 +102,9 @@ def restore(root, url):
         if settings_file.is_symlink() or not settings_file.is_file():
             raise ValueError("The selected repository does not contain Oryx workspace settings")
         metadata = workspace.read_settings(settings_file)
+        if selected is not None:
+            from oryx.workspace.location import workspace_id
+            workspace_id(checkout)
         saved = metadata["remotes"]["workspace"]
         if saved and git_ops.identity(saved) != git_ops.identity(url):
             raise ValueError("The remote workspace records a different sync destination")
@@ -143,9 +153,10 @@ def prepare(root, *, explicit=False):
         return
     if not sys.stdin.isatty():
         raise ValueError("Run pm.py agent in a terminal for Step 0, or initialise the workspace first")
-    workspace.repo(root, "system")
-    if not exists:
-        workspace.require_studio_boundary(root)
+    if storage.selected_workspace(root) is None:
+        workspace.repo(root, "system")
+        if not exists:
+            workspace.require_studio_boundary(root)
     private = workspace.repo(root, "workspace") if exists else None
     print("Step 0 — Set up your workspace")
     print("Sign in to your client if prompted. Review and trust the Oryx project hooks when prompted.")

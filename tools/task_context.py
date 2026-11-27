@@ -738,7 +738,7 @@ def resolve_current(private, prompt, cwd, previous, explicit, explain, include_h
         except ValueError as exc:
             result.update(status="ambiguous", scope={}, warnings=[str(exc)])
             return result
-    metrics = metric_registry.effective(private.parent, private, scope.get("product"), through.isoformat())
+    metrics = metric_registry.effective(storage.core_for(private), private, scope.get("product"), through.isoformat())
     for key in sorted(metric_registry.qualified_ids(prompt) - metrics.keys()):
         result["warnings"].append(f"No approved definition of {key} exists for this scope on {through.isoformat()}.")
     if not scope:
@@ -765,7 +765,7 @@ def resolve_current(private, prompt, cwd, previous, explicit, explain, include_h
     if product and (private / layout.initiative_register(product)).is_file():
         import initiative_store
         try:
-            _, _, register = initiative_store.read(private.parent, product)
+            _, _, register = initiative_store.read(storage.core_for(private), product)
             import initiative_views
             for item in register.items.values():
                 item_slug = item["id"].split("/", 1)[1]

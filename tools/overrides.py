@@ -113,7 +113,7 @@ def resolve_layers(core, company, personal):
 
 
 def workflow_snapshot(private, state):
-    root = private.parent
+    root = storage.core_for(private)
     bundle, problem = company_source.inspection(root)
     if problem:
         return resolve_layers({}, {}, state["rules"]), problem
@@ -174,10 +174,10 @@ def covered_rules(core, company, personal):
 
 def reconcile(private, release, apply):
     original, state = read(private)
-    bundle, problem = company_source.inspection(private.parent)
+    bundle, problem = company_source.inspection(storage.core_for(private))
     if problem:
         return []
-    core = defaults(private.parent)
+    core = defaults(storage.core_for(private))
     covered = covered_rules(core, bundle["rules"] if bundle else {}, state["rules"])
     if apply and covered:
         for key in covered:

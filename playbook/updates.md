@@ -1,6 +1,6 @@
 # Updating oryx
 
-Private format 2 applies.
+Archives use [Core recovery](installed-core.md). Checkout instructions cover private format 2.
 
 | Release | Change |
 | --- | --- |
@@ -16,7 +16,7 @@ Private format 2 applies.
 | 0.6.1 | Requires [browser impact evidence](local-ui.md#review-workflow-changes) for changes to roadmap, task, and launch checklist workflows. |
 | 0.6.0 | Opens [roadmaps, PM tasks, and launch checklists](local-ui.md) in a local browser. The app reads and updates existing private records. |
 | 0.5.0 | Adds [oryx commands](commands.md) and optional [reply preferences](working.md#reply-preferences). Existing profiles use oryx defaults. |
-| 0.4.2 | Automates [publication](publication.md). |
+| 0.4.2 | Automates publication of the software release. |
 
 Release 0.4.1 adds [initiative tasks and launch checklists](initiative-work.md) on demand.
 

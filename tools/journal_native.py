@@ -8,6 +8,8 @@ from pathlib import Path
 import re
 import stat
 
+import storage
+
 # A recovery can give up. It must never import a native history or save raw records.
 MAX_SCAN = 8 * 1024 * 1024
 MAX_LINE = 1024 * 1024
@@ -64,7 +66,10 @@ def _time(value):
 
 
 def _cwd(private, value):
-    return isinstance(value, str) and Path(value).is_absolute() and Path(value).resolve().is_relative_to(private.parent)
+    if not isinstance(value, str) or not Path(value).is_absolute():
+        return False
+    cwd = Path(value).resolve()
+    return cwd.is_relative_to(private) or cwd.is_relative_to(storage.core_for(private))
 
 
 def _claude_user(row):
@@ -91,7 +96,7 @@ def checkpoint(private, client, session, payload, now):
     """Keep the native inode and current end position only when this client identifies it."""
     try:
         path = _path(client, session, payload.get("transcript_path"))
-        if path is None or path.is_relative_to(private.parent):
+        if path is None or _cwd(private, str(path)):
             return None
         if client == "claude" and not os.path.lexists(path):
             # Claude can supply its future session filename before creating the first transcript.
@@ -204,7 +209,7 @@ def recover(private, client, session, cursor, prompt, turn_id, submitted_at):
         if not cursor:
             return None
         path = _path(client, session, cursor["path"])
-        if path is None or path.is_relative_to(private.parent):
+        if path is None or _cwd(private, str(path)):
             return None
         with _open(path) as (stream, info):
             offset = cursor["offset"]
