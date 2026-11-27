@@ -31,6 +31,7 @@ def candidate_version(base, head):
 def needs_native(paths):
     # Diff both sides of renames so moving a platform-sensitive file still runs macOS.
     patterns = (
+        "bin/oryx", "src/oryx/*.py",
         ".github/workflows/*", ".codex/*", ".claude/hooks/*", ".claude/settings.json",
         "playbook/workspace-format.json", "tools/workspace-seed/*", "tools/conversion.py",
         "tools/context_*.py", "tools/task_context.py", "tools/search_model/*", "tests/test_context_search.py",

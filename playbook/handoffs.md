@@ -45,7 +45,10 @@ Send this example to `pm.py handoff preview` on standard input. Add the reviewed
 ```
 
 Show the preview to the PM. Pass the entire preview as `review` and their confirmation as `approved: true` to `pm.py handoff save`.
-Studio keeps these checkpoints in `workspace/handoffs/index.json`. Revisions protect updates from concurrent edits.
+In an installed Workspace, approve the [staged change](external-review.md) in the PM terminal.
+
+Fresh Workspaces keep handoffs in `.oryx/state/handoffs/index.json`. Older Workspaces use `workspace/handoffs/index.json`. Revisions protect concurrent edits.
+
 For an update, include the current `id` and `base_revision` in the preview. The PM approves the new text.
 
 Start the real client from another terminal with `python3 tools/pm.py agent codex` or `python3 tools/pm.py agent claude`.

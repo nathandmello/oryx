@@ -47,7 +47,7 @@ Read the owning record, its checkpoint, and applicable parent rules. Check sourc
 
 Use [local semantic search](context-search.md) for each task and material scope or evidence change.
 Run `pm.py task-context "TASK"` if hooks are unavailable. Use `--product`, `--area`, or `--initiative` when scope is known.
-Add `--work-record workspace/problems/export.md` to read the checkpoint and effective mode. Use the resolved reply preferences.
+Use the actual record path, such as `--work-record problems/export.md` on a fresh Workspace. Use the resolved reply preferences.
 Use [the numerical evidence procedure](numbers.md) before relying on material figures from any source.
 
 Check [setup](company-context.md) before PM work. Run `pm.py onboarding status` yourself when hooks are disabled.

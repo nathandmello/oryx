@@ -16,7 +16,7 @@ Use `/pm DOMAIN SUBJECT VERB [arguments]`. Use the same arguments after the skil
 Enter a domain to see its subjects. Enter a domain and subject to see the available actions.
 Add `--help` to a complete command to see its purpose, example, and options.
 
-From the oryx checkout root, use `python3 tools/pm.py action` in place of `/pm`.
+From Core, run `python3 tools/pm.py action` in place of `/pm`. The [installed launcher](installed-core.md) also accepts `action`.
 Use `action --catalog` for the machine-readable catalog.
 Use `action --describe DOMAIN SUBJECT VERB` for one action's route and effect.
 
@@ -101,3 +101,5 @@ python3 tools/pm.py check --system-only --command-base "$BASE_SHA"
 GitHub CI compares the proposed merge tree with the pull request base.
 Published paths and aliases must resolve with the same effect. Published CLI examples must still parse.
 Use a new path for a different effect. Keep the existing path available with its published behavior.
+
+[Resume guided work](guided-work.md) explains how to reopen a checked workflow step in either client.

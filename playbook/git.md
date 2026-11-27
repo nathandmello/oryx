@@ -1,6 +1,6 @@
 # Git and GitHub operations
 
-The outer checkout is the shared system repository. `studio/` is an independent Git repository, ignored by the system.
+See [installed Core](installed-core.md) for archives. System Git needs a checkout.
 
 Keep each repository's history, branches, staging area, and remotes separate. Open a [protected PM session](overrides.md) for workspace work. Run system updates from your terminal.
 
@@ -21,13 +21,13 @@ For mixed changes, keep commits separate. Authorisation for one target does not 
 
 ## Inspect and save
 
-Run `python3 tools/pm.py git workspace status` and `python3 tools/pm.py git system status` before a save or synchronisation.
+Check `oryx action workspace git status` before saving or syncing. Checkouts also use `python3 tools/pm.py git system status`.
 
-Read `studio/settings.json`. Verify the actual Git root, branch, changed files, staged changes, and fetch and push URLs.
+Read the selected Workspace’s `settings.json`. Verify its Git root, branch, working and staged changes, and both remote URLs.
 
-Stage explicit paths with `git -C studio add -- <paths>` for PM work. Use the outer root for system changes.
+Stage named paths with `git -C "$ORYX_WORKSPACE" add -- <paths>`. Checkouts default to `studio/` for PM work. Core changes use the outer root.
 
-Review the staged diff, then commit in that same repository. Preserve unrelated edits. Run the relevant checks before a commit.
+Review the staged diff and run relevant checks. Commit in that repository. Preserve unrelated edits.
 
 An instruction to commit authorises that commit. A push or sync instruction authorises its stated remote operation; retain other session limits.
 
@@ -51,11 +51,11 @@ Shared pull requests use system contribution branches. Private PM work remains i
 
 ## Pull and push
 
-Use `python3 tools/pm.py git <system|workspace> <fetch|pull|push>` for normal network operations.
+Use `oryx action workspace git <fetch|pull|push>` when installed. Checkouts use `python3 tools/pm.py git <system|workspace> <fetch|pull|push>`.
 
-The wrapper verifies the repository, settings, origin, and tracking branch. Preserve local changes before synchronising.
+The wrapper verifies repository settings, origin and tracking branch. Preserve local changes.
 
-Push sends the current branch to the same branch on the confirmed origin. It does not push tags or other branches.
+Push sends the current branch under the same name. Tags stay local. Before first sharing from installed Core on GitHub, review the audience, destination, branch and historical files, including deletions. Confirm in the PM terminal.
 
 Pull permits a fast-forward. Keep divergent histories for reconciliation. See [the two-machine upgrade procedure](updates.md#using-two-machines).
 
@@ -122,4 +122,4 @@ Merging to the default branch makes changes available to consumers who pull it. 
 | Merge | The agent may merge the exact reviewed SHA when both reviews and required CI pass. Respect repository protections. |
 | Publication | An authorised merge starts publication. Verify the tested tree and publish the version in the merged commit. |
 
-Require `check` and `review` before merging. Follow [release setup and recovery](publication.md).
+Require `check` and `review` before merging. Maintainers follow their checkout’s publication procedure.

@@ -39,6 +39,10 @@ INPUT_FILES = (
     "tools/pm.py",
     "tools/records.py",
     "tools/red_team_eval.py",
+    "src/oryx/cli/command.py",
+    "src/oryx/adapters/host_hooks.py",
+    "src/oryx/workspace/records.py",
+    "src/oryx/capabilities/context_capture.py",
 )
 MINIMUM_PERCENT = 85
 

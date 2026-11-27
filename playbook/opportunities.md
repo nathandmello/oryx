@@ -54,7 +54,7 @@ The PM can reassess an initiative under consideration. Each approved evaluation 
 
 Recording a success target creates one editable JSON draft when that metric has no experiment on the initiative.
 The filename is `experiment.<metric-id>.draft.json`. Find its path and missing fields with `initiative show`.
-The draft lives in `workspace/experiments/<product>/<initiative>/` inside the private repository. It references the metric definition and initiative target by ID.
+Find drafts in `experiments/<product>/<initiative>/` in a fresh Workspace. Older Workspaces keep this folder under `workspace/`. It references the metric definition and initiative target by ID.
 
 Start earlier with just a registered initiative and product metric:
 

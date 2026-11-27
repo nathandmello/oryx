@@ -4,6 +4,8 @@ Create only the artifact needed for the current work. Templates guide thought; t
 
 ## Available templates
 
+The table uses fresh Workspace paths. Older Workspaces keep work folders under `workspace/`.
+
 | Template | Purpose | Home |
 | --- | --- | --- |
 | [Company context](company-context.md) | Customer value, economics, portfolio, growth, competitive advantage, and strategic trade-offs | `context/company/overview.md` |
@@ -12,15 +14,15 @@ Create only the artifact needed for the current work. Templates guide thought; t
 | [Product area context](product-area-context.md) | Standing area boundaries, users, rules, goals, and decisions | `context/products/<product>/<group>/<area>/overview.md` |
 | [Initiative context](initiative-context.md) | Outcome, affected workflow, dependencies, and decisions for recurring initiative work | `context/products/<product>/initiatives/<initiative>/overview.md` |
 | [Context note](context-note.md) | Supporting detail that passes [the filing test](../playbook/filing.md) | One topic level under the owning context entity, when the filing rule permits it |
-| [Goal](goal.md) | The five outcome components and their alignment | `workspace/goals/` |
-| [Problem](problem.md) | Customer problem, evidence, knowledge audit, and research | `workspace/problems/` |
-| [Strategy](strategy.md) | Why, Who, What, When, and How | `workspace/strategies/` |
-| [Experiment](experiment.md) | Hypothesis, test, measure, criterion, and result | `workspace/experiments/` |
-| [Discovery Brief](discovery-brief.md) | Timebox, learning goals, evidence, and conclusion | `workspace/initiatives/<product>/<initiative>/discovery-brief.md` |
-| [Initiative Brief](initiative-brief.md) | Investment case, scope, launch, and success measures | `workspace/initiatives/<product>/<initiative>/initiative-brief.md` |
-| [Launch checklist](launch-checklist.json) | Starter checkpoints for launch readiness and follow-through | `workspace/initiatives/<product>/<initiative>/launch-checklist.json` |
-| [Prioritization](prioritization.md) | Comparison of approved candidates for a planning cycle | `workspace/roadmaps/<product>/<cycle>.md` |
-| [Roadmap](roadmap.md) | Narrative roadmap for work outside the initiative register | `workspace/roadmaps/` |
+| [Goal](goal.md) | The five outcome components and their alignment | `goals/` |
+| [Problem](problem.md) | Customer problem, evidence, knowledge audit, and research | `problems/` |
+| [Strategy](strategy.md) | Why, Who, What, When, and How | `strategies/` |
+| [Experiment](experiment.md) | Hypothesis, test, measure, criterion, and result | `experiments/` |
+| [Discovery Brief](discovery-brief.md) | Timebox, learning goals, evidence, and conclusion | `initiatives/<product>/<initiative>/discovery-brief.md` |
+| [Initiative Brief](initiative-brief.md) | Investment case, scope, launch, and success measures | `initiatives/<product>/<initiative>/initiative-brief.md` |
+| [Launch checklist](launch-checklist.json) | Starter checkpoints for launch readiness and follow-through | `initiatives/<product>/<initiative>/launch-checklist.json` |
+| [Prioritization](prioritization.md) | Comparison of approved candidates for a planning cycle | `roadmaps/<product>/<cycle>.md` |
+| [Roadmap](roadmap.md) | Narrative roadmap for work outside the initiative register | `roadmaps/` |
 
 The [PM walkthrough](../playbook/pm-context.md) helps you build your profile in `context/pm/context.md`. You can also write it yourself.
 
@@ -31,7 +33,7 @@ For other working plans, use Scope, Evidence, and Next action in that order. Sta
 
 ## Create a draft
 
-Run `pm.py new` from the oryx root. Destination paths are relative to `studio/`. New drafts include applicable [Studio and product template changes](../playbook/customization.md).
+In an installation, run `oryx new problem problems/example-onboarding.md`. Use the selected Workspace’s paths. Drafts include applicable [template changes](../playbook/customization.md). The examples below use a source checkout with its default Studio.
 
 ```sh
 python3 tools/pm.py new problem workspace/problems/example-onboarding.md --title "Example problem"

@@ -342,7 +342,10 @@ function editRoadmapFields(row, view) {
       const values = Object.fromEntries(Array.from(readers, ([key, read]) => [key, read()]).filter(([key, value]) =>
         JSON.stringify(value) !== JSON.stringify(row[key] ?? null) && !(row[key] == null && Array.isArray(value) && !value.length)));
       if (Object.keys(values).length) {
-        await api("roadmap-fields", { product: row.product, id: row.id, revision: view.revision, values });
+        const result = await api("roadmap-fields", { product: row.product, id: row.id, revision: view.revision, values });
+        if (["staged", "pending"].includes(result.state)) {
+          alert("Staged for PM review. Run oryx review decide " + result.id + " in the PM terminal, then refresh.");
+        }
       }
       dialog.close();
       await loadBoard();
@@ -740,6 +743,10 @@ function workRequest(command, scope, operation, extra = {}) {
 }
 
 function commitWork(result, message) {
+  if (["staged", "pending"].includes(result.state)) {
+    alert("Staged for PM review. Run oryx review decide " + result.id + " in the PM terminal, then refresh.");
+    return;
+  }
   state.list = result;
   render();
   alert(message);
@@ -947,11 +954,14 @@ function setupScreen() {
   } else if (!current.stage_available) {
     handoff = "You can keep your existing context up to date in your oryx conversation.";
   }
+  const terminalCommand = { company: "oryx action context company capture", pm: "oryx action context pm capture",
+    product: "oryx action context product capture" }[current.stage] || "oryx onboarding status";
   app.append(heading("Continue onboarding", `You can return to ${screenNames[state.screen]} after the walkthrough.`),
     node("section", { class: "panel stack" },
       node("h2", {}, stage || "Your walkthrough"),
       node("p", {}, current.prompt),
       node("p", {}, handoff),
+      node("p", {}, "Open the current step in your terminal with ", node("code", {}, terminalCommand), "."),
       actions(button("Check progress", event => attempt(event, openWorkspace)))));
 }
 

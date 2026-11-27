@@ -138,6 +138,15 @@ Verified fresh setup and rollback.
 ## Verification limits
 Desktop sessions were outside this fixture.
 """}
+        self.harness = "e" * 40
+        self.trust = patch.dict(os.environ, ORYX_QUALIFICATION_APP_ID="321", ORYX_QUALIFICATION_COMMIT=self.harness)
+        self.trust.start()
+        self.addCleanup(self.trust.stop)
+        self.receipt = {"schema": "oryx-qualified-archive/1", "commit": self.head, "tree": "tree",
+                        "harness_commit": self.harness, "archive_sha256": "c" * 64, "report_sha256": "d" * 64,
+                        "components": {k: {"passed": 2, "required": 2} for k in release_review.COMPONENT_TYPES}}
+        self.archive_check = {"name": release_review.QUALIFICATION_CHECK, "head_sha": self.head,
+                              "app": {"id": 321}, "status": "completed", "conclusion": "success"}
         self.state = {key: {"commit_sha": self.head, "status": "completed", "has_unresolved_findings": False}
                       for key in ("code_review", "security_review")}
         self.bot = {"id": 199175422, "login": "chatgpt-codex-connector[bot]"}
@@ -149,6 +158,9 @@ Desktop sessions were outside this fixture.
         if path.startswith("issues/9/comments?"):
             body = "<!-- codex-pull-request-review-summary -->\n<!-- codex-review-state:v1 " + json.dumps(self.state) + " -->"
             return [{"user": self.bot, "id": 1, "updated_at": "2026-11-19T12:00:00Z", "body": body}]
+        if "check_name=Oryx+archive+qualification" in path:
+            check = dict(self.archive_check, output={"summary": json.dumps(self.receipt)})
+            return {"total_count": 1, "check_runs": [check]}
         if "/check-runs?" in path:
             return {"total_count": 0, "check_runs": []}
         if path.startswith("actions/workflows/review.yml/"):
@@ -175,6 +187,7 @@ Desktop sessions were outside this fixture.
         cases = (
             ([unrelated], "", None),
             ([tasks], "", "Browser impact section"),
+            ([{"filename": "src/oryx/adapters/browser.py", "additions": 1}], "", "Browser impact section"),
             ([tasks], "## Browser impact\nUnchanged:", "explain the result"),
             ([tasks], unchanged, None),
             ([tasks], changed, "Playwright scenario"),
@@ -190,6 +203,22 @@ Desktop sessions were outside this fixture.
                         release_review.browser_impact(pr, self.api)
                 else:
                     release_review.browser_impact(pr, self.api)
+
+    def test_qualification_requires_the_external_app_exact_build_and_an_affirmative_complete_matrix(self):
+        self.gate()
+        for key, value in (("app", {"id": 322}), ("head_sha", "f" * 40), ("conclusion", "skipped"),
+                           ("status", "in_progress"), ("conclusion", "neutral"), ("conclusion", "cancelled")):
+            with self.subTest(key=key, value=value), patch.dict(self.archive_check, {key: value}), self.assertRaises(ValueError):
+                self.gate()
+        for key, value in (("tree", "other"), ("commit", self.merge), ("harness_commit", "old"),
+                           ("archive_sha256", "unbound"), ("report_sha256", None), ("components", {})):
+            with self.subTest(key=key), patch.dict(self.receipt, {key: value}), self.assertRaises(ValueError):
+                self.gate()
+        for counts in ({"required": 1, "passed": 0}, {"required": 0, "passed": 0}, {"required": True, "passed": True}):
+            with patch.dict(self.receipt["components"], {"skills": counts}), self.assertRaises(ValueError):
+                self.gate()
+        with patch.dict(os.environ, ORYX_QUALIFICATION_APP_ID=""), self.assertRaises(ValueError):
+            self.gate()
 
     def test_browser_impact_checks_all_pages_and_previous_paths(self):
         self.responses["pulls/9/files?per_page=100&page=1"] = [

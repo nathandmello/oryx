@@ -19,14 +19,14 @@ The [manifest](meeting_cases.json) records prompts, URLs, content hashes, and th
 
 1. From the oryx root, prepare a new directory outside the checkout. The harness copies the shared Hub and omits eval files.
 2. Start an agent with fresh conversation context in the generated `hub/`. Supply the text of `prompt.txt` as its request.
-3. Give the agent access to its own Hub, the supplied input, and the public connector required by the request.
+3. Give the agent access to its own Hub, the supplied input, and an authorized reader for the requested public source.
 4. Keep other runs, evaluation criteria, and prior replies outside the agent's inputs. Save its final reply beside `prompt.txt`.
 5. Run the file checks. Give a separate reviewer the output, source, and [rubric](meeting_rubric.json).
 6. Score each criterion as pass, partial, or fail. Cite the source passage and the agent's claim. Flag other material errors separately.
 
 Use the Hub's normal session-start hook. For an agent runner without hook support, deliver its generated startup context to the fresh session.
 
-For URL retrieval, inspect the tool history. Verify the agent called the available provider connector or reported a concrete fallback reason.
+For URL retrieval, inspect the tool history. Verify the agent used an available authorized reader for the confirmed source or reported the missing capability.
 
 ```sh
 python3 tests/evals/meeting_transcripts.py prepare product /tmp/meeting-product

@@ -84,7 +84,7 @@ Edit values in a customized browser view or send `values` alongside a configurat
 Use null to clear a value. Hiding, relabelling, or reordering a column preserves its values.
 Clear or convert incompatible data explicitly when changing a field type. Apply related edits together.
 
-Settings and values share one atomic private file, `studio/customizations/settings.json`.
+Settings and values share `settings.json` in the Workspace’s [customization folder](../README.md#placement).
 Custom fields travel with their initiative across cycles. The PM reviews planning decisions through the usual approval workflow.
 Put the figures behind a decision in its approved comparison when you need their historical values.
 
@@ -99,7 +99,7 @@ JSON, CSV, and Markdown exports use the selected columns. Edit priorities opens 
 
 ## Bespoke interfaces
 
-For a custom standalone interface, save HTML in `studio/customizations/views/<name>.html`.
+For a custom standalone interface, save HTML under `views/<name>.html` in that customization folder.
 Include one `<!-- pm:roadmap-data -->` marker. Set the view's `page` to that name.
 
 Export with `python3 tools/pm.py roadmap --view review --format html`. Save the output in the private workspace.

@@ -5,7 +5,7 @@ description: Explain oryx updates, audit installed artifacts, and give the user 
 
 # Review an oryx update
 
-Use [the installed-workspace procedure](../../../playbook/updates.md). Keep the compatibility alignment and the user's artifact decisions distinct.
+Use [archive recovery](../../../playbook/installed-core.md) for signed installations. Use [checkout updates](../../../playbook/updates.md) for source checkouts. Keep the compatibility alignment and the user's artifact decisions distinct.
 
 ## Explain and audit
 

@@ -1024,6 +1024,42 @@ class InitiativeTests(unittest.TestCase):
         self.preview(self.plan(), error="new comparison for the current Initiative Brief")
         self.assertEqual(self.trace()["initiative"]["phase"], "candidate")
 
+    def test_approved_comparison_recovers_with_its_register(self):
+        self.submit(self.setup_event(), self.capture(), self.describe(), self.metric(), self.target())
+        self.submit(self.decision("evaluate"), self.decision("prepare-brief"))
+        self.brief_ready()
+        self.submit(self.decision("approve-initiative"))
+        cycle = self.cycle()
+        comparison = self.work / self.planning
+        text = comparison.read_text(encoding="utf-8")
+        comparison.unlink()
+        store = pm.initiative_store
+        changes = [cycle, self.plan()]
+        proposal, _, _, _ = store.prepare(
+            self.root, "example", changes, comparison_drafts={self.planning: text})
+        self.assertFalse(comparison.exists())
+        replace = store.storage.replace_text
+
+        def interrupted(target, *args, **kwargs):
+            if target == comparison:
+                raise OSError("Interrupted comparison before publication")
+            return replace(target, *args, **kwargs)
+
+        with patch.object(store.storage, "replace_text", interrupted):
+            with self.assertRaisesRegex(ValueError, "Interrupted comparison"):
+                store.apply(self.root, "example", proposal, approved_revision=proposal["revision"],
+                            comparison=(comparison, None, text))
+        self.assertFalse(comparison.exists())
+        comparison.write_text("Intervening PM edit\n")
+        self.cli("initiative", "recover", "example", error="comparison changed")
+        self.assertEqual(comparison.read_text(), "Intervening PM edit\n")
+        comparison.unlink()
+        self.cli("initiative", "recover", "example")
+        self.assertEqual(comparison.read_text(), text)
+        self.assertEqual(len(json.loads(self.cli("roadmap", "--cycle", "quarter-two"))), 1)
+        self.cli("initiative", "recover", "example")
+        self.assertEqual(comparison.read_text(), text)
+
     def test_replay_prior_signed_cycle_with_a_narrative_comparison(self):
         self.submit(self.setup_event(), self.capture())
         cycle = self.cycle()

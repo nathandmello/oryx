@@ -4,3 +4,7 @@ __pycache__/
 .env.*
 secrets/
 .state/
+
+/.oryx/staging/
+/.oryx/state/review/
+/.oryx/cache/

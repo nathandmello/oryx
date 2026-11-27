@@ -23,15 +23,11 @@ For a summary-only request with a supplied transcript, start with retrieval.
 
 ## Retrieve transcripts
 
-- Read supplied files directly. For remote sources, discover which connected tools can search, read transcripts, or open files.
-- Use calendar, mail, or chat connectors to locate events, transcript attachments, and links within scope.
-- Follow each link through the connector for the service holding the transcript. Check its read or export capabilities.
-- Use any authorized connector that returns the transcript text. This includes meeting platforms, document stores, and recording services.
-- For a GitHub file link, call the GitHub `fetch_file` tool with its repository, revision, and path. Read large files in ranges.
-- Reuse the connector response for parsing, quotations, and router input. Fetch missing ranges through the same connector.
-- If a connector fails, use an authorized reader for the same confirmed source. Report the connector limitation.
-- For ChatGPT Record, find the meeting-notes Page with `find_pages`. Use `read_page_transcript` with its Page ID.
-- For Notion AI Meeting Notes, use `query_meeting_notes` to find meetings. Fetch the matched page with `include_transcript: true`.
+- Read supplied files directly. For remote sources, inspect the tools available in the current agent session.
+- Choose an authorized search tool to find the event, transcript attachment, or source link.
+- Use an available reader that can return the confirmed transcript, its revision, and the requested range.
+- Reuse the returned passage for parsing, quotations, and routing. Fetch missing ranges from the same confirmed revision.
+- If a reader fails, try another available tool with authorized access to the same source. Report any coverage gap.
 - Follow search and transcript continuations until exhausted where available. Read each transcript in full before claiming complete coverage.
 - Keep timestamps, speaker labels, and segment order. Rejoin split utterances before quoting them.
 - Record coverage as `read`, `partial`, or `unavailable`. Treat preliminary transcripts, truncated text, and excerpts as partial.

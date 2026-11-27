@@ -95,7 +95,7 @@ Approval records the exact reviewed briefs and planning comparison. Keep later n
 
 Oryx rechecks the Initiative Brief at selection and delivery start. Reopen weak briefs for review.
 
-Update all clients before the first new approval. Sync and back up the register with its receipt at `studio/.oryx-approvals/<product>.json`.
+Update all clients before the first new approval. Sync and back up the register with its receipt at `.oryx-approvals/<product>.json` under the selected Workspace root.
 After an interrupted save, retry the approved proposal. If it is unavailable, run `python3 tools/pm.py initiative recover PRODUCT` in your terminal.
 Recovery applies the recorded approval only when the register matches its expected revision. [Updates and recovery](updates.md)
 
@@ -110,7 +110,7 @@ Alignment pauses on that prototype. Use its original checkout at `02a62b6`. If t
 
 ## Two local POSIX accounts
 
-For a separate agent account, set `PM_HUB_SHARED_GROUP` to the dedicated group in both accounts. New files otherwise allow only owner access.
+For a separate agent account in a source checkout, set `PM_HUB_SHARED_GROUP` to the dedicated group in both accounts. New files otherwise allow only owner access.
 Use a local filesystem that supports exclusive locks on read-only descriptors.
 
 | Existing location | PM provisions | Access for the group |

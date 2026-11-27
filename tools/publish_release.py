@@ -78,12 +78,12 @@ def select_candidate(event, ref, sha, api):
         raise ValueError("The release must be in the default branch's first-parent history")
     if "inputs" not in event and merge != sha:
         raise ValueError("The merged PR changed after the push")
-    publication(pr, branch, merge, api)
+    qualification = publication(pr, branch, merge, api)
     before = event.get("before")
     base = release_base(pr, merge, before, api)
     if "inputs" not in event and base != before:
         raise ValueError("The pushed range does not match the merged PR")
-    return pr, merge, candidate_version(base, merge)
+    return pr, merge, candidate_version(base, merge), qualification
 
 
 def release_notes(pr):
@@ -129,16 +129,24 @@ def create_release(tag, notes):
         raise ValueError(error or "GitHub Release creation failed")
 
 
-def publish(pr, sha, version, api=github, create=create_release):
+def publish(pr, sha, version, api=github, create=create_release, *, qualification=None):
     tag = "v" + version
     ensure_tag(tag, sha, api)
     path = "releases/tags/" + tag
     release = optional(api, path)
     if release is None:
-        create(tag, release_notes(pr))
+        notes = release_notes(pr)
+        if qualification is not None:
+            notes += "\n\nQualified archive SHA-256: " + qualification["archive_sha256"]
+        create(tag, notes)
         release = api(path)
     if release["tag_name"] != tag or release["draft"] or release["prerelease"]:
         raise ValueError("The release must be a published stable release for " + tag)
+
+    if qualification is not None:
+        digests = re.findall(r"^Qualified archive SHA-256: ([0-9a-f]{64})[ \t]*$", release["body"], re.M)
+        if digests != [qualification["archive_sha256"]]:
+            raise ValueError("Release notes do not identify the independently qualified archive")
 
     # All publishers share a queue. An older retry can finish after a newer release.
     versions = {}
@@ -182,8 +190,8 @@ def retry_publication(operation, sleep=time.sleep):
 def main():
     event = json.loads(Path(os.environ["GITHUB_EVENT_PATH"]).read_text())
     def release():
-        pr, sha, version = select_candidate(event, os.environ["GITHUB_REF"], os.environ["GITHUB_SHA"], github)
-        return pr, sha, version, publish(pr, sha, version)
+        pr, sha, version, qualification = select_candidate(event, os.environ["GITHUB_REF"], os.environ["GITHUB_SHA"], github)
+        return pr, sha, version, publish(pr, sha, version, qualification=qualification)
     pr, sha, version, url = retry_publication(release)
     with Path(os.environ["GITHUB_STEP_SUMMARY"]).open("a") as summary:
         print(f"Published [v{version}]({url}) from PR #{pr['number']} at `{sha}`.", file=summary)
