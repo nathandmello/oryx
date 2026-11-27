@@ -1,6 +1,7 @@
 """Manage guided work through a selected Workspace and reviewed, scoped handoff."""
 
 import json
+import sys
 from . import checkpoints
 
 
@@ -20,6 +21,8 @@ def register(commands):
     show = actions.add_parser("show", help="Revalidate scope, method version and evidence before resuming")
     show.add_argument("identifier")
     show.add_argument("--scope", required=True)
+    show.add_argument("--with-inputs", action="store_true",
+                      help="Read scoped JSON on stdin to include selected Core references and count supplied hook/tool text")
     advance = actions.add_parser("advance", help="Record the PM-selected transition at the expected revision")
     advance.add_argument("identifier")
     advance.add_argument("--scope", required=True)
@@ -33,7 +36,16 @@ def run(root, args):
     if args.wf_operation == "start":
         result = checkpoints.start(root, args.route, args.handoff, args.scope, args.revision)
     elif args.wf_operation == "show":
-        result = checkpoints.show(root, args.identifier, args.scope)
+        from oryx.workspace.storage import json_input
+        inputs = None
+        if args.with_inputs:
+            raw = sys.stdin.buffer.read(131073)
+            if len(raw) > 131072:
+                raise ValueError("Workflow context envelope exceeds 128 KiB")
+            inputs = json_input(raw)
+            if not isinstance(inputs, dict):
+                raise ValueError("Supply a workflow context envelope")
+        result = checkpoints.show(root, args.identifier, args.scope, inputs=inputs)
     else:
         result = checkpoints.advance(root, args.identifier, args.scope, args.expect, args.to, args.handoff_revision, args.readback)
     print(json.dumps(result, indent=2, ensure_ascii=False))

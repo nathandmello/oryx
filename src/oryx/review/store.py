@@ -216,7 +216,7 @@ class Workspace:
         path.chmod(0o700)
         sync_dir(path)
 
-    def proposal(self, identifier):
+    def proposal_envelope(self, identifier):
         if not HEX.fullmatch(identifier):
             raise ValueError("Expected the staged proposal digest")
         checked_directory(self.staging)
@@ -228,17 +228,32 @@ class Workspace:
         if sha(data) != identifier:
             raise ValueError("The staged proposal changed. Stage and review the new revision")
         result = json.loads(data, object_pairs_hook=unique)
-        if result.get("workspace") != self.identity or set(result) != {"workspace", "request"}:
+        if (result.get("workspace") != self.identity or set(result) not in ({"workspace", "request"}, {"workspace", "request", "evidence"})
+                or "evidence" in result and (not isinstance(result["evidence"], list) or not result["evidence"]
+                    or not all(isinstance(selector, str) for selector in result["evidence"]))):
             raise ValueError("Proposal does not belong to the selected Workspace")
-        return result["request"]
+        return result
 
-    def stage(self, request):
+    def proposal(self, identifier):
+        envelope = self.proposal_envelope(identifier)
+        if "evidence" in envelope:
+            from oryx.adapters.selected_evidence import snapshot
+            snapshot(self.root, envelope["evidence"])
+        return envelope["request"]
+
+    def stage(self, request, *, evidence=()):
         head, texts = self.snapshot()
         materialize(request, head, texts)
-        return self.stage_request(request)
+        return self.stage_request(request, evidence=evidence)
 
-    def stage_request(self, request):
-        data = encoded({"workspace": self.identity, "request": request})
+    def stage_request(self, request, *, evidence=()):
+        envelope = {"workspace": self.identity, "request": request}
+        if evidence:
+            pm_only()
+            from oryx.adapters.selected_evidence import snapshot
+            snapshot(self.root, evidence)
+            envelope["evidence"] = list(evidence)
+        data = encoded(envelope)
         if len(data) > MAX_METADATA:
             raise ValueError("Proposal exceeds the supported group size")
         identifier = sha(data)
@@ -250,7 +265,8 @@ class Workspace:
         return {"id": identifier, "workspace": self.identity, "state": "staged"}
 
     def inspect(self, identifier):
-        request = self.proposal(identifier)
+        envelope = self.proposal_envelope(identifier)
+        request = envelope["request"]
         if request.get("operation") in {"initiative-work", "customization"}:
             from . import work
             return work.inspect(self, identifier, request)
@@ -262,9 +278,16 @@ class Workspace:
             return {"state": "applied", "receipt": head["receipts"][identifier]}
         if (self.state / "discarded" / identifier).is_file():
             return {"state": "discarded", "id": identifier}
-        request = self.proposal(identifier)
+        if "evidence" in envelope:
+            from oryx.adapters.selected_evidence import snapshot
+            try:
+                snapshot(self.root, envelope["evidence"])
+            except (ValueError, OSError):
+                return {"id": identifier, "state": "pending", "workspace": self.identity,
+                        "access": "source unavailable", "available_actions": ["discard"]}
         _, pairs = materialize(request, head, texts)
         return {"id": identifier, "state": "pending", "workspace": self.identity,
+                **({"selected_evidence": envelope["evidence"]} if "evidence" in envelope else {}),
                 **{name: request[name] for name in ("current_behavior", "reason", "effect")},
                 "changes": pairs}
 
@@ -284,6 +307,8 @@ class Workspace:
                     raise ValueError("A saved decision is awaiting recovery. Resume the approved change")
                 publish_file(self.state / "discarded" / identifier, encoded({"id": identifier, "actor": actor}))
                 return {"id": identifier, "state": "discarded"}
+            if shown.get("access") == "source unavailable":
+                raise ValueError("The evidence for this proposal is unavailable. Discard it or review a new proposal")
             if choice != "save":
                 raise ValueError("Expected a PM save or discard decision")
             request = self.proposal(identifier)
@@ -301,17 +326,21 @@ class Workspace:
             governed.update(item["path"].split("/")[1] for item in request["changes"] if "decisions" in item)
             next_head = {**head, "governing": sorted(governed), "files": {k: sha(v.encode()) for k, v in updated.items()},
                          "receipts": {**head["receipts"], identifier: receipt}}
-            generation = self.generation()
-            unchanged = {name: (self.official / name).lstat()
-                         for name, value in updated.items() if name in texts and value == texts[name]}
-            self.write_generation(generation, next_head, updated, unchanged=unchanged)
-            if self.proposal(identifier) != request or self.snapshot() != (head, texts):
-                raise ValueError("A draft or official record changed during preparation")
-            for name, previous in unchanged.items():
-                latest = (self.official / name).lstat()
-                if not os.path.samestat(previous, latest) or latest.st_mtime_ns != previous.st_mtime_ns:
-                    raise ValueError("An unchanged sibling was edited during review. Review its current revision")
-            rename_dir(generation, self.official, exchange=True)
+            from contextlib import nullcontext
+            from oryx.workspace import storage
+            verified_write = storage.writer_lock(self.root) if "selected_evidence" in shown else nullcontext()
+            with verified_write:
+                generation = self.generation()
+                unchanged = {name: (self.official / name).lstat()
+                             for name, value in updated.items() if name in texts and value == texts[name]}
+                self.write_generation(generation, next_head, updated, unchanged=unchanged)
+                if self.proposal(identifier) != request or self.snapshot() != (head, texts):
+                    raise ValueError("A draft or official record changed during preparation")
+                for name, previous in unchanged.items():
+                    latest = (self.official / name).lstat()
+                    if not os.path.samestat(previous, latest) or latest.st_mtime_ns != previous.st_mtime_ns:
+                        raise ValueError("An unchanged sibling was edited during review. Review its current revision")
+                rename_dir(generation, self.official, exchange=True)
             return {"state": "applied", "receipt": receipt}
 
 

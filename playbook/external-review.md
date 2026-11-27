@@ -55,16 +55,22 @@ A full same-machine backup preserves private drafts and recovery history. Keep t
 
 ## Launch a native client
 
-Run `oryx agent codex --check-host` or `oryx agent claude --check-host` to exercise the actual native binary. The check verifies Linux namespaces, read-only files, private staging and absence of a controlling PM terminal. The default profile is offline and uses temporary account storage.
+Run `oryx agent codex --check-host` or `oryx agent claude --check-host`. This exercises the native binary, Linux namespaces, read-only files, private staging and terminal isolation. The default profile uses temporary offline storage.
 
-Choose `--note notes/launch.md` for each note the agent may read or propose changing. Each invocation handles one request. Type it at the prompt or supply it on standard input. The client receives its selected note copies and Core tools. Saving a proposed change still requires the PM’s separate review decision.
+Repeat `--note notes/launch.md` for each authorized note. Enter one request at the prompt or on standard input. Saving proposed text requires the PM’s separate decision.
 
-For hosted inference, select a dedicated absolute account directory with `--client-home`. Start with an empty, PM-owned directory. The first successful check provisions its client identity. Use the native client’s normal sign-in and tool configuration with that directory as its home. Keep the PM's personal account, credentials and browser profile separate.
+Use `oryx workspace record-resolve PATH` to find the current ID and revision. Repeat `--record 'ID@REVISION#Exact heading'` for up to eight private work or context sections. The client receives only verified passages and citations. With `--client-home`, these may reach its configured provider.
+
+Changed, revoked or transferred sources hold the answer and proposals. PM review rechecks sources before saving a record-assisted note. Discard a proposal whose evidence became unavailable.
+
+For hosted inference, supply an empty, PM-owned absolute `--client-home`. After provisioning, sign in and configure tools through the native client using that home. Keep personal PM credentials separate.
 
 ```sh
-oryx agent codex --check-host --client-home /private/native-codex
-HOME=/private/native-codex codex login
-oryx agent codex --client-home /private/native-codex --note notes/launch.md
+oryx agent codex --check-host --client-home "$HOME/.oryx-native-codex"
+HOME="$HOME/.oryx-native-codex" codex login
+oryx agent codex --client-home "$HOME/.oryx-native-codex" --note notes/launch.md
 ```
 
-The account profile requires rootless Bubblewrap, slirp4netns and Linux packet filtering. It permits DNS and public IPv4 TLS, and blocks host addresses, private networks and inbound connections. An unavailable kernel or client dependency holds startup. Installed native or connector capabilities depend on that dedicated account. A successful startup check verifies the local boundary. Model responses and connector permissions require their own qualification.
+The account profile requires rootless Bubblewrap, slirp4netns, iproute2, iptables, and util-linux `nsenter` with `--keep-caps`. It permits DNS and public IPv4 connections on port 443. It blocks private networks, host interface addresses identified at startup and unsolicited inbound connections.
+
+Missing dependencies hold startup. The check verifies the local boundary. Model responses and connector permissions depend on the dedicated account and require separate qualification.

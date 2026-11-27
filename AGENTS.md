@@ -4,11 +4,11 @@ oryx helps PMs practise product craft. PMs own their product decisions and final
 
 ## Start and scope
 
-Read [README.md](README.md). Save standing PM corrections as scoped [workspace overrides](playbook/overrides.md). Run `python3 tools/pm.py align` per [updates](playbook/updates.md).
+Read [README.md](README.md). Save standing PM corrections as scoped [workspace overrides](playbook/overrides.md). Run [alignment](playbook/updates.md) for your installation.
 
 Guide [onboarding](playbook/company-context.md) through company, PM and parent product context. Offer area owners an optional fourth step.
 
-File evidence under `context/` and work under `workspace/` in the [selected Workspace](playbook/installed-core.md). Source checkouts default to `studio/`.
+File evidence in `context/` and work by purpose. Use the [Workspace placement map](README.md#placement).
 
 Read [the Git rules](playbook/git.md) before any commit, pull, push, remote change, or GitHub action.
 
@@ -93,7 +93,7 @@ Use restrained Hemingway prose in written deliverables.
 
 Trace core changes through guidance, examples, tools, and tests. Report unverified impact.
 
-Run `python3 tools/pm.py check` after changes. Run affected tests after tool changes.
+After changes, run `oryx check` (`python3 tools/pm.py check` in checkouts). Test affected tools.
 
 Author shared skills under `.agents/skills/`. Run `python3 tools/pm.py sync-skills` to update Claude copies.
 

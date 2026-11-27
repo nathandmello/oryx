@@ -97,7 +97,7 @@ Confirm `true` or `false` only when dated evidence on or after the resolution da
 
 ## Compatibility and recovery
 
-Forecasts live in `studio/workspace/forecasts/forecast-<id>.json`. The private record retains the reviewed decision citation and its evidence as they stood at creation. Historical forecasts can be resolved after the owning decision changes. Existing decisions and private files need no conversion.
+Fresh Workspaces keep forecasts in `forecasts/forecast-<id>.json`. Older Workspaces use `workspace/forecasts/`. The private record retains the reviewed decision citation and its evidence as they stood at creation. Historical forecasts can be resolved after the owning decision changes. Existing decisions and private files need no conversion.
 
 Use the release’s normal backup and alignment steps on every client before sharing the first new forecast. Clients predating forecasts can read their own initiative rationales. Their workspace checker predates forecast files.
 

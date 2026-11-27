@@ -294,20 +294,32 @@ class Connection:
         return {"ruleset":rule_id,"check_run":positive(trusted[0]["id"]),"github_review_decision":"APPROVED",
                 "require_current_base":effective.get("required_status_checks",{}).get("strict_required_status_checks_policy") is True}
 
-    def sync_inventory(self, scope, repository, organization, branch):
+    def sync_inventory(self, scope, repository, organization, branch, *, collect=False):
         reg, path, _ = self.repo(scope)
         if (reg["id"], reg["owner_id"], reg["branch"]) != (repository, organization, branch):
             raise PermissionError("GitHub repository differs from the connected scope")
         head = self.tip(path, reg)
-        rows = []
-        for rid in sorted(reg.get("records", {})):
+        from oryx.workspace import replicas
+        registered = reg.get("records", {})
+        if len(registered) > replicas.MAX_RECORDS:
+            raise ValueError("Shared replica exceeds the bounded registered inventory")
+        rows, documents = [], {}
+        size = 0
+        for rid in sorted(registered):
             record = self.registered_record(reg, path, rid, head)
             rows.append({"id":record["id"], "revision":record["source_revision"]})
+            if collect:
+                row = {"path":registered[rid], "record":record}
+                size += len(canonical(row))
+                if size > LIMIT:
+                    raise ValueError("Shared replica exceeds the bounded registered inventory")
+                documents[rid] = row
         confirmed, path, _ = self.repo(scope)
         if ((confirmed["id"], confirmed["owner_id"], confirmed["branch"]) != (repository, organization, branch)
                 or self.tip(path, confirmed) != head):
             raise ValueError("The GitHub scope changed during synchronization")
-        return {"scope":scope, "repository_id":repository, "official_revision":head, "records":rows}
+        result = {"scope":scope, "repository_id":repository, "official_revision":head, "records":rows}
+        return (result, documents) if collect else result
 
     def perform(self,op,body):
         if op == "github-sync":
@@ -539,10 +551,36 @@ def effect(client,op,body,private=None,confirm=human_confirmation,reauthenticate
     return result
 
 
+def connect():
+    return Connection(load_enrollment(), GitHubAPI(), os.geteuid())
+
+
+def verify_binding(client, binding):
+    reg, path, _ = client.repo(binding["scope"])
+    if (client.account != binding["actor"] or reg["id"] != binding["authority"]["repository"]
+            or reg["owner_id"] != binding["authority"]["organization"] or reg["branch"] != binding["branch"]):
+        raise PermissionError("GitHub actor, branch or repository differs from the connected authority")
+    return reg, path
+
+
+def fetch_replica(binding):
+    client = connect()
+    first, _ = verify_binding(client, binding)
+    current, documents = client.sync_inventory(binding["scope"], first["id"], first["owner_id"],
+                                              first["branch"], collect=True)
+    latest = connect()
+    confirmed, path = verify_binding(latest, binding)
+    if confirmed != first or latest.tip(path, confirmed) != current["official_revision"]:
+        raise ValueError("GitHub registration or revision changed while collecting the replica")
+    return current, documents
+
+
 def run(op,body,private=None):
-    def connect():
-        settings=load_enrollment()
-        return Connection(settings,GitHubAPI(),os.geteuid())
+    if private is not None and op == "github-record":
+        from oryx.workspace import connections
+        binding = connections.recorded(private, "github", body.get("scope"))
+        if binding is not None:
+            return connections.github_record(private, body, binding)
     client=connect()
     if op=="github-propose":
         return propose(client,private,body,reauthenticate=connect)

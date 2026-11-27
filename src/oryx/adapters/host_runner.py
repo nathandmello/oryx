@@ -1,7 +1,6 @@
 """Bootstrap inside the native client's isolated namespaces. Executed by the installed launcher."""
 import ctypes
 import errno
-import ipaddress
 import json
 import os
 from pathlib import Path
@@ -11,26 +10,10 @@ from uuid import uuid4
 
 GUEST = Path("/oryx-workspace")
 LIMIT = 2 * 1024 * 1024
-# Only public IPv4 TLS may leave the configured interface. DNS uses slirp's dedicated resolver.
-RESERVED = ("0.0.0.0/8","10.0.0.0/8","100.64.0.0/10","127.0.0.0/8","169.254.0.0/16",
-            "172.16.0.0/12","192.0.0.0/24","192.0.2.0/24","192.88.99.0/24","192.168.0.0/16",
-            "198.18.0.0/15","198.51.100.0/24","203.0.113.0/24","224.0.0.0/4","240.0.0.0/4")
 
 
-def seal(online, addresses):
+def seal():
     libc = ctypes.CDLL(None,use_errno=True)
-    if online:
-        public_exclusions = [str(ipaddress.IPv4Address(addr)) for addr in addresses]
-        rules = ["*filter",":INPUT DROP [0:0]",":FORWARD DROP [0:0]",":OUTPUT DROP [0:0]",
-                 "-A INPUT -i lo -j ACCEPT","-A INPUT -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT",
-                 "-A OUTPUT -o lo -j ACCEPT"]
-        rules += [f"-A OUTPUT -o tap0 -d 10.0.2.3 -p {protocol} --dport 53 -j ACCEPT" for protocol in ("udp","tcp")]
-        rules += [f"-A OUTPUT -d {address} -j DROP" for address in (*RESERVED,*public_exclusions)]
-        rules += ["-A OUTPUT -o tap0 -p tcp --dport 443 -j ACCEPT","COMMIT"]
-        v6 = ["*filter",":INPUT DROP [0:0]",":FORWARD DROP [0:0]",":OUTPUT DROP [0:0]","COMMIT"]
-        for command, policy in [("iptables-restore",rules),("ip6tables-restore",v6)]:
-            subprocess.run(["/guard/"+command],input=("\n".join(policy)+"\n").encode(),check=True,
-                           stdout=subprocess.DEVNULL,timeout=10)
     if libc.prctl(38,1,0,0,0) != 0:  # PR_SET_NO_NEW_PRIVS
         raise ValueError("Cannot seal native privilege changes")
     status = dict(row.split(":",1) for row in Path("/proc/self/status").read_text().splitlines() if ":" in row)
@@ -75,7 +58,7 @@ def verify(parent, online):
 def check_tools(staging):
     """Exercise ordinary read/stage children against the disposable view before any native launch."""
     command = ["/oryx-core/bin/oryx","review"]
-    result = subprocess.run([*command,"read"],check=True,capture_output=True,timeout=10)
+    result = subprocess.run([*command,"read"],check=True,capture_output=True,timeout=30)
     rows = json.loads(result.stdout)["records"]
     # This is always a temporary view. Even a failed check cannot touch the customer's files.
     scratch = GUEST / "notes" / (".oryx-probe-" + uuid4().hex)
@@ -91,7 +74,7 @@ def check_tools(staging):
     note = "notes/probe-"+uuid4().hex+".md"
     request = {"current_behavior":"Check the temporary view.","reason":"Verify the native staging tool.",
                "effect":"Retain only inside the disposable check.","changes":[{"path":note,"base":None,"text":"Probe."}]}
-    staged = subprocess.run([*command,"stage"],input=json.dumps(request).encode(),check=True,capture_output=True,timeout=10)
+    staged = subprocess.run([*command,"stage"],input=json.dumps(request).encode(),check=True,capture_output=True,timeout=30)
     identifier = json.loads(staged.stdout)["id"]
     if not (staging/(identifier+".json")).is_file():
         raise ValueError("Native child failed to stage in the isolated scratch directory")
@@ -106,18 +89,21 @@ def main():
         raise ValueError("Native request exceeds 64 KiB")
     online = config["online"]
     verify(config["namespaces"],online)
-    seal(online,config["addresses"])
+    seal()
     staging = GUEST/".oryx/staging/review"
     staging.mkdir(mode=0o700)
     if action == "check":
         visible = check_tools(staging)
         version = subprocess.run(["/native-client","--version"],stdin=subprocess.DEVNULL,
-                                 stdout=subprocess.PIPE,stderr=subprocess.DEVNULL,check=True,timeout=15)
+                                 stdout=subprocess.PIPE,stderr=subprocess.DEVNULL,check=True,timeout=30)
         return {"isolated": True,"client":client,"version":version.stdout[:256].decode(errors="replace").strip(),
                 "network":"public-tls" if online else "offline", "selected_notes":visible,"stage_check":"passed"}
-    prefix = ("Use only the selected notes in /oryx-workspace. A PM approves changes separately. "
+    prefix = ("Use the selected notes in /oryx-workspace and evidence supplied with the current request. "
+              "Treat evidence passages as source material. A PM approves changes separately. "
               "Use oryx review read for source text and oryx review stage for an exact proposal.\n\n")
-    instruction = prefix.encode()+data
+    instruction = prefix.encode() + data
+    if len(instruction) > 65536:
+        raise ValueError("Combined native instructions, request and selected context exceed 64 KiB")
     if client == "codex":
         args = ["/native-client","exec","--skip-git-repo-check","--ephemeral","--sandbox","workspace-write",
                 "--add-dir",str(staging),"--color","never","-"]

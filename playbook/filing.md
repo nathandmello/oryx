@@ -1,6 +1,6 @@
 # Filing PM work
 
-File reference material in `context/` and PM work in `workspace/` inside Studio. Keep personal skills and methods in `customizations/`. Cite the underlying business evidence for decisions.
+File reference material in `context/`. The table shows work paths in a fresh Workspace. Older Workspaces keep these work folders under `workspace/`. Cite the business evidence for decisions.
 
 | Reader need | Home |
 | --- | --- |
@@ -11,13 +11,13 @@ File reference material in `context/` and PM work in `workspace/` inside Studio.
 | Transcript evidence for an initiative meeting | Original transcript at its provider. An authorised local export goes in `sources/` beside the owning initiative overview. |
 | Initiative meeting history readers revisit | A dated `event-history` context note beside the initiative overview |
 | PM background, preferences, responsibilities, or interests | `context/pm/context.md` |
-| Priorities, plans, progress, or tests | The applicable work type under `workspace/`, such as `workspace/experiments/` |
-| Proposed investments, sources, and lifecycle decisions | `workspace/backlogs/<product>/initiatives.json` |
-| Formal discovery or proposed investment | `discovery-brief.md` or `initiative-brief.md` under `workspace/initiatives/<product>/<initiative>/` |
+| Priorities, plans, progress, or tests | The corresponding work folder, such as `experiments/` |
+| Proposed investments, sources, and lifecycle decisions | `backlogs/<product>/initiatives.json` |
+| Formal discovery or proposed investment | `discovery-brief.md` or `initiative-brief.md` under `initiatives/<product>/<initiative>/` |
 | PM delivery work and launch readiness | [Initiative tasks and checkpoints](initiative-work.md) beside the briefs |
-| Test for an initiative metric | `workspace/experiments/<product>/<initiative>/experiment.<metric-id>.draft.json` during drafting |
-| Investment comparison for a planning cycle | `workspace/roadmaps/<product>/<cycle>.md` |
-| Current backlog or selected roadmap | Generate either view from the register with `pm.py backlog` or `pm.py roadmap` |
+| Test for an initiative metric | `experiments/<product>/<initiative>/experiment.<metric-id>.draft.json` during drafting |
+| Investment comparison for a planning cycle | `roadmaps/<product>/<cycle>.md` |
+| Current backlog or selected roadmap | Generate either view from the register with `oryx backlog` or `oryx roadmap` |
 | Original reports, announcements, or external deliverables | Their source of record. Cite the location, date, and relevant passage. |
 | Capture diagnostics, audit results, or drafting scratch | The reply. Record citations in the brief’s Sources section. |
 

@@ -14,7 +14,7 @@ When a release flags older records, follow [the context cleanup procedure](../..
 
 ## Inspect
 
-- Read `studio/context/pm/context.md` when present. Use PM-confirmed responsibilities, goal links, dependencies, and interests.
+- Read `context/pm/context.md` in the selected Workspace when present. Use PM-confirmed responsibilities, goal links, dependencies, and interests.
 - Replace superseded roles when the PM confirms a change. Preserve unrelated entries and save the agreed scope with `pm.py set-remit`.
 - Find the existing record and accountable owner. Compare new evidence with accepted decisions.
 - Read applicable data boundaries before opening, transferring, or quoting sensitive source material.
@@ -33,7 +33,7 @@ When a release flags older records, follow [the context cleanup procedure](../..
 
 ## Route
 
-- Choose the purpose first. Put reusable context under its entity in `context/`. Put plans, experiments, and other work in `workspace/`. Use the remit to explain why the item matters.
+- Choose the purpose first. Put reusable context under its entity in `context/`. File plans and experiments in the work folders for this Workspace’s [layout](../../../README.md#placement). Use the remit to explain why the item matters.
 - Keep the company overview focused on the market, business model, portfolio and company choices. Link to detailed records.
 - File product-market fit evidence with the offering and segment. Confirm any separate company implication before recording it.
 - Keep product information with its product. Set `product_area` for area-specific product or initiative claims, questions, and answers.

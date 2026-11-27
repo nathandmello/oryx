@@ -162,6 +162,11 @@ def route(root, args, *, check_setup=None):
     """Return the CLI arguments, or print the catalog or a workflow handoff."""
     catalog = load(root)
     runner = "oryx" if (root / "oryx-release-manifest.json").is_file() else "pm.py"
+    if args == ["--catalog"] or args[:1] == ["--describe"] or any(arg in HELP for arg in args):
+        from oryx.workspace.layout import work_path
+        for entry in catalog["commands"].values():
+            if "example" in entry:
+                entry["example"] = [work_path(arg) if arg.startswith("workspace/") else arg for arg in entry["example"]]
     if args == ["--catalog"]:
         print(json.dumps(catalog, indent=2))
         return None
@@ -222,5 +227,5 @@ def route(root, args, *, check_setup=None):
             if path in WORKFLOWS:
                 result["workflow"] = workflow_entry(root, path, private)
                 result = measured(result)
-        print(json.dumps(result, indent=2))
+        print(json.dumps(result, indent=2, ensure_ascii=False))
     return None

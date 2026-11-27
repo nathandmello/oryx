@@ -103,6 +103,8 @@ def main(argv=None):
         elif args.operation.startswith("github-"):
             from .github import run
             needs_private=args.operation in {"github-propose", "github-transfer"} or (args.operation=="github-reconcile" and "id" in body)
+            if args.operation == "github-record" and (args.workspace is not None or os.environ.get("ORYX_WORKSPACE")):
+                needs_private = True
             result=run(args.operation,body,private_root(args.workspace) if needs_private else None)
         else:
             result=request(args.operation,body)

@@ -66,13 +66,15 @@ You can enable [private session transcripts](playbook/session-continuity.md) and
 
 ## Placement
 
-**Core** ships software. Your selected Workspace has its own Git history. A source checkout defaults to `studio/`. Paths below start at their owner.
+**Core** ships software. Your selected Workspace has its own Git history. Paths below start at the fresh Workspace or Core root.
 
 | Location | What lives there |
 | --- | --- |
 | `context/` | Company, PM, stakeholder and product context, sources, and meeting notes |
-| `workspace/` | Discovery briefs, experiments, planning comparisons, and launch work |
-| `customizations/` | Your standing rules, templates, fields, and views |
+| `goals/` · `problems/` · `strategies/` | Goals, problems and product strategy |
+| `backlogs/` · `initiatives/` · `roadmaps/` | Initiative registers, discovery briefs, launch work and planning comparisons |
+| `experiments/` · `forecasts/` | Experiments and decision forecasts |
+| `.oryx/customizations/` | Your standing rules, templates, fields, and views |
 | `README.md` · `settings.json` | Your session handoff and local configuration |
 | `playbook/` · `templates/` | Shared methods and starting points |
 | Core `bin/` · `src/oryx/cli/` | Installed commands and action catalog routing |
@@ -81,7 +83,7 @@ You can enable [private session transcripts](playbook/session-continuity.md) and
 | Core `tools/` | Compatible entry points, browser assets and Workspace seeds |
 | Core `.agents/` · `.claude/` · `.codex/` | Agent skills and client configuration |
 
-In a source checkout, Step 0 can restore committed work from your private GitHub repository. [Filing guide](playbook/filing.md) · [Git and remotes](playbook/git.md) · [Updates and recovery](playbook/updates.md)
+Source checkouts default to `studio/`. Older Workspaces retain their `workspace/` work folders and `customizations/`. [Filing guide](playbook/filing.md) · [Git and remotes](playbook/git.md) · [Updates and recovery](playbook/updates.md)
 
 For a walkthrough from a customer signal to a roadmap decision, start with the [worked example](playbook/opportunities.md#worked-example). For the rules that guide both agents, read the [project constitution](AGENTS.md).
 

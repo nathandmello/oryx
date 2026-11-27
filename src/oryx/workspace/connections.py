@@ -22,7 +22,7 @@ def key(provider, scope):
 
 
 def validate(private, value, name):
-    shape(value, ("workspace", "provider", "scope", "authority", "revision"), ("actor","sync","branch"))
+    shape(value, ("workspace", "provider", "scope", "authority", "revision"), ("actor","sync","branch","replica"))
     if (value["workspace"] != workspace_id(private) or name != key(value["provider"], value["scope"]) + ".json"
             or not isinstance(value["revision"], str) or not COMMIT.fullmatch(value["revision"])):
         raise ValueError("Scope connection identity or revision differs from its Workspace")
@@ -32,6 +32,9 @@ def validate(private, value, name):
             raise ValueError("Invalid enrolled GitHub repository or organization identity")
     else:
         identifier(value["authority"])
+    if "replica" in value and (value["provider"] != "github" or not isinstance(value["replica"], str)
+            or not re.fullmatch(r"[a-f0-9]{64}", value["replica"])):
+        raise ValueError("Invalid shared replica generation")
     if "branch" in value:
         if value["provider"] != "github":
             raise ValueError("Only GitHub connections specify an official branch")
@@ -104,7 +107,14 @@ def observe(scope, provider, previous):
 def manage(private, action, provider, scope):
     previous = recorded(private, provider, scope)
     if action == "show":
-        current, _, _, _ = observe(scope, provider, previous)
+        try:
+            current, _, _, _ = observe(scope, provider, previous)
+        except (OSError, KeyError, ValueError, RuntimeError):
+            if provider == "github" and previous and "replica" in previous:
+                with lease(private, provider, scope):
+                    if recorded(private, provider, scope) == previous:
+                        invalidate(private, previous)
+            raise
         return {"current": current, "connection": previous}
     if action == "disconnect" and previous is None:
         return {"disconnected":scope, "provider":provider}
@@ -115,6 +125,9 @@ def manage(private, action, provider, scope):
         if action == "disconnect":
             if previous is None:
                 return {"disconnected":scope, "provider":provider}
+            if provider == "github":
+                from . import replicas
+                replicas.forget(private, previous)
             path = directory(private, HOME) / (key(provider, scope)+".json")
             with DirLock(path.parent):
                 if read(path) != previous:
@@ -137,13 +150,22 @@ def manage(private, action, provider, scope):
                 raise ValueError("Connect the enrolled scope under the PM’s current identity first")
             sync = {**sync, "state":"pending", "attempt_ns":time.time_ns()}
             previous = store(private, {**previous,"sync":sync}, previous)
-        current, authority, revision, actor = observe(scope, provider, previous)
-        if action == "sync":
-            if provider == "github":
-                from oryx.governance.github import run
-                current = run("github-sync", {"scope":scope, "expected_actor":actor, "branch":previous["branch"], **authority})
+        replica = None
+        if action == "sync" and provider == "github":
+            from oryx.governance.github import fetch_replica
+            from . import replicas
+            try:
+                current, documents = fetch_replica(previous)
                 revision = current["official_revision"]
-            else:
+                actor, authority = previous["actor"], previous["authority"]
+                replica = replicas.publish(private, previous, revision, documents)
+            except (OSError, KeyError, ValueError, RuntimeError):
+                invalidate(private, previous)
+                raise
+        else:
+            current, authority, revision, actor = observe(scope, provider, previous)
+        if action == "sync":
+            if provider != "github":
                 from oryx.governance.client import request
                 current = request("sync", {"scope":scope, "expected_actor":actor}, expected_organization=authority)
                 revision = current["revision"]
@@ -154,7 +176,52 @@ def manage(private, action, provider, scope):
                  "revision":revision, "actor":actor, "sync":sync}
         if provider == "github":
             value["branch"] = previous["branch"] if action == "sync" else current["official_branch"]
-        return {"current":current, "connection":store(private,value,previous)}
+        if replica:
+            value["replica"] = replica
+        result = {"current":current, "connection":store(private,value,previous)}
+        if replica:
+            replicas.prune(private, value, keep=replica)
+        return result
+
+
+def invalidate(private, previous):
+    from . import replicas
+    if previous and "replica" in previous:
+        value = {k:v for k,v in previous.items() if k != "replica"}
+        value["sync"] = {**previous["sync"], "state":"pending"}
+        store(private, value, previous)
+    replicas.prune(private, previous)
+
+
+def github_record(private, body, binding):
+    from oryx.governance import github
+    from . import replicas
+    shape(body, ("scope","id"), ("revision",))
+    with lease(private, "github", body["scope"]):
+        current = recorded(private, "github", body["scope"])
+        if current is None or current["workspace"] != binding["workspace"] or "branch" not in current:
+            raise ValueError("Reconnect the current GitHub scope before reading the shared replica")
+        try:
+            client = github.connect()
+            reg, _ = github.verify_binding(client, current)
+            result = client.perform("github-record", body)
+            # The current registered path, authority and exact remote bytes still govern a cache hit.
+            latest = github.connect()
+            confirmed, path = github.verify_binding(latest, current)
+            if confirmed != reg:
+                raise ValueError("GitHub registration changed while reading the record")
+            tip = latest.tip(path, confirmed)
+            if "revision" in body:
+                latest.descendant(path, result["commit"], tip)
+            elif tip != result["commit"]:
+                raise ValueError("The official GitHub revision changed while reading the record")
+            if current["sync"]["state"] == "current" and result["commit"] == current["revision"] == tip:
+                result["record"] = replicas.record(private, current, body["id"],
+                                                   confirmed["records"][body["id"]], result["record"])
+            return result
+        except (OSError, KeyError, ValueError, RuntimeError):
+            invalidate(private, current)
+            raise
 
 
 def connection_entries(private):

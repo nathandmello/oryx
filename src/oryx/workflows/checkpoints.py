@@ -10,7 +10,7 @@ import storage
 import work_handoffs
 import workspace
 from oryx.workspace.location import workspace_id
-from .method import entry, fingerprint, measured, prepare
+from .method import entry, fingerprint, measured, prepare, with_inputs
 from .readback import observe, permit_completion
 
 HASH = re.compile(r"[0-9a-f]{64}")
@@ -159,14 +159,15 @@ def open_current(root, private, wid, key, scope):
     return target, raw, doc, method
 
 
-def show(root, key, scope):
+def show(root, key, scope, *, inputs=None):
     private, wid = checked_workspace(root, False)
     with storage.writer_lock(private):
         _, _, doc, method = open_current(root, private, wid, key, scope)
         state = doc["state"]
         info, _ = handoff(private, state["handoff"], scope, state["handoff_revision"])
         observed = observe(root, private, state["command"], scope)
-        return view(private, doc, method, info, observed)
+        result = view(private, doc, method, info, observed)
+        return with_inputs(root, result, inputs) if inputs is not None else result
 
 
 def advance(root, key, scope, expect, to, revision, readback=None):

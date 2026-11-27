@@ -29,8 +29,10 @@ def capture(hub, destination, entries, evidence=None, evidence_id=None):
         source = evidence[evidence_id]
         sources.append({
             "reference": source.get("reference") or f"[{source['title']}]({source['url']})",
-            "date": source["date"], "coverage": "read", "checked_on": date.today().isoformat(),
+            "date": source["date"], "coverage": "partial" if "offset" in source else "read",
+            "checked_on": date.today().isoformat(),
             "text": source["text"],
+            **({"ingestion": {"offset": source["offset"]}} if "offset" in source else {}),
         })
         entries = [
             dict(entry, source=1, quote=source["text"], location=source["title"])
@@ -267,9 +269,10 @@ def checks(hub, evidence):
         f"## Next action\n\n{rule}\n"
     )
     navigation = "context/products/navigation/overview.md"
-    source = {"review": {"title": "Ground navigation outcome review", "date": "undated", "text": rule,
-                         "reference": f"[Ground navigation outcome review]({review})"}}
     original_review = review_path.read_bytes()
+    source = {"review": {"title": "Ground navigation outcome review", "date": "undated", "text": rule,
+                         "reference": f"[Ground navigation outcome review]({review})",
+                         "offset": original_review.index(rule.encode("utf-8"))}}
     written = capture(hub, navigation, [{"scope": "product", "product": "navigation", "topic": "constraints",
                                          "rule": rule}], source, "review")
     rendered = (hub.work / navigation).read_text()

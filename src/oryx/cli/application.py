@@ -60,5 +60,8 @@ def main(root):
         return discovered
     # Resolve relative legacy imports from this installation regardless of the invoking directory.
     sys.path.insert(0, os.fspath(root / "tools"))
+    # Protected native children only need the review owner for their read and stage calls.
+    if sys.argv[1:2] == ["review"]:
+        return dispatch(root, sys.argv[1:])
     from oryx.cli import command
     return command.main()

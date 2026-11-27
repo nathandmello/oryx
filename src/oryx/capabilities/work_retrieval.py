@@ -36,6 +36,7 @@ def permitted_references(private):
     # Grants for a review permit their named subscriber to see the passage.
     # They cannot authorize general task retrieval of that source document.
     for grant in state["grants"].values():
+        denied.add(source_evidence.fingerprint(grant["reference"]))
         name = source_evidence.local_name(grant["reference"])
         if name:
             denied.add(source_evidence.fingerprint(name))

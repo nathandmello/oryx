@@ -468,6 +468,18 @@
       "cli": ["workspace", "record-list"],
       "example": []
     },
+    "workspace snapshot show": {
+      "summary": "Read the immutable local Git view of an approved group.",
+      "effect": "read",
+      "cli": ["workspace", "publication"],
+      "example": []
+    },
+    "workspace client start": {
+      "summary": "Start the selected native client or check its protected environment.",
+      "effect": "local-write",
+      "cli": ["agent"],
+      "example": ["codex", "--check-host"]
+    },
     "workspace records show": {
       "summary": "Resolve a record by its stable identity and revision.",
       "effect": "read",

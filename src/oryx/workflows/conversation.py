@@ -282,7 +282,7 @@ def review_protection(root, record, text):
         return
     import initiative_store
 
-    _, payload, _ = initiative_store.read(root, Path(record).parts[2])
+    _, payload, _ = initiative_store.read(root, layout.work_parts(record)[2])
     for event in payload["events"]:
         reference = event.get("references", {})
         if (reference.get("path") == record and event.get("action") != "start-discovery"

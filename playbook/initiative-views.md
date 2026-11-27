@@ -21,7 +21,7 @@ The next closure cites the measurements that reopened the review.
 For an area view, use `--product PRODUCT --area AREA`. Both views read the area's qualified subject from the initiative.
 An initiative can appear in several area views. Product-wide initiatives appear in the unfiltered product view.
 
-The roadmap shows approved selections by planning cycle, horizon, and rank. Its comparison lives at `workspace/roadmaps/<product>/<cycle>.md` inside the private repository. The cycle dates bound the planning period. An initiative's delivery record supplies its implementation reference.
+The roadmap shows approved selections by planning cycle, horizon, and rank. Find its comparison at `roadmaps/<product>/<cycle>.md` in a fresh Workspace. Older Workspaces use `workspace/roadmaps/`. The cycle dates bound the planning period. An initiative's delivery record supplies its implementation reference.
 Use the linked comparison to see the alternatives, obligations, and capacity constraints behind each selection.
 
 ```sh

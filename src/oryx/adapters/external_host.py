@@ -1,6 +1,7 @@
 """Run an external Workspace client with a bounded read-only projection and private scratch."""
 from contextlib import contextmanager, ExitStack
 import fcntl
+import ipaddress
 import json
 import os
 from pathlib import Path
@@ -59,7 +60,10 @@ def project(ws, directory, selected):
                 "files": {k: v for k, v in head["files"].items() if k in selection}}
     store.Workspace.write_generation(official, narrowed, {k: v for k,v in texts.items() if k in selection})
     # Native skill discovery needs only release-owned guides, never the real customer checkout.
-    for resource in ("AGENTS.md",".agents",".claude","playbook","templates","tools"):
+    (directory / ".claude").mkdir(mode=0o700)
+    # The checkout hooks expect their working directory to be inside Core. Only project
+    # skill discovery applies to a separately mounted, selected-note Workspace.
+    for resource in ("AGENTS.md", ".agents", ".claude/skills", "playbook", "templates", "tools"):
         (directory/resource).symlink_to("/oryx-core/"+resource)
     return narrowed
 
@@ -115,6 +119,49 @@ def network_addresses():
     return addresses
 
 
+# Only public IPv4 TLS may leave the configured interface. DNS uses slirp's dedicated resolver.
+RESERVED = ("0.0.0.0/8","10.0.0.0/8","100.64.0.0/10","127.0.0.0/8","169.254.0.0/16",
+            "172.16.0.0/12","192.0.0.0/24","192.0.2.0/24","192.88.99.0/24","192.168.0.0/16",
+            "198.18.0.0/15","198.51.100.0/24","203.0.113.0/24","224.0.0.0/4","240.0.0.0/4")
+
+
+def namespace_descriptors(stack, pid, status):
+    # NS_GET_USERNS returns the owner of the new network namespace. Bubblewrap may
+    # place the final client inside a further user namespace to disable nesting.
+    net = os.open(f"/proc/{pid}/ns/net", os.O_RDONLY | os.O_CLOEXEC)
+    stack.callback(os.close, net)
+    user = fcntl.ioctl(net, 0xb701)
+    stack.callback(os.close, user)
+    if (os.fstat(net).st_ino == os.stat("/proc/self/ns/net").st_ino
+            or os.fstat(user).st_ino == os.stat("/proc/self/ns/user").st_ino
+            or status.get("net-namespace", os.fstat(net).st_ino) != os.fstat(net).st_ino):
+        raise ValueError("Refusing to configure networking outside a new child namespace")
+    return user, net
+
+
+def install_policy(user, net):
+    public_exclusions = [str(ipaddress.IPv4Address(addr)) for addr in network_addresses()]
+    rules = ["*filter",":INPUT DROP [0:0]",":FORWARD DROP [0:0]",":OUTPUT DROP [0:0]",
+             "-A INPUT -i lo -j ACCEPT","-A INPUT -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT",
+             "-A OUTPUT -o lo -j ACCEPT"]
+    rules += [f"-A OUTPUT -o tap0 -d 10.0.2.3 -p {protocol} --dport 53 -j ACCEPT" for protocol in ("udp","tcp")]
+    rules += [f"-A OUTPUT -d {address} -j DROP" for address in (*RESERVED,*public_exclusions)]
+    rules += ["-A OUTPUT -o tap0 -p tcp --dport 443 -j ACCEPT","COMMIT"]
+    v6 = ["*filter",":INPUT DROP [0:0]",":FORWARD DROP [0:0]",":OUTPUT DROP [0:0]","COMMIT"]
+    # Only the trusted rule loader enters these namespaces. It inherits no account
+    # files, model prompt, client descriptors, or host network administration rights.
+    ns = ["/usr/bin/nsenter", "--user=/proc/self/fd/"+str(user), "--net=/proc/self/fd/"+str(net),
+          "--preserve-credentials", "--keep-caps", "--"]
+    with TemporaryDirectory(prefix="oryx-firewall-") as directory:
+        env = {"PATH": os.defpath, "LC_ALL": "C", "XTABLES_LOCKFILE": str(Path(directory)/"lock")}
+        for binary, policy in [("iptables-restore", rules), ("ip6tables-restore", v6)]:
+            result = subprocess.run([*ns, "/usr/sbin/"+binary], input=("\n".join(policy)+"\n").encode(),
+                                    capture_output=True, pass_fds=(user, net), env=env, timeout=15)
+            if result.returncode:
+                diagnostic = result.stderr[:400].decode("ascii", "replace")
+                raise ValueError(f"{HOLD}. Could not install child network policy: {diagnostic!r}")
+
+
 def command(core, directory, binary, client, check, home=None):
     bwrap = "/usr/bin/bwrap"
     if sys.platform != "linux" or not os.path.isfile(bwrap) or os.geteuid() == 0:
@@ -133,13 +180,10 @@ def command(core, directory, binary, client, check, home=None):
         elif Path(path).is_dir():
             cmd += ["--ro-bind", path, path]
     if home is not None:
-        for name in ("iptables-restore","ip6tables-restore"):
-            tool = Path("/usr/sbin") / name
-            if not tool.is_file():
-                raise ValueError(f"{HOLD}. Install Linux network filtering tools")
-            cmd += ["--ro-bind",str(tool.resolve()),"/guard/"+name]
-        cmd += ["--cap-add","CAP_NET_ADMIN",
-                "--ro-bind","/etc/ssl/certs/ca-certificates.crt","/etc/ssl/certs/ca-certificates.crt",
+        # Rootless slirp's own sandbox enters the owning user namespace as UID/GID 0.
+        # Only the unprivileged PM's IDs are mapped. seal() drops every capability
+        # before a native executable or a tool sees the account or prompt.
+        cmd += ["--uid", "0", "--gid", "0", "--ro-bind","/etc/ssl/certs/ca-certificates.crt","/etc/ssl/certs/ca-certificates.crt",
                 "--ro-bind",str(directory.parent/"resolv.conf"),"/etc/resolv.conf",
                 "--size","1048576","--tmpfs","/run"]
     cmd += ["--ro-bind", str(core), "/oryx-core", "--ro-bind", str(binary), "/native-client",
@@ -151,8 +195,7 @@ def command(core, directory, binary, client, check, home=None):
             "--setenv", "PM_HUB_PROTECTED_ROOT", "/oryx-core", "--setenv", "ORYX_PROPOSAL_HOST", "1",
             "--setenv", "PYTHONDONTWRITEBYTECODE", "1", "--setenv", "LC_ALL", "C.UTF-8",
             "--", "/usr/bin/python3", "-IB", "/oryx-core/src/oryx/adapters/host_runner.py",
-            client, "check" if check else "run", json.dumps({"namespaces":parent_ns,"online":home is not None,
-            "addresses":network_addresses() if home else []})]
+            client, "check" if check else "run", json.dumps({"namespaces":parent_ns,"online":home is not None})]
     return cmd
 
 
@@ -199,7 +242,12 @@ def processes(command, online):
                              pass_fds=info[1:],start_new_session=True))
         stack.callback(stop,child)
         if online:
-            status = notice(info[0],child,4096,json_record=True)
+            try:
+                status = notice(info[0], child, 4096, json_record=True)
+            except ValueError as error:
+                stop(child)
+                message = child.stderr.read(400).decode("ascii", "replace")
+                raise ValueError(f"{HOLD}. Network namespace did not start: {message!r}") from error
             pid = status.get("child-pid")
             if type(pid) is not int or pid < 1 or child.poll() is not None:
                 raise ValueError("Native network namespace vanished during setup")
@@ -207,15 +255,26 @@ def processes(command, online):
             lifetime = os.pipe()
             for fd in (*ready,*lifetime):
                 stack.callback(os.close,fd)
-            # slirp only transports the new namespace. Native startup waits on stdin until its
-            # network is configured; the trusted bootstrap installs the egress policy before exec.
-            network = stack.enter_context(subprocess.Popen(["/usr/bin/slirp4netns","--configure",
-                  "--disable-host-loopback","--enable-sandbox","--enable-seccomp","--ready-fd",str(ready[1]),
-                  "--exit-fd",str(lifetime[0]),"--userns-path",f"/proc/{pid}/ns/user",str(pid),"tap0"],
-                  env={"PATH":os.defpath,"LC_ALL":"C"},stdin=subprocess.DEVNULL,stdout=subprocess.DEVNULL,
-                  stderr=subprocess.DEVNULL,start_new_session=True,pass_fds=(ready[1],lifetime[0])))
-            stack.callback(stop,network)
-            if len(notice(ready[0],network,8)) != 1 or network.poll() is not None:
+            user, net = namespace_descriptors(stack, pid, status)
+            install_policy(user, net)
+            # Use PID addressing so the slirp process can enter the client's user
+            # namespace for its own sandbox. Its TAP helper uses the netns owner.
+            # Native bootstrap waits on stdin until both policy and transport are ready.
+            network = stack.enter_context(subprocess.Popen(["/usr/bin/slirp4netns", "--configure",
+                  "--disable-host-loopback", "--enable-sandbox", "--enable-seccomp", "--ready-fd", str(ready[1]),
+                  "--exit-fd", str(lifetime[0]), "--userns-path=/proc/self/fd/"+str(user),
+                  str(pid), "tap0"], env={"PATH":os.defpath,"LC_ALL":"C"},
+                  stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE,
+                  start_new_session=True, pass_fds=(user, net, ready[1], lifetime[0])))
+            stack.callback(stop, network)
+            try:
+                ready_byte = notice(ready[0], network, 8)
+            except ValueError as error:
+                # This system helper has no access to native input or account credentials.
+                stop(network)
+                message = network.stderr.read(400).decode("ascii", "replace")
+                raise ValueError(f"{HOLD}. Network transport did not start: {message!r}") from error
+            if len(ready_byte) != 1 or network.poll() is not None:
                 raise ValueError("Restricted user-mode networking is unavailable")
         yield child
 
@@ -261,7 +320,7 @@ def bounded(command, data, timeout, *, online=False):
                 child.wait()
 
 
-def import_proposals(ws, selected, frozen, proposals):
+def import_proposals(ws, selected, frozen, proposals, *, records=()):
     if not isinstance(proposals, list) or len(proposals) > 1:
         raise ValueError("Submit at most one atomic local note group per protected turn")
     staged = []
@@ -276,11 +335,13 @@ def import_proposals(ws, selected, frozen, proposals):
                 raise ValueError("Native proposal exceeds this session's selected notes")
             if change.get("base") != frozen["files"].get(change["path"].split("/")[1]):
                 raise ValueError("Native proposal does not use the session's reviewed base")
-        staged.append(ws.stage(req))
+        staged.append(ws.stage(req, evidence=records) if records else ws.stage(req))
     return staged
 
 
-def launch(core, client, *, selected=(), check=False, client_home=None):
+def launch(core, client, *, selected=(), records=(), check=False, client_home=None):
+    from oryx.adapters import selected_evidence
+    from oryx.workspace import storage
     store.pm_only()
     if client not in {"codex","claude"}:
         raise ValueError("Choose Codex or Claude")
@@ -296,11 +357,13 @@ def launch(core, client, *, selected=(), check=False, client_home=None):
         frozen = project(ws,view,selected)
         (view / ".oryx/staging").mkdir(mode=0o700)
         cmd = command(core,view,binary,client,True)
-        version = invoke(cmd,b"",30)
+        version = invoke(cmd,b"",100)
         with account(client_home,ws,core,client) as home:
             if home is not None:
-                version = invoke(command(core,view,binary,client,True,home),b"",35,online=True)
+                version = invoke(command(core,view,binary,client,True,home),b"",110,online=True)
             if check:
+                if records:
+                    version["selected_sections"] = len(selected_evidence.snapshot(ws.root, records))
                 print(json.dumps(version,ensure_ascii=True))
                 return
             from oryx.adapters import session_sync
@@ -312,9 +375,24 @@ def launch(core, client, *, selected=(), check=False, client_home=None):
                     prompt = sys.stdin.read(65537)
                 if not prompt.strip() or len(prompt.encode()) > 65536:
                     raise ValueError("Provide one nonempty request of at most 64 KiB")
-                result = invoke(command(core,view,binary,client,False,home),prompt.encode(),300,online=home is not None)
-                staged = import_proposals(ws,set(selected),frozen,result.pop("proposals"))
-                print(json.dumps({**result, "staged":staged}, ensure_ascii=True))
+                evidence = selected_evidence.snapshot(ws.root, records)
+                payload = selected_evidence.request(prompt, evidence)
+                try:
+                    result = invoke(command(core,view,binary,client,False,home),payload,300,online=home is not None)
+                except (OSError, ValueError, RuntimeError, subprocess.SubprocessError):
+                    if records:
+                        # Native stderr may contain the submitted passage even when a turn fails.
+                        raise ValueError("The native evidence turn did not complete") from None
+                    raise
+                if records:
+                    with storage.writer_lock(ws.root):
+                        if selected_evidence.snapshot(ws.root, records) != evidence:
+                            raise ValueError("Record authority or revision changed during the native turn")
+                        staged = import_proposals(ws,set(selected),frozen,result.pop("proposals"),records=records)
+                        print(json.dumps({**result, "staged":staged}, ensure_ascii=True))
+                else:
+                    staged = import_proposals(ws,set(selected),frozen,result.pop("proposals"))
+                    print(json.dumps({**result, "staged":staged}, ensure_ascii=True))
 
 
 def invoke(cmd, prompt, timeout, *, online=False):

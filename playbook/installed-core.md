@@ -28,7 +28,9 @@ For an existing Workspace, select its original identity and location. Keep older
 
 ## Start or resume work
 
-Run `oryx valet setup` in your foreground terminal to choose local storage, connect an existing private GitHub repository or create one. Setup offers to restore an existing remote Workspace into your selected directory. Creating a repository and sending the first commit require separate decisions. Protected host startup and its platform requirements are described in [local review](external-review.md).
+Run `oryx valet setup` in your foreground terminal to choose local storage, connect an existing private GitHub repository or create one. Setup can restore a committed Workspace in a private directory with its original identity.
+
+Creating a repository, making the local commit and first sharing its history on GitHub are separate decisions. Review the verified destination, branch, audience and files in every reachable commit before approving the first push. Review drafts and search caches stay local. See [Git and remotes](git.md) and [protected host startup](external-review.md).
 
 For local setup, you can also supply the owner directly.
 
@@ -37,8 +39,9 @@ For local setup, you can also supply the owner directly.
 "$ORYX_CORE/bin/oryx" action --catalog
 ```
 
-Workspace paths in the playbooks start at your selected private Git root. A checkout example using `studio/context/` means its `context/`.
-Fresh Workspaces use visible work domains such as `initiatives/`, `roadmaps/` and `experiments/`. Personal rules and views live in `.oryx/customizations/`. Fresh search indexes live in `.oryx/cache/` and rebuild from permitted source records. Existing Workspaces keep their original paths.
+Workspace paths start at the selected Git root. Follow the [placement map](../README.md#placement) for fresh work. Onboarding and handoff checkpoints live in `.oryx/state/`. Search indexes in `.oryx/cache/` rebuild from permitted records.
+
+Source examples using `studio/context/` mean the selected Workspace’s `context/`. Older Workspaces keep work in `workspace/` and personal rules in `customizations/`. Use their recorded paths when resuming or restoring work.
 
 Core resources such as `playbook/`, `templates/` and host skills stay in Core. From any directory, use the printed launcher path for commands.
 
@@ -70,7 +73,7 @@ Core rollback and Workspace recovery have separate outcomes. Preserve subsequent
 
 New external Workspaces store Core links as `oryx://core/` references. The stored path stays valid when the active release changes. Workspace records link to each other by relative path.
 
-Run `bin/oryx resource 'oryx://core/playbook/filing.md#when-a-section-earns-its-place'` from an installation. The command returns JSON with the current file path and optional heading anchor. A missing file or heading reports an error.
+Run `oryx resource 'oryx://core/playbook/filing.md#when-a-section-earns-its-place'` from an installation. The command returns JSON with the current file path and optional heading anchor. A missing file or heading reports an error.
 
 For an existing format-2 Workspace, follow [the adoption and portable recovery instructions](record-adoption.md).
 

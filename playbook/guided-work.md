@@ -37,4 +37,10 @@ oryx company-onboarding accept --revision 3
 
 Type `save` to accept the displayed revision. For an open question use `resolve --revision R --question "Exact question?"` on the same onboarding command. Choosing `later` keeps the finding pending. If a first product area needs a new product brief, Oryx asks you to approve the new parent first. That brief is saved independently and remains available when you resume the area review.
 
-The reported input size measures the data Core assembled for this response. A host can add its own instructions, references and tool output.
+Core limits each workflow input to 64 KiB, including its emitted UTF-8 JSON. When a client adds material to a checkpoint, assemble the turn through `oryx workflow show "$WORKFLOW" --scope "$SCOPE" --with-inputs`. Supply JSON on standard input with these fields.
+
+- `binding` copies `workspace_id`, `scope`, `id`, `revision` and `readback_revision` from the current workflow.
+- `references` lists the Core-relative Markdown links selected for this turn, in reading order. Choose links from the active step or a reference already selected. Preserve a linked section anchor. Core returns the exact selected text.
+- `observations` lists already delivered hook and tool results as objects with `kind` (`hook` or `tool`) and their exact UTF-8 `text`. Supply only observations authorized for this Workspace, scope and step. Core counts the supplied bytes and discards the text.
+
+Send the measured response and the counted observations once each. The report covers that assembled input. Additional content inserted privately by a provider requires host-side measurement.

@@ -925,6 +925,8 @@ def build_parser():
     agent = commands.add_parser("agent")
     agent.add_argument("client", choices=("codex", "claude"))
     agent.add_argument("--check-host", action="store_true", help="Verify native client startup inside the selected protection profile")
+    agent.add_argument("--record", action="append", default=[], metavar="ID@REVISION#SECTION",
+                       help="Disclose one verified private work or context section to this native turn")
     agent.add_argument("--note", action="append", default=[], help="Expose a named managed note to this native turn")
     agent.add_argument("--client-home", type=Path, help="Use a dedicated native account home with restricted public TLS networking")
     agent.add_argument("--setup", action="store_true", help="Run workspace setup again")
@@ -1219,7 +1221,7 @@ def main() -> int:
             return 0
         if args.command == "agent":
             agent_session.launch(ROOT, args.client, context_statusline=args.context_statusline, setup=args.setup,
-                                 check_host=args.check_host, notes=args.note, client_home=args.client_home)
+                                 check_host=args.check_host, notes=args.note, records=args.record, client_home=args.client_home)
             return 0
         if args.command == "customize":
             if args.operation == "apply":

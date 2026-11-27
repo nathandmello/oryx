@@ -41,7 +41,7 @@ python3 tools/pm.py override list
 
 Apply the rule immediately and on subsequent relevant turns. Both clients receive the same rules at prompt submission.
 Use the effective rules from the list command when prompt hooks are unavailable.
-The private repository stores rules, reporting receipts, and retired rules in `studio/customizations/rules.json`.
+The Workspace stores rules and reporting receipts in `rules.json` under its [customization folder](../README.md#placement).
 
 Silence profile prompts immediately with `pm.py override profile-suggestions off`. Use `--source transcript` for a narrower request. Offer optional feedback afterwards.
 
@@ -59,7 +59,7 @@ If the PM withdraws the habit, use `pm.py override remove friday-handoff`. Core 
 A rule can change agent judgment or call existing tools. For a changed app or generated artifact, exercise its actual entry point.
 If it needs new core support, explain the gap and follow the feedback process. Keep the PM's requirement active.
 
-Keep longer procedures in `studio/customizations/skills/<name>/SKILL.md`. Register the trigger with `override set` and reference that file in its steps.
+Keep longer procedures in `skills/<name>/SKILL.md` under that customization folder. Register the trigger with `override set` and reference that file in its steps.
 Both clients can then find the procedure from the same rule.
 
 ## Company working practices
