@@ -96,7 +96,7 @@ def restore(root, url):
         checkout = Path(temporary) / "restore"
         subprocess.run(
             ["git", "-c", CREDENTIAL + "=!gh auth git-credential", "clone", "--", url, str(checkout)],
-            check=True,
+            check=True, umask=0o077 if selected is not None else -1,
         )
         settings_file = checkout / "settings.json"
         if settings_file.is_symlink() or not settings_file.is_file():

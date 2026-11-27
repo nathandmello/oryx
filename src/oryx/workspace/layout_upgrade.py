@@ -16,6 +16,7 @@ import metric_registry
 import records
 import storage
 import upgrades
+from oryx.workspace.location import purpose_layout
 
 RULE = "purpose-layout-1"
 PROFILE = "context/pm/context.md"
@@ -433,9 +434,13 @@ def plan(private):
     original, state = upgrades.read_state(private)
     if conversion.pointer(private).exists():
         raise ValueError("Resume the previous filing transaction before migrating the layout")
+    saved = receipt(private, state)
+    if purpose_layout(private) and saved == {"version": 1}:
+        # Fresh external Workspaces were created after the historical filing migration.
+        # Its nested starter guide and retained-source ledger belong to older layouts.
+        return {"moves": {}, "outstanding": [], "writes": {}, "retired": {}}
     docs, metadata = load_documents(private)
     ledger = state.setdefault(upgrades.RULE, {})
-    saved = receipt(private, state)
     protected = protected_sources(private, docs, ledger, saved)
     notes, moves, guides = {}, {}, {}
     for name in metadata.keys() - docs.keys() - protected:

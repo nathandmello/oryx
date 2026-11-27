@@ -1,6 +1,7 @@
 """Verify workspace setup before the company walkthrough."""
 
 import json
+import os
 import shutil
 
 import git_ops
@@ -51,13 +52,38 @@ class FirstRunTests(unittest.TestCase):
         self.assertEqual(workspace.settings(self.root)["owner"], "Fixture PM")
         self.assertEqual(first_run.origin_urls(self.work), [])
 
+    def test_external_restore_with_permissive_umask_preserves_private_access_and_review(self):
+        from oryx.review.store import Workspace
+
+        source = self.root.parent / "original"
+        restored = self.root.parent / "restored"
+        workspace.git(self.root, "add", "--", "AGENTS.md", "playbook", "templates")
+        with patch.dict(os.environ, ORYX_WORKSPACE=str(source)):
+            workspace.initialise(self.root, owner="Fixture PM", delivery_system="Fixture delivery")
+            workspace.git(source, "add", "-A")
+            workspace.git(source, "-c", "user.name=Fixture PM", "-c", "user.email=fixture@example.invalid",
+                          "commit", "-m", "Initialize Oryx Workspace")
+        with patch.dict(os.environ, ORYX_WORKSPACE=str(restored)):
+            previous = os.umask(0o022)
+            try:
+                first_run.restore(self.root, source.as_uri())
+            finally:
+                os.umask(previous)
+            self.assertEqual(workspace.git(restored, "rev-parse", "HEAD"), workspace.git(source, "rev-parse", "HEAD"))
+            self.assertEqual((restored / ".oryx/workspace.json").read_bytes(), (source / ".oryx/workspace.json").read_bytes())
+            for path in (restored, restored / ".git", restored / ".oryx", restored / "settings.json"):
+                self.assertEqual(path.stat().st_mode & 0o077, 0, str(path))
+            Workspace().init()
+
     def test_private_first_disclosure_rechecks_repository_and_pins_the_reviewed_history(self):
+        from oryx.workspace.location import create_identity
+        create_identity(self.work)
         url = "https://github.com/example/fictional.git"
         approved = {"id": "repo-123", "nameWithOwner": "example/fictional", "visibility": "PRIVATE",
                     "viewerPermission": "ADMIN"}
         self.commit = "a" * 40
         with patch.object(git_ops, "origin_for_push", return_value=url), patch.object(
-            git_ops.workspace, "git", return_value=""
+            git_ops.workspace, "git", side_effect=lambda p, *a: "0" * 40 + "\trefs/heads/main" if a[0] == "ls-remote" else self.commit if a[0] in ("log", "rev-parse") else "100644 blob abc\tdeleted-note.md"
         ) as local_git, patch.object(first_run, "github") as api, patch(
             "oryx.review.cli.confirm_effect", return_value=True
         ) as confirm:
@@ -66,8 +92,9 @@ class FirstRunTests(unittest.TestCase):
             shown = confirm.call_args.args[1]
             self.assertEqual((shown["repository_id"], shown["actor"], shown["commit"]),
                              ("repo-123", "fictional-user", self.commit))
-            self.assertIn("files", shown)
+            self.assertIn("deleted-note.md", repr(shown["reachable_trees"]))
             local_git.assert_any_call(self.work, "ls-tree", "-r", self.commit)
+            self.commit = "b" * 40
             api.side_effect = [json.dumps(approved), "fictional-user", json.dumps(dict(approved, visibility="PUBLIC"))]
             with self.assertRaisesRegex(ValueError, "private and writable"):
                 git_ops.reviewed_first_push(self.work, "main", url, self.commit)

@@ -247,17 +247,58 @@ def reviewed_first_push(path, branch, url, commit):
         return {"repository": repo["nameWithOwner"], "repository_id": repo["id"], "visibility": repo["visibility"],
                 "actor": github("api", "user", "--jq", ".login"), "audience": "Accounts and integrations with repository read access"}
 
+    from oryx.governance.common import canonical, digest
+    from oryx.governance.files import directory, read, save
+    from oryx.workspace.location import workspace_id
     target = audience()
-    if workspace.git(path, "ls-remote", "--heads", url, ref):
+    witness = {"workspace": workspace_id(path), "target": target, "branch": ref}
+    folder = directory(path, ".git/oryx-disclosures")
+    receipt = folder / (digest(canonical(witness)) + ".json")
+    previous = read(receipt) if os.path.lexists(receipt) else None
+    if previous is not None and (previous.keys() != {"witness", "commit", "state"} or previous["witness"] != witness
+            or previous["state"] not in {"reviewed", "confirmed"}
+            or not isinstance(previous["commit"], str) or not re.fullmatch(r"[a-f0-9]{40}|[a-f0-9]{64}", previous["commit"])):
+        raise ValueError("Invalid private first-push receipt")
+    advertised = workspace.git(path, "ls-remote", "--heads", url, ref)
+    remote_tip = advertised.split("\t", 1)[0] if advertised else None
+    # A remote ref may predate Oryx or belong to another machine. Only a positively
+    # observed, previously reviewed disclosure can authorize subsequent ordinary sync.
+    if previous and remote_tip and subprocess.run(
+            ["git", "-C", str(path), "merge-base", "--is-ancestor", previous["commit"], remote_tip],
+            capture_output=True).returncode == 0:
+        return None
+
+    pending = {"witness": witness, "commit": commit, "state": "reviewed"}
+    if previous != pending:
+        history = workspace.git(path, "log", "--format=%H %an <%ae> %s", commit).splitlines()
+        # Keep every historical pathname, including files deleted before the tip.
+        trees = {}
+        for entry in history:
+            revision = entry.split(" ", 1)[0]
+            tree = workspace.git(path, "rev-parse", revision + "^{tree}")
+            if tree not in trees:
+                trees[tree] = workspace.git(path, "ls-tree", "-r", tree).splitlines()
+        shown = {**target, "branch": ref, "commit": commit, "history": history, "reachable_trees": trees}
+        if not confirm_effect("This first push makes the listed Git history available to the private repository's readers.",
+                              shown, "PUSH"):
+            raise ValueError("Kept the commit in the local Workspace")
+        if audience() != target or origin_for_push(path) != url:
+            raise ValueError("GitHub identity, visibility or push destination changed during review")
+        directory(path, ".git/oryx-disclosures", True)
+        save(receipt, pending, expected=previous)
+    return receipt, pending
+
+
+def finish_first_push(path, url, ref, commit, acknowledgement):
+    if acknowledgement is None:
         return
-    shown = {**target, "branch": ref, "commit": commit, "tree": workspace.git(path, "rev-parse", commit + "^{tree}"),
-             "files": workspace.git(path, "ls-tree", "-r", commit).splitlines(),
-             "history": workspace.git(path, "log", "--format=%H %an <%ae> %s", commit).splitlines()}
-    if not confirm_effect("This first push makes the listed Git history available to the private repository's readers.",
-                          shown, "PUSH"):
-        raise ValueError("Kept the commit in the local Workspace")
-    if audience() != target or origin_for_push(path) != url:
-        raise ValueError("GitHub identity, visibility or push destination changed during review")
+    from oryx.governance.files import save
+    remote_tip = workspace.git(path, "ls-remote", "--heads", url, ref)
+    if remote_tip.split("\t", 1)[0] != commit:
+        raise ValueError("First push awaits confirmation of the reviewed branch revision")
+    receipt, pending = acknowledgement
+    save(receipt, {**pending, "state": "confirmed"}, expected=pending)
+
 
 
 def origin_for_push(path):
@@ -311,10 +352,16 @@ def run(root, role, operation):
             url = origin_for_push(path)
             if identity(url) != identity(settings["remotes"]["workspace"]):
                 raise ValueError("The Workspace push destination differs from the confirmed repository")
-            reviewed_first_push(path, branch, url, reviewed)
+            acknowledgement = reviewed_first_push(path, branch, url, reviewed)
+            tracking_ref = f"refs/remotes/origin/{branch}"
+            previous_tracking = subprocess.run(["git", "-C", str(path), "rev-parse", "--verify", tracking_ref],
+                                               capture_output=True, text=True)
             # Send the reviewed commit to the verified URL even if HEAD or origin changes concurrently.
             workspace.git(path, "-c", "push.followTags=false", "push", url, f"{reviewed}:refs/heads/{branch}")
+            finish_first_push(path, url, f"refs/heads/{branch}", reviewed, acknowledgement)
             if origin_for_push(path) == url:
+                expected = previous_tracking.stdout.strip() if previous_tracking.returncode == 0 else "0" * len(reviewed)
+                workspace.git(path, "update-ref", tracking_ref, reviewed, expected)
                 workspace.git(path, "config", "--local", f"branch.{branch}.remote", "origin")
                 workspace.git(path, "config", "--local", f"branch.{branch}.merge", f"refs/heads/{branch}")
         else:
