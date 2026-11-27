@@ -81,7 +81,6 @@ REQUIRED = (
     ".agents/skills/stakeholder-profiles/SKILL.md", ".claude/skills/stakeholder-profiles/SKILL.md",
     "playbook/session-continuity.md", "playbook/context-advice.md", "playbook/handoffs.md",
     "tools/hub_commands.py", "playbook/commands.md", hub_commands.CATALOG,
-    ".agents/skills/extend-hub/SKILL.md", ".claude/skills/extend-hub/SKILL.md",
     ".agents/skills/ingest-context/SKILL.md", ".claude/skills/ingest-context/SKILL.md",
     ".codex/hooks.json", ".codex/config.toml", ".claude/settings.json",
     ".github/workflows/release.yml", ".github/workflows/review.yml", "tools/publish_release.py", "tools/release_candidate.py",

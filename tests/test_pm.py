@@ -123,7 +123,7 @@ class HubTests(unittest.TestCase):
         self.assertTrue(any("product" in e and "unsupported" in e and "old-purpose" in e for e in errors), errors)
 
     def test_skill_drift_is_rejected_and_sync_is_idempotent(self):
-        target = self.root / ".claude/skills/extend-hub/SKILL.md"
+        target = self.root / ".claude/skills/red-team/SKILL.md"
         target.write_text("Changed adapter.\n")
         self.assertTrue(any("sync-skills" in error for error in pm.check(self.root)))
         self.assertEqual(pm.sync_skills(self.root), 1)
@@ -197,7 +197,7 @@ class HubTests(unittest.TestCase):
         outside.write_text("External fixture.\n")
         (self.work / "context/escape.md").symlink_to(outside)
         self.assertTrue(any("regular files" in error for error in pm.check(self.root)))
-        source = self.root / ".agents/skills/extend-hub/escape.md"
+        source = self.root / ".agents/skills/red-team/escape.md"
         source.symlink_to(outside)
         with self.assertRaises(ValueError):
             pm.sync_skills(self.root)

@@ -58,26 +58,3 @@ Record the approver and reason for a waiver. Review readiness before the launch 
 If the list changes, inspect the current record and review your edits again.
 
 See the [terminal workflow](initiative-work.md) for the list fields and [roadmap approvals](initiative-approvals.md) for the decision gates.
-
-## Browser tests
-
-Use Node.js 20 or later. Run these commands from the oryx repository root.
-
-```sh
-npm ci --prefix tests/browser
-npm exec --prefix tests/browser -- playwright install chromium
-npm test --prefix tests/browser
-```
-
-Set `PM_HUB_CHROMIUM` to use an installed Chromium binary.
-The tests use temporary workspaces and simulate the PM’s response to the desktop confirmation.
-
-## Review workflow changes
-
-The required PR review checks changes to roadmap, task, launch checklist, and browser workflow files.
-Add one `## Browser impact` section to the pull request.
-Start with `Changed:` and describe the affected behavior, or use `Unchanged:` and explain why it stays the same.
-
-For changed behavior, add or update a Playwright spec in `tests/browser/`.
-Describe what you verified through the terminal and browser.
-The reviewer checks the explanation and test coverage. The required CI check runs Playwright.
