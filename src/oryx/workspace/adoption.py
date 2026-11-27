@@ -126,12 +126,28 @@ def validate_receipt(root):
         return None
     data = json.loads(identity.read_regular(path))
     keys = {"schema","workspace_id","plan","source_inventory","source","destination","backup","status"}
-    if (not isinstance(data, dict) or data.keys() != keys or data["schema"] != 1
+    if (not isinstance(data, dict) or set(data) - {"legacy_core"} != keys or data["schema"] != 1
             or data["workspace_id"] != identity.workspace_id(root) or data["status"] != "adopted-separate-copy"
             or any(not isinstance(data[k],str) or not identity.SHA.fullmatch(data[k]) for k in ("plan","source_inventory"))
             or any(not isinstance(data[k],str) or not Path(data[k]).is_absolute() for k in ("source","destination","backup"))):
         raise ValueError("Invalid adoption receipt")
+    check_proofs(data.get("legacy_core", {}))
     return data
+
+
+def check_proofs(values):
+    if not isinstance(values,dict) or any(not identity.ID.fullmatch(rid) or not isinstance(tokens,list)
+            or not all(isinstance(t,str) and identity.SHA.fullmatch(t) for t in tokens) for rid,tokens in values.items()):
+        raise ValueError("Invalid adopted Core link proofs")
+    return values
+
+
+def origin_proofs(root):
+    receipt = validate_receipt(root)
+    if receipt is None and (root / PORTABLE_RECEIPT).is_file():
+        from . import portable
+        receipt = portable.check_receipt(root)
+    return (receipt or {}).get("legacy_core", {})
 
 
 def checked_paths(private):
@@ -217,6 +233,14 @@ def adopt(source, destination, backup, expect):
         receipt = {"schema": 1, "workspace_id": plan["workspace_id"], "plan": expect, "source_inventory": digest,
                    "source": str(source), "destination": str(destination), "backup": str(backup),
                    "status": "adopted-separate-copy"}
+        proofs = {}
+        for rid,row in registry["records"].items():
+            if row["path"].endswith(".md"):
+                raw = identity.read_regular(identity.local_file(staging, row["path"]))
+                tokens = [v[2] for v in citations.legacy_proofs(rid, row["path"], raw).values()]
+                if tokens:
+                    proofs[rid] = sorted(set(tokens))
+        receipt["legacy_core"] = proofs
         identity.write_json(staging / RECEIPT, receipt)
         citations.reconcile(staging, registry, history)
         checked_paths(staging)
@@ -226,11 +250,22 @@ def adopt(source, destination, backup, expect):
             snapshot.publish_new(staging, destination)
     return receipt
 
-def legacy_resource(private, workspace_relative_path, raw_href):
-    if not ((private / RECEIPT).is_file() or (private / PORTABLE_RECEIPT).is_file()):
+def legacy_resource(private, workspace_relative_path, raw_href, expression):
+    if not raw_href.startswith("../"):
         return None
-    try:
-        link = citations.lookup(private, str(workspace_relative_path), raw_href)
-    except ValueError:
-        return None
-    return link.get("uri") if link.get("status") == "core" else None
+    name = str(workspace_relative_path)
+    registry = identity.load(private)["records"]
+    for rid,row in registry.items():
+        if row["path"] != name:
+            continue
+        trusted = origin_proofs(private).get(rid, [])
+        if not trusted:
+            return None
+        raw = identity.read_regular(identity.local_file(private, name))
+        native = identity.legacy_id(raw)
+        if (native or not rid.startswith("rec-")) and native != rid:
+            return None
+        proof = citations.legacy_proofs(rid, name, raw).get(expression)
+        if proof and proof[0] == raw_href and proof[2] in trusted:
+            return proof[1]
+    return None

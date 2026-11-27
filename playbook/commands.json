@@ -63,7 +63,8 @@
     "policy": "Resolve approved policy from the enrolled GitHub repository.",
     "verify": "Verify the reviewed pull request revision and its required checks.",
     "recover": "Recover validated local approvals from an independently verified backup.",
-    "create": "Create a local scope with its own identity."
+    "create": "Create a local scope with its own identity.",
+    "record": "Read the authoritative record and revision at its enrolled GitHub destination."
   },
   "aliases": {
     "preferences": "workspace preferences"
@@ -703,6 +704,30 @@
       "summary": "Resolve a record’s verified shared owner.",
       "effect": "remote-read",
       "cli": ["governance", "owner"],
+      "example": []
+    },
+    "workspace github merge": {
+      "summary": "Merge the exact independently reviewed candidate on GitHub.",
+      "effect": "remote-write",
+      "cli": ["governance", "github-merge"],
+      "example": []
+    },
+    "workspace github transfer": {
+      "summary": "Merge an approved ownership transfer and retain the private source until verification.",
+      "effect": "remote-write",
+      "cli": ["governance", "github-transfer"],
+      "example": []
+    },
+    "workspace github reconcile": {
+      "summary": "Reconcile pending ownership against the authenticated GitHub outcome.",
+      "effect": "local-write",
+      "cli": ["governance", "github-reconcile"],
+      "example": []
+    },
+    "workspace github record": {
+      "summary": "Read the authoritative record and revision at its enrolled GitHub destination.",
+      "effect": "remote-read",
+      "cli": ["governance", "github-record"],
       "example": []
     }
   }

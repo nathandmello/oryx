@@ -217,55 +217,38 @@ def link_errors(root: Path, path: Path, text: str, planned=()) -> list[str]:
         private = storage.selected_workspace(root)
         if private is not None and path.is_relative_to(private):
             roots = (root, private)
-    fence = None
-    metadata = text.startswith("---\n")
-    for line, unit in enumerate(text.splitlines(), 1):
-        stripped = unit.strip()
-        if metadata:
-            if line > 1 and stripped == "---":
-                metadata = False
+    from oryx.workspace.citations import visible_links
+    for line, match in visible_links(text):
+        raw = unescape(match[2].strip("<>"))
+        if raw.lower().startswith("oryx:"):
+            from oryx.workspace.resources import CoreResources
+            try:
+                if resources is None:
+                    resources = CoreResources(root)
+                resources.resolve(raw, conversion.markdown_anchors)
+            except (OSError, ValueError) as exc:
+                errors.append(f"{line}: {exc}")
             continue
-        if stripped.startswith(("```", "~~~")):
-            marker = stripped[:3]
-            if fence is None:
-                fence = marker
-            elif marker == fence:
-                fence = None
+        target = urlsplit(raw)
+        if target.scheme or target.netloc:
             continue
-        if fence:
-            continue
-        unit = re.sub(r"`[^`]+`", "", unit)
-        for match in LINK.finditer(unit):
-            raw = unescape(match[2].strip("<>"))
-            if raw.lower().startswith("oryx:"):
-                from oryx.workspace.resources import CoreResources
-                try:
-                    if resources is None:
-                        resources = CoreResources(root)
-                    resources.resolve(raw, conversion.markdown_anchors)
-                except (OSError, ValueError) as exc:
-                    errors.append(f"{line}: {exc}")
-                continue
-            target = urlsplit(raw)
-            if target.scheme or target.netloc:
-                continue
-            destination = (path.parent / unquote(target.path)).resolve() if target.path else path.resolve()
-            if not any(destination.is_relative_to(bound) for bound in roots):
-                if len(roots) == 2:
-                    from oryx.workspace.adoption import legacy_resource
-                    uri = legacy_resource(private, path.relative_to(private), raw)
-                    if uri is not None:
-                        from oryx.workspace.resources import CoreResources
-                        try:
-                            if resources is None:
-                                resources = CoreResources(root)
-                            resources.resolve(uri, conversion.markdown_anchors)
-                        except (OSError, ValueError) as exc:
-                            errors.append(f"{line}: {exc}")
-                        continue
-                errors.append(f"{line}: link leaves oryx: {match[2]}")
-            elif not destination.exists() and destination not in planned:
-                errors.append(f"{line}: broken link: {match[2]}")
+        destination = (path.parent / unquote(target.path)).resolve() if target.path else path.resolve()
+        if not any(destination.is_relative_to(bound) for bound in roots):
+            if len(roots) == 2:
+                from oryx.workspace.adoption import legacy_resource
+                uri = legacy_resource(private, path.relative_to(private), raw, match[0])
+                if uri is not None:
+                    from oryx.workspace.resources import CoreResources
+                    try:
+                        if resources is None:
+                            resources = CoreResources(root)
+                        resources.resolve(uri, conversion.markdown_anchors)
+                    except (OSError, ValueError) as exc:
+                        errors.append(f"{line}: {exc}")
+                    continue
+            errors.append(f"{line}: link leaves oryx: {match[2]}")
+        elif not destination.exists() and destination not in planned:
+            errors.append(f"{line}: broken link: {match[2]}")
     return errors
 
 

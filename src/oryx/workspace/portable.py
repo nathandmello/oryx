@@ -181,7 +181,9 @@ def approved_pairs(files, blobs):
 
 
 def exported_bindings(root, selected, registry):
+    from . import adoption
     edges = citations.load(root)
+    legacy = adoption.origin_proofs(root)
     known = {row["id"]: {r for r in [row["working"], row["head"], row["index"], *row["history"]] if r}
              for row in selected.values() if row["id"] and row["working"]}
     bindings = {}
@@ -198,7 +200,12 @@ def exported_bindings(root, selected, registry):
                 if edge["status"] == "record" and edge["revision"] not in known.get(edge["id"], set()):
                     edge = {"status": "historical-target-unverified"}
                 out[revision][href] = edge
-        bindings[rid] = {"aliases": aliases, "citations": out}
+        retained = []
+        if legacy.get(rid):
+            name = originals["path"]
+            raw = identity.read_regular(identity.local_file(root, name))
+            retained = sorted({p[2] for p in citations.legacy_proofs(rid,name,raw).values()} & set(legacy[rid]))
+        bindings[rid] = {"aliases": aliases, "citations": out, "legacy_core":retained}
     return bindings
 
 
@@ -504,7 +511,8 @@ def restore(archive, destination, expected):
         identity.write_json(root / identity.INDEX, registry)
         citations.reconcile(root,registry)
         identity.write_json(root/RECEIPT,{"schema":1,"workspace_id":manifest["workspace_id"],"manifest":expected,
-                            "lineage":"new-private-history","new_head":commit,"source_head":manifest["source_head"]})
+                            "lineage":"new-private-history","new_head":commit,"source_head":manifest["source_head"],
+                            "legacy_core":{rid:row["legacy_core"] for rid,row in manifest["bindings"].items() if row.get("legacy_core")}})
         from . import adoption
         validate_durable(root, files)
         adoption.checked_paths(root)
@@ -516,10 +524,12 @@ def restore(archive, destination, expected):
 
 def check_receipt(root):
     record=json.loads(identity.read_regular(identity.local_file(root,str(RECEIPT))))
-    if (not isinstance(record,dict) or record.keys() != {"schema","workspace_id","manifest","source_head","lineage","new_head"}
+    if (not isinstance(record,dict) or set(record) - {"legacy_core"} != {"schema","workspace_id","manifest","source_head","lineage","new_head"}
             or record["schema"] != 1 or record["workspace_id"] != identity.workspace_id(root)
             or record["lineage"] != "new-private-history" or not identity.SHA.fullmatch(record["manifest"])
             or not re.fullmatch(r"[0-9a-f]{40}|[0-9a-f]{64}",record["new_head"])):
         raise ValueError("Invalid portable recovery receipt")
 
+    from . import adoption
+    adoption.check_proofs(record.get("legacy_core", {}))
     return record

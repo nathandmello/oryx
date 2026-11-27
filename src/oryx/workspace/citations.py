@@ -1,4 +1,5 @@
 """Keep source links bound to the original indexed revision and its recorded limitations."""
+from html import unescape
 import json
 from pathlib import Path, PurePosixPath
 import posixpath
@@ -9,6 +10,45 @@ from . import identity
 
 FILE = identity.STATE / "citations.json"
 LINK = re.compile(r"\[[^\]\n]*\]\((<[^>\n]+>|[^\s)]+)\)")
+
+
+PUBLIC_LINK = re.compile(r"\[([^\]\n]+)\]\((<[^>\n]+>|[^\s)]+)\)")
+
+
+def visible_links(text):
+    """Yield exactly the public Markdown links inspected by Core integrity checks."""
+    fence = None
+    metadata = text.startswith("---\n")
+    for number, unit in enumerate(text.splitlines(), 1):
+        stripped = unit.strip()
+        if metadata:
+            if number > 1 and stripped == "---":
+                metadata = False
+            continue
+        if stripped.startswith(("```", "~~~")):
+            marker = stripped[:3]
+            if fence is None:
+                fence = marker
+            elif marker == fence:
+                fence = None
+            continue
+        if fence is None:
+            for match in PUBLIC_LINK.finditer(re.sub(r"`[^`]+`", "", unit)):
+                yield number, match
+
+
+def legacy_proofs(rid, name, data):
+    """Bind indivisible legacy link expressions to the original record, path, and logical resource."""
+    proofs = {}
+    for _, match in visible_links(data.decode("utf-8")):
+        href = unescape(match[2].strip("<>"))
+        if not href.startswith("../"):
+            continue
+        edge = classify(href, name, {}, {}, None)
+        if edge["status"] == "core":
+            key = identity.checksum(json.dumps([rid, name, match[0], edge["uri"]], ensure_ascii=True).encode("ascii"))
+            proofs[match[0]] = (href, edge["uri"], key)
+    return proofs
 
 
 def load(root):

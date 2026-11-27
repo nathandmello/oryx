@@ -49,14 +49,19 @@ def checked_paths(private):
     from oryx.sharing.transfer import check
     names=set()
     root=Path(private)
-    sections=(".oryx/staging/sharing",".oryx/state/transfers",".oryx/state/scopes")
+    sections=(".oryx/staging/sharing",".oryx/state/transfers",".oryx/state/scopes",".oryx/state/github-transfers")
     for relative in sections:
         folder=directory(root,relative)
         if not folder.exists():
             continue
         for path in folder.iterdir():
             value=read(path)
-            if relative.endswith("/transfers"):
+            if relative.endswith("/github-transfers"):
+                from .github import transfer_binding
+                transfer_binding(value)
+                if path.name!=digest(value["id"].encode())+".json":
+                    raise ValueError("Mismatched GitHub transfer recovery address")
+            elif relative.endswith("/transfers"):
                 check(value,path.name)
             elif relative.endswith("/scopes"):
                 shape(value, ("id","type","parent","membership"))
@@ -90,14 +95,15 @@ def read_body():
 
 
 def main(argv=None):
-    args=arguments(argv, ("local","scope","sync","read","owner","resolve","report","reviews","github-status","github-reviews","github-policy","github-verify"))
+    args=arguments(argv, ("local","scope","sync","read","owner","resolve","report","reviews","github-status","github-reviews","github-policy","github-verify","github-merge","github-transfer","github-reconcile","github-record"))
     try:
         body=read_body()
         if args.operation=="local":
             result=local_scope(private_root(args.workspace),body)
         elif args.operation.startswith("github-"):
             from .github import run
-            result=run(args.operation,body)
+            needs_private=args.operation=="github-transfer" or (args.operation=="github-reconcile" and "id" in body)
+            result=run(args.operation,body,private_root(args.workspace) if needs_private else None)
         else:
             result=request(args.operation,body)
         print(json.dumps(result,ensure_ascii=True))

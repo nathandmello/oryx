@@ -1,4 +1,4 @@
-"""Read-only observations from enrolled GitHub.com repositories under the acting credential."""
+"""Governed GitHub.com reads and head-bound merges under the acting customer credential."""
 import base64
 import binascii
 import os
@@ -10,7 +10,8 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import quote, urlencode
 from urllib.request import build_opener, HTTPRedirectHandler, Request
 
-from .common import LIMIT, canonical, decode, digest, identifier, shape
+from .common import LIMIT, SHA, canonical, decode, digest, identifier, record_id, shape
+from .files import directory, read, save
 
 ENROLLMENT = Path("/etc/oryx/github.json")
 OID = re.compile(r"[a-f0-9]{40}\Z")
@@ -56,7 +57,7 @@ class NoRedirect(HTTPRedirectHandler):
 
 
 class GitHubAPI:
-    """Fixed HTTPS origin and immutable GraphQL query. No mutation transport."""
+    """Fixed HTTPS origin, one immutable GraphQL read and a single typed merge effect."""
     def __init__(self):
         self.token=os.environ.get("GH_TOKEN") or os.environ.get("GITHUB_TOKEN")
         if not self.token:
@@ -74,19 +75,32 @@ class GitHubAPI:
         if not path.startswith("/") or path.startswith("//") or (variables is not None and path!="/graphql"):
             raise ValueError("Invalid GitHub adapter endpoint")
         data=canonical({"query":REVIEW_QUERY,"variables":variables}) if variables is not None else None
-        req=Request("https://api.github.com"+path,data=data,headers={"Authorization":"Bearer "+self.token,
+        return self._request(path,data,"POST" if data else "GET")
+
+    def merge(self,slug,number,head):
+        owner,name=slug.split("/")
+        path=f"/repos/{identifier(owner)}/{identifier(name)}/pulls/{positive(number)}/merge"
+        return self._request(path,canonical({"sha":oid(head),"merge_method":"merge"}),"PUT")
+
+    def _request(self,path,data,method):
+        req=Request("https://api.github.com"+path,data=data,method=method,headers={"Authorization":"Bearer "+self.token,
                     "Accept":"application/vnd.github+json","User-Agent":"oryx-customer-governance",
                     "Content-Type":"application/json","X-GitHub-Api-Version":"2022-11-28"})
         try:
             with self.http.open(req,timeout=15) as response:
                 return decode(response.read(LIMIT+1))
-        except (HTTPError,URLError,TimeoutError) as exc:
+        except HTTPError as exc:
+            if method=="PUT" and 400<=exc.code<500:
+                raise PermissionError(f"GitHub declined the merge (HTTP {exc.code}); reconcile the PR") from exc
+            raise RuntimeError("GitHub response is uncertain; reconcile the PR") from exc
+        except (URLError,TimeoutError) as exc:
             raise PermissionError("GitHub could not confirm this operation under the acting credential") from exc
 
 
 class Connection:
     def __init__(self,settings,api,uid):
-        shape(settings, ("principals","repositories"))
+        shape(settings, ("principals","repositories"), ("human_effects",))
+        self.human_effects=settings.get("human_effects",{}).get(str(uid),{})
         account=settings["principals"].get(str(uid))
         if not account:
             raise PermissionError("OS principal has no enrolled GitHub user")
@@ -94,12 +108,19 @@ class Connection:
         user=api.fetch("/user")
         if positive(user["id"])!=positive(account):
             raise PermissionError("Active GitHub identity differs from customer enrollment")
+        self.account=positive(user["id"])
         self.login=identifier(user["login"])
         self.config=settings["repositories"]
+        owners={}
+        for scope,repo in self.config.items():
+            for rid in repo.get("records",{}):
+                if record_id(rid) in owners:
+                    raise ValueError("A GitHub record has multiple registered authoritative homes")
+                owners[rid]=scope
 
     def repo(self,scope):
         value=self.config[identifier(scope)]
-        shape(value,("slug","id","owner_id","branch","reports"),("protection",))
+        shape(value,("slug","id","owner_id","branch","reports"),("protection","records"))
         owner,name=value["slug"].split("/")
         path="/repos/"+identifier(owner)+"/"+identifier(name)
         identifier(value["branch"])
@@ -122,6 +143,24 @@ class Connection:
         except (ValueError,binascii.Error) as exc:
             raise ValueError("Invalid GitHub file encoding") from exc
         return decode(raw),digest(raw)
+
+    def registered_record(self,reg,path,rid,revision):
+        filename=relative_path(reg.get("records",{})[record_id(rid)])
+        if not filename.startswith("context/records/"):
+            raise ValueError("Register an authoritative record in context/records")
+        value,_=self.content(path,filename,revision)
+        shape(value,("id","kind","content","source_revision"))
+        if (value["id"]!=rid or value["kind"]!="record" or not isinstance(value["content"],str)
+                or digest(value["content"].encode())!=value["source_revision"]):
+            raise ValueError("GitHub record identity or exact bytes do not match its declared revision")
+        return value
+
+    def descendant(self,path,earlier,later):
+        if earlier==later:
+            return
+        compared=self.api.fetch(path+"/compare/"+oid(earlier)+"..."+oid(later)+"?per_page=1")
+        if compared["status"]!="ahead" or compared["merge_base_commit"]["sha"]!=earlier:
+            raise ValueError("Expected commit is outside the official GitHub history")
 
     def inbox(self,path,reg):
         qualifiers=["review-requested:@me"]
@@ -166,9 +205,23 @@ class Connection:
         changed=self.api.fetch(path+"/pulls/"+str(number)+"/files?per_page=100")
         if not changed or len(changed)!=pr["changed_files"] or len(changed)>100:
             raise ValueError("Candidate change inventory is incomplete")
+        records=reg.get("records",{})
+        if len(set(records.values()))!=len(records):
+            raise ValueError("Multiple record identities refer to one GitHub file")
+        record_paths={v:k for k,v in records.items()}
         receipts=[]
         for entry in changed:
             filename=relative_path(entry["filename"])
+            if filename in record_paths:
+                if len(changed)!=1 or entry["status"]!="added" or filename in reg["reports"]:
+                    raise ValueError("Ownership transfer requires exactly one new registered record")
+                commit=self.api.fetch(path+"/git/commits/"+head)
+                if commit["sha"]!=head or [p["sha"] for p in commit["parents"]]!=[pr["base"]["sha"]]:
+                    raise ValueError("Transfer must contain one commit rooted directly in destination history")
+                rid=record_paths[filename]
+                record=self.registered_record(reg,path,rid,head)
+                receipts.append({"record":rid,"path":filename,"source_revision":record["source_revision"]})
+                continue
             if entry["status"] not in {"added","modified"} or filename not in reg["reports"]:
                 raise ValueError("Change requires owner review outside the supported structured-report policy")
             control=reg["reports"][filename]
@@ -219,10 +272,19 @@ class Connection:
         if (decision["headRefOid"]!=head or decision["baseRefOid"]!=pr["base"]["sha"]
                 or decision["reviewDecision"]!="APPROVED" or decision["mergeStateStatus"]!="CLEAN"):
             raise ValueError("GitHub has not confirmed a clean candidate with required approvals")
-        return {"ruleset":rule_id,"check_run":positive(trusted[0]["id"]),"github_review_decision":"APPROVED"}
+        return {"ruleset":rule_id,"check_run":positive(trusted[0]["id"]),"github_review_decision":"APPROVED",
+                "require_current_base":effective.get("required_status_checks",{}).get("strict_required_status_checks_policy") is True}
 
     def perform(self,op,body):
         candidate=op in {"github-policy","github-verify"}
+        if op=="github-record":
+            shape(body,("scope","id"),("revision",))
+            reg,path,_=self.repo(body["scope"])
+            tip=self.tip(path,reg)
+            revision=oid(body.get("revision",tip))
+            self.descendant(path,revision,tip)
+            return {"scope":body["scope"],"repository_id":reg["id"],"commit":revision,
+                    "record":self.registered_record(reg,path,body["id"],revision)}
         shape(body, ("scope","pull","head") if candidate else ("scope",))
         reg,path,current=self.repo(body["scope"])
         result={"scope":body["scope"],"destination":reg["slug"],"actor":self.login}
@@ -239,6 +301,8 @@ class Connection:
         pr,dependencies=self.policy(path,reg,number,head)
         observed=self.verify_protection(path,reg,number,head,pr) if op=="github-verify" else {}
         for dep in dependencies:
+            if "record" in dep:
+                continue
             owner,owner_path,_=self.repo(dep["owner_scope"])
             if self.tip(owner_path,owner)!=dep["owner_revision"]:
                 raise ValueError("Governing dependency changed during verification")
@@ -247,6 +311,194 @@ class Connection:
         return {**result,"head":head,"base":pr["base"]["sha"],"dependencies":dependencies,**observed}
 
 
-def run(op,body):
-    settings=load_enrollment()
-    return Connection(settings,GitHubAPI(),os.geteuid()).perform(op,body)
+def human_confirmation(intent):
+    with open("/dev/tty","r+",encoding="utf-8") as pm:
+        pm.write("Merge the already-disclosed, independently approved GitHub candidate below.\n")
+        pm.write(canonical(intent).decode("ascii","backslashreplace")+"\n")
+        pm.write("Type MERGE to authorize this exact destination, candidate and effect: ")
+        pm.flush()
+        return pm.readline().strip()=="MERGE"
+
+
+def transfer_binding(value):
+    shape(value,("scope","pull","head","base","id","repository_id","owner_id","source_revision","workspace_id"))
+    identifier(value["scope"])
+    positive(value["pull"])
+    for key in ("repository_id","owner_id"):
+        positive(value[key])
+    for key in ("base","head"):
+        oid(value[key])
+    record_id(value["id"])
+    from uuid import UUID
+    if str(UUID(value["workspace_id"]))!=value["workspace_id"] or not SHA.fullmatch(value["source_revision"]):
+        raise ValueError("Invalid GitHub transfer binding")
+    return digest(canonical(value))
+
+
+def binding_path(private,rid,create=False):
+    return directory(private,".oryx/state/github-transfers",create)/(digest(record_id(rid).encode())+".json")
+
+
+def verify_marker(private,binding):
+    from oryx.sharing import transfer
+    from oryx.workspace.location import workspace_id
+    marker=transfer.status(private,binding["id"])
+    if (not marker or marker["proposal"]!=transfer_binding(binding) or marker["workspace_id"]!=workspace_id(private)
+            or marker["workspace_id"]!=binding["workspace_id"] or marker["source_revision"]!=binding["source_revision"]
+            or marker["organization"]!="github-"+str(binding["owner_id"]) or marker["scope"]!=binding["scope"]):
+        raise ValueError("Workspace transfer marker and GitHub destination binding differ")
+    return marker
+
+
+def fence_transfer(private,body,reg,source_revision):
+    from oryx.sharing import transfer
+    from oryx.workspace.location import workspace_id
+    from storage import writer_lock
+    rid=body["id"]
+    binding={**body,"repository_id":reg["id"],"owner_id":reg["owner_id"],"source_revision":source_revision,"workspace_id":workspace_id(private)}
+    commitment=transfer_binding(binding)
+    with writer_lock(private):
+        marker=transfer.status(private,rid)
+        path=binding_path(private,rid,True)
+        prior=read(path) if path.exists() else None
+        if marker and marker["status"]!="closed":
+            if prior!=binding:
+                raise ValueError("Reconcile the existing owner transfer first")
+            return verify_marker(private,binding)
+        row,data,_=transfer.source(private,rid)
+        if row["id"]!=rid or row["revision"]!=source_revision or digest(data)!=source_revision:
+            raise ValueError("Private source changed; inspect both revisions before transfer")
+        current={"id":rid,"workspace_id":binding["workspace_id"],"source_path":row["path"],"source_revision":source_revision,
+                 "organization":"github-"+str(reg["owner_id"]),"scope":body["scope"],"proposal":commitment,"status":"pending","official_commit":None}
+        # Write the recovery address before the fence. No provider call can occur between these writes.
+        save(path,binding,expected=prior)
+        save(transfer.location(private,rid,True),current,expected=marker)
+        return current
+
+
+def merge_state(client,reg,path,body):
+    pr=client.api.fetch(path+"/pulls/"+str(positive(body["pull"])))
+    if (pr["base"]["repo"]["id"]!=reg["id"] or pr["head"]["repo"]["id"]!=reg["id"]
+            or pr["base"]["ref"]!=reg["branch"] or pr["head"]["sha"]!=oid(body["head"])):
+        raise ValueError("GitHub PR no longer matches the bound repository, branch and candidate")
+    result={"repository_id":reg["id"],"pull":body["pull"],"head":body["head"]}
+    if pr["state"]=="open" and pr.get("merged") is False:
+        return {**result,"status":"open"}
+    if pr["state"]!="closed" or type(pr.get("merged")) is not bool:
+        raise ValueError("GitHub PR outcome is uncertain")
+    if not pr["merged"] and pr.get("merged_at") is None:
+        return {**result,"status":"closed"}
+    if not pr["merged"] or not pr.get("merged_at"):
+        raise ValueError("GitHub merge evidence is inconsistent")
+    merged=oid(pr["merge_commit_sha"])
+    commit=client.api.fetch(path+"/git/commits/"+merged)
+    if commit["sha"]!=merged or [p["sha"] for p in commit["parents"]]!=[oid(body["base"]),body["head"]]:
+        raise ValueError("Merge commit does not have the approved base and candidate parents")
+    client.descendant(path,merged,client.tip(path,reg))
+    return {**result,"status":"merged","official_commit":merged}
+
+
+def reconcile_transfer(client,private,scope,rid):
+    from oryx.sharing import transfer
+    from storage import writer_lock
+    binding=read(binding_path(private,rid))
+    marker=verify_marker(private,binding)
+    reg,path,_=client.repo(scope)
+    if (scope!=binding["scope"] or reg["id"]!=binding["repository_id"] or reg["owner_id"]!=binding["owner_id"]
+            or rid!=binding["id"] or "transfer" not in client.human_effects.get(scope,[])):
+        raise PermissionError("Cannot verify the enrolled transfer destination or recovery identity")
+    result=merge_state(client,reg,path,binding)
+    if result["status"]=="open":
+        return {**result,"transfer_status":marker["status"]}
+    official=result.get("official_commit")
+    if official:
+        record=client.registered_record(reg,path,rid,official)
+        if record["source_revision"]!=marker["source_revision"]:
+            raise ValueError("Verified merge differs from the fenced source revision")
+        tip=client.tip(path,reg)
+        if tip!=official:
+            client.registered_record(reg,path,rid,tip)
+    updated={**marker,"status":"transferred" if official else "closed","official_commit":official}
+    if marker["status"]=="transferred" and updated!=marker:
+        raise ValueError("GitHub evidence conflicts with a completed ownership transfer")
+    with writer_lock(private):
+        save(transfer.location(private,rid),updated,expected=marker)
+    return {**result,"transfer_status":updated["status"],"record_id":rid,"scope":scope}
+
+
+def effect(client,op,body,private=None,confirm=human_confirmation,reauthenticate=None):
+    is_transfer=op=="github-transfer"
+    if op=="github-reconcile":
+        if "id" in body:
+            shape(body,("scope","id"))
+            return reconcile_transfer(client,private,body["scope"],body["id"])
+        shape(body,("scope","pull","head","base"))
+        reg,path,_=client.repo(body["scope"])
+        return merge_state(client,reg,path,body)
+    if op not in {"github-merge","github-transfer"}:
+        raise ValueError("Unknown GitHub effect")
+    shape(body,("scope","pull","head","base","id") if is_transfer else ("scope","pull","head","base"))
+    params={key:body[key] for key in ("scope","pull","head")}
+    scope=body["scope"]
+    rights=set(client.human_effects.get(scope,[]))
+    if "merge" not in rights or (is_transfer and "transfer" not in rights):
+        raise PermissionError("This OS principal is not separately enrolled for the requested human GitHub effect")
+    reg,path,current=client.repo(scope)
+    if current["permissions"].get("push") is not True or current.get("allow_merge_commit") is not True or current["visibility"]!="private":
+        raise PermissionError("Private repository, acting account write permission and merge-commit support required")
+    state=merge_state(client,reg,path,body)
+    if state["status"]!="open":
+        return reconcile_transfer(client,private,scope,body["id"]) if is_transfer else state
+    proof=client.perform("github-verify",params)
+    if proof["base"]!=oid(body["base"]) or not proof["require_current_base"]:
+        raise ValueError("A strictly current base and its exact approved revision are required")
+    docs=[dep for dep in proof["dependencies"] if "record" in dep]
+    if bool(docs)!=is_transfer or (is_transfer and (len(docs)!=1 or docs[0]["record"]!=body["id"])):
+        raise ValueError("The approved effect differs from the registered candidate type")
+    if is_transfer:
+        from oryx.sharing import transfer
+        marker=transfer.status(private,body["id"])
+        if not marker or marker["status"]=="closed":
+            _,source,_=transfer.source(private,body["id"])
+            if digest(source)!=docs[0]["source_revision"]:
+                raise ValueError("The private record and proposed GitHub content differ")
+    intent={**proof,"operation":op,"branch":reg["branch"],"repository_id":reg["id"],"visibility":current["visibility"]}
+    intent["reviewed_files"]=[]
+    for dep in proof["dependencies"]:
+        filename=dep.get("report") or dep["path"]
+        doc,_=client.content(path,filename,body["head"])
+        intent["reviewed_files"].append({"path":filename,"document":doc})
+    if not confirm(intent):
+        return {"status":"no-decision","head":body["head"]}
+    if is_transfer:
+        fence_transfer(private,body,reg,docs[0]["source_revision"])
+    actor=reauthenticate() if reauthenticate else client
+    current_rights=set(actor.human_effects.get(scope,[]))
+    if (actor.account!=client.account or "merge" not in current_rights
+            or (is_transfer and "transfer" not in current_rights)):
+        raise PermissionError("Customer merge principal or enrollment changed after review")
+    client=actor
+    refreshed=client.perform("github-verify",params)
+    new_reg,_,latest=client.repo(scope)
+    if new_reg!=reg:
+        raise ValueError("Customer repository registration changed after review")
+    if refreshed!=proof or latest["permissions"].get("push") is not True or latest["visibility"]!="private":
+        raise ValueError("GitHub authority or exact candidate changed after local review")
+    # The server independently enforces permission, fresh required checks and the supplied head SHA.
+    response=client.api.merge(reg["slug"],body["pull"],body["head"])
+    if response.get("merged") is not True or not OID.fullmatch(str(response.get("sha"))):
+        raise ValueError("GitHub has not confirmed the merge; reconcile before retrying")
+    result=reconcile_transfer(client,private,scope,body["id"]) if is_transfer else merge_state(client,reg,path,body)
+    if result.get("official_commit")!=response["sha"]:
+        raise ValueError("Cannot verify the provider's merge response; reconcile before retrying")
+    return result
+
+
+def run(op,body,private=None):
+    def connect():
+        settings=load_enrollment()
+        return Connection(settings,GitHubAPI(),os.geteuid())
+    client=connect()
+    if op in {"github-merge","github-transfer","github-reconcile"}:
+        return effect(client,op,body,private,reauthenticate=connect)
+    return client.perform(op,body)
