@@ -331,12 +331,9 @@ class Connection:
 
 
 def human_confirmation(intent):
-    with open("/dev/tty","r+",encoding="utf-8") as pm:
-        pm.write("Merge the already-disclosed, independently approved GitHub candidate below.\n")
-        pm.write(canonical(intent).decode("ascii","backslashreplace")+"\n")
-        pm.write("Type MERGE to authorize this exact destination, candidate and effect: ")
-        pm.flush()
-        return pm.readline().strip()=="MERGE"
+    from oryx.review.cli import confirm_effect
+
+    return confirm_effect("Merge the independently approved GitHub candidate.", intent, "MERGE")
 
 
 def transfer_binding(value):
@@ -713,16 +710,20 @@ def verify_candidate(client,reg,path,draft,head):
 
 
 def disclosure_confirmation(draft):
-    with open("/dev/tty","r+",encoding="utf-8") as pm:
-        pm.write("This writes private material into a customer GitHub repository before merge.\n")
-        intent=draft["intent"]
-        metadata={"parents":[intent["base"]],"message":"Reviewed Oryx proposal "+draft["commitment"],
-                  "author_and_committer":{"name":intent["author"],"email":str(intent["actor"])+"+"+intent["author"]+"@users.noreply.github.com",
-                                          "date":intent["last_updated"]},"pull_title":"Oryx record "+intent["id"],
-                  "pull_body":"Reviewed Oryx proposal "+draft["commitment"]}
-        pm.write(canonical({"branch":branch_name(draft),"draft_pull_request":True,"review":draft,"metadata":metadata}).decode("ascii","backslashreplace")+"\n")
-        pm.write("Type DISCLOSE to allow these exact bytes, metadata, destination and readers: ");pm.flush()
-        return pm.readline().strip()=="DISCLOSE"
+    from oryx.review.cli import confirm_effect
+
+    intent = draft["intent"]
+    actor_email = f"{intent['actor']}+{intent['author']}@users.noreply.github.com"
+    metadata = {
+        "parents": [intent["base"]],
+        "message": "Reviewed Oryx proposal " + draft["commitment"],
+        "author_and_committer": {"name": intent["author"], "email": actor_email, "date": intent["last_updated"]},
+        "pull_title": "Oryx record " + intent["id"],
+        "pull_body": "Reviewed Oryx proposal " + draft["commitment"],
+    }
+    displayed = {"branch": branch_name(draft), "draft_pull_request": True, "review": draft, "metadata": metadata}
+    return confirm_effect("This exposes the reviewed material to the repository audience before merge.",
+                          displayed, "DISCLOSE")
 
 
 def proposal_fence(private,draft):

@@ -61,13 +61,11 @@ def authorize(draft, call=request):
     if (info["actor"]!=draft["actor"] or info["organization"]!=draft["organization"] or info["revision"]!=intent["base"]
             or info["audience"]!=intent["audience"]):
         raise ValueError("The reviewed actor, audience or destination revision changed")
-    # Reopen the controlling terminal rather than treating agent-supplied standard input as a PM gesture.
-    with open("/dev/tty","r+",encoding="utf-8") as tty:
-        tty.write("This first external write exposes the exact material below to the named destination audience.\n")
-        tty.write(json.dumps(intent,indent=2,ensure_ascii=True)+"\n")
-        tty.write("Type DISCLOSE to authorize this revision and audience: ");tty.flush()
-        if tty.readline().strip()!="DISCLOSE":
-            return {"status":"kept-private","commitment":draft["commitment"]}
+    from oryx.review.cli import confirm_effect
+
+    if not confirm_effect("The first external write exposes this material to the named audience.",
+                          intent, "DISCLOSE"):
+        return {"status": "kept-private", "commitment": draft["commitment"]}
     return call("authorize",{"scope":intent["scope"],"commitment":draft["commitment"],"base":intent["base"],"audience":intent["audience"]})
 
 

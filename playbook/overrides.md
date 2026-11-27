@@ -17,7 +17,7 @@ The launcher aligns Studio before startup. Core and [initiative approval receipt
 
 Run system updates from the PM's terminal. Use a separate development checkout for shared contributions.
 Review and trust the project hooks. Use local filesystem tools for edits to oryx files.
-Remote connectors and external services have their own permissions.
+Use the [available tools](ingestion.md#choose-an-external-tool) within the PM’s permissions.
 
 For templates, fields, columns, and browser layouts, use [workspace customization](customization.md).
 

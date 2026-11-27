@@ -26,6 +26,16 @@ def tty_session():
         raise
 
 
+def confirm_effect(summary, displayed, keyword):
+    """Show the exact operation in the PM's foreground terminal and read its decision."""
+    with tty_session() as terminal:
+        terminal.write(summary.encode("utf-8") + b"\n")
+        terminal.write(json.dumps(displayed, ensure_ascii=True, indent=2).encode("ascii") + b"\n")
+        terminal.write(f"Type {keyword} to approve this exact operation: ".encode("ascii"))
+        decision = terminal.readline(64)
+        return decision.endswith(b"\n") and decision.strip() == keyword.encode("ascii")
+
+
 def interact(ws, identifier, *, actor="pm-local-review"):
     store.pm_only()
     shown = ws.inspect(identifier)

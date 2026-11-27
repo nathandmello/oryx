@@ -298,13 +298,13 @@ def revoke(private, source_id, *, restore=False, reference=None):
 
 
 def reread(private, grant, purpose, source=None):
-    """Connector reads arrive through the caller. The stored grant cannot supply remote text."""
+    """Check the caller’s current remote read or reopen the original local passage."""
     grant = {k: v for k, v in grant.items() if k != "ticket"}
     if grant["purposes"] != [purpose] or grant["retention"] != "review":
         raise ValueError("Source use is outside this purpose")
     if source is None:
         if not local_ref(grant["reference"]):
-            raise ValueError("Obtain a fresh authorized read from the original conversation or connector")
+            raise ValueError("Obtain a fresh authorized read of the original passage using an available reader")
         info = {k: v for k, v in grant.items() if k not in ("checksum", "length", "local_version", "ends_at_eof")}
         actual, text = material(private, info, None, length=grant["length"])
     else:

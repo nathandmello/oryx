@@ -30,13 +30,14 @@ Pass JSON on standard input to `python3 tools/pm.py ingestion assess`. A meeting
 Use each original's stable ID. Link a recap to the same `event_id` only when the originating exchange is known.
 Use `subject` for an agreed product, area or initiative. An unspecified subject remains unknown.
 
-Use the inspected text for connector reads. For chat, identify the specific message with an opaque `chat:` reference.
+For remote reads, use the original text returned by an authorized tool available to the agent.
+For chat, identify the specific message with an opaque `chat:` reference.
 Use a Workspace-relative path to a regular Markdown or text file in a visible record directory.
 Oryx reads the cited bytes from that file, including evidence in an initiative or a newly added domain.
 Configuration, hidden files, private profiles, customizations and linked files cannot supply evidence.
 
 Set `coverage` to `read`, `partial` or `unavailable`. For a partial read, include the exact text and its UTF-8 byte offset.
-Supply the connector revision for partial remote reads. An incomplete speaker turn needs clarification.
+Supply the source revision for partial remote reads. An incomplete speaker turn needs clarification.
 Keep the permitted excerpt within 128 KiB. For longer sources, supply bounded ranges within the approved scope.
 
 Only name purposes the PM permits. Use `chat-only` when secondary review or pointer retention is outside that permission.
@@ -46,6 +47,14 @@ Shared capture uses the same envelope through a source's `ingestion` options. Pr
 To withdraw a local document, run `oryx ingestion revoke-document SOURCE_ID PATH`.
 Personal search withholds that document and records citing it until you restore its use.
 Oryx rechecks a local source when the PM accepts its reviewed onboarding finding.
+
+## Choose an external tool
+
+The agent discovers which tools are available in its session. Choose one that can complete the action with the PM’s permissions.
+For reads, carry the source identity, revision, scope, coverage and permitted use into Oryx.
+
+For an outward action, verify the destination and audience before PM review. Recheck both before disclosure.
+Keep an external result pending when the available tool cannot confirm it. Report the missing capability.
 
 ## Inspect and review
 
@@ -71,7 +80,7 @@ Finish the PM's task. At a natural pause, the common selector can reserve one el
 Use `pm.py offer presented TOKEN` after delivery. A busy moment can retain an eligible source pointer for later.
 
 Use `pm.py offer list` and `pm.py offer show TOKEN` for explicit discovery.
-Pending references contain no quotes. Remote evidence requires a fresh authorized connector read of that exact passage.
+Pending references contain no quotes. Remote evidence requires a fresh authorized read of that exact passage.
 
 ## File one approved claim
 
@@ -83,7 +92,7 @@ For a broader interpretation, choose `kind: hypothesis`, `attribution: PM`, and 
 Show the PM the wording, evidence, private destination and any uncertainty. Preview edits again.
 Pass the review and approved wording to `stakeholder-profile accept`. Both operations recheck the authorized original.
 
-For remote sources, supply a current `source_read` from the authorized conversation or connector at each step.
+For remote sources, supply a current `source_read` from the authorized conversation or remote reader at each step.
 A stored grant identifies the permitted range. It cannot prove continued external access.
 
 Use `ingestion revoke SOURCE_ID` when permission ends. This removes pending review authority for that original.
