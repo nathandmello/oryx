@@ -3,6 +3,7 @@ import argparse
 import json
 import os
 from pathlib import Path
+import subprocess
 import sys
 from uuid import UUID, uuid4
 
@@ -12,14 +13,18 @@ from .files import directory, read, save
 
 
 def private_root(explicit):
-    from oryx.workspace.location import workspace_id
-    selected = explicit or os.environ.get("ORYX_WORKSPACE")
-    if not selected:
-        raise ValueError("Select the personal Workspace")
-    private = Path(selected)
-    if private.resolve() != private or not private.is_dir():
-        raise ValueError("Select an existing canonical Workspace")
-    workspace_id(private)
+    from oryx.workspace.location import selected_path
+    core = Path(__file__).resolve().parents[3]
+    private = selected_path(core, explicit=explicit)
+    if private is None or not private.is_dir():
+        raise ValueError("Select an existing personal Workspace")
+    try:
+        root = subprocess.run(["git", "-C", str(private), "rev-parse", "--show-toplevel"],
+                              capture_output=True, text=True, timeout=10)
+    except subprocess.SubprocessError as exc:
+        raise ValueError("Cannot verify the selected Workspace Git root") from exc
+    if root.returncode or Path(root.stdout.strip()).resolve() != private:
+        raise ValueError("Git root does not match the selected Workspace")
     return private
 
 
@@ -97,6 +102,6 @@ def main(argv=None):
             result=request(args.operation,body)
         print(json.dumps(result,ensure_ascii=True))
         return 0
-    except (OSError,ValueError,KeyError,TypeError,RuntimeError) as exc:
+    except (OSError, ValueError, KeyError, TypeError, RuntimeError, subprocess.SubprocessError) as exc:
         print(str(exc),file=sys.stderr)
         return 1

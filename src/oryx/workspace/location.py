@@ -24,9 +24,13 @@ def workspace_id(folder):
     return value
 
 
-def selected_path(core):
+def selected_path(core, *, explicit=None):
     """Validate explicit location even when the caller only wants to read a file."""
     value = os.environ.get("ORYX_WORKSPACE")
+    if explicit is not None:
+        if value is not None and Path(value) != explicit:
+            raise ValueError("The explicit location differs from the selected Workspace")
+        value = os.fspath(explicit)
     if value is None:
         if "ORYX_WORKSPACE_ID" in os.environ:
             raise ValueError("ORYX_WORKSPACE_ID needs an explicit ORYX_WORKSPACE")
