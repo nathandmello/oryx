@@ -18,7 +18,7 @@ For dictionary use, see rules 1.1–1.4. For procedures and descriptions, see Se
 
 oryx checks approximate word counts, paragraph length, and a few house terms. A reviewer must check approved meanings, syntax, technical terminology, and exceptions against the standard.
 
-Record the passages and rules actually checked before reporting a standards review. A passing oryx check alone supports no claim of full STE compliance.
+Record the passages and rules actually checked before reporting a standards review. Automated checks cover measurable rules and repository integrity. Review full STE compliance, evidence quality and judgment separately.
 
 ## Hemingway and meaning
 
