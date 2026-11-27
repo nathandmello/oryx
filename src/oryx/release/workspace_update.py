@@ -17,6 +17,8 @@ class ConcurrentEdit(ValueError):
     """The PM's displaced settings need explicit reconciliation."""
 
 
+RELEASE_VERSION = re.compile(r"(0|[1-9][0-9]{0,8})\.(0|[1-9][0-9]{0,8})\.(0|[1-9][0-9]{0,8})")
+FIRST_CUSTOMER_VERSION = (0, 17, 0)
 FIELD = re.compile(rb'("system_version"\s*:\s*)"([0-9]+\.[0-9]+\.[0-9]+)"')
 
 
@@ -32,7 +34,7 @@ def git(folder, *arguments, data=None):
 
 
 def validate(folder, identifier=None):
-    if "PM_HUB_PROTECTED_ROOT" in os.environ:
+    if "PM_HUB_PROTECTED_ROOT" in os.environ or "ORYX_PROPOSAL_HOST" in os.environ:
         raise ValueError("Run release changes from the PM terminal")
     folder = archive.local_path(folder)
     marker = archive.regular(archive.local_path(folder / ".oryx/workspace.json"))
@@ -85,6 +87,22 @@ def prepare(folder, incident, previous, desired):
         _, before = read_settings(folder)
         if previous is None:
             previous = desired
+        current = json.loads(before, object_pairs_hook=archive.unique_object)
+        if not isinstance(current, dict):
+            raise ValueError("The selected Workspace needs valid release settings")
+        actual = current.get("system_version")
+        if actual != previous:
+            # A new machine may have installed the latest Core before restoring an older
+            # customer-format portable backup. Only its checked, identity-bound receipt
+            # admits this extra path. A normal mismatched Workspace still requires review.
+            from oryx.workspace import portable
+            version = RELEASE_VERSION.fullmatch(actual) if isinstance(actual, str) else None
+            ceiling = tuple(map(int, previous.split(".")))
+            if (not version or not FIRST_CUSTOMER_VERSION <= tuple(map(int, version.groups())) <= ceiling
+                    or not (folder / portable.RECEIPT).is_file()
+                    or portable.check_receipt(folder)["workspace_id"] != identifier):
+                raise ValueError("Unsupported restored Workspace revision. Keep the original for reconciliation")
+            previous = actual
         after = version_change(before, previous, desired)
         if before == after:
             return None
@@ -117,8 +135,11 @@ def apply(plan, *, reverse=False):
             return "unchanged"
         if live != source:
             initial, final = (plan["to"], plan["from"]) if reverse else (plan["from"], plan["to"])
-            version = json.loads(live, object_pairs_hook=archive.unique_object).get("system_version")
-            if version == final:
+            doc = json.loads(live, object_pairs_hook=archive.unique_object)
+            if not isinstance(doc, dict):
+                raise ValueError("Unrecognized live Workspace settings")
+            if doc.get("system_version") == final:
+                version_change(live, final, final)
                 return "unchanged"
             target = version_change(live, initial, final)
         mode = stat.S_IMODE(path.stat().st_mode)

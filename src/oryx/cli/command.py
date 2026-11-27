@@ -545,6 +545,8 @@ def check(root: Path = ROOT, include_workspace=True, *, command_base=None, valid
         from oryx.release.archive import check_runtime
         try:
             manifest = check_runtime(root)
+            catalog = hub_commands.load(root, build_parser())
+            hub_commands.check_owner_routes(root, catalog)
             if command_base is not None:
                 return ["Compare release command compatibility from the maintainer checkout"]
             if not include_workspace:

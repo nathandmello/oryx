@@ -58,6 +58,8 @@ For a configured release channel, use `oryx release update` and `oryx release st
 Use `oryx release rollback` when an update also recorded Workspace version changes.
 The update command records the Core and Workspace recovery outcomes. It reports the status of any queued issue separately.
 
+A restored portable Workspace can retain an earlier supported version. Run the verified channel update with that Workspace selected. If the Core is already current, the local receipt marks the update `workspace_only`. To reverse that change, keep the same Workspace selected and use `oryx release rollback --workspace-only INCIDENT --store STORE --public-key KEY` with its update incident. The active Core and later unrelated PM edits stay in place.
+
 Read the active Core path after a rollback. Use Workspace Git commands only for authorized private repository actions.
 For a local Workspace recovery inventory, run the following command on the machine that holds the work.
 

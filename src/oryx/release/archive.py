@@ -10,6 +10,7 @@ import re
 import shutil
 import stat
 import subprocess
+import sys
 import tempfile
 from uuid import uuid4
 import zipfile
@@ -229,6 +230,34 @@ def check_runtime(core):
     return manifest
 
 
+def verify_startup(core):
+    """Exercise the signed runtime without selecting a Workspace or inheriting PM credentials."""
+    core = local_path(core)
+    check_runtime(core)
+    entry = regular(core / "bin/oryx")
+    expected = json.loads(regular(core / "playbook/commands.json").read_bytes(), object_pairs_hook=unique_object)
+    with tempfile.TemporaryDirectory(dir=core.parent) as temporary:
+        scratch = Path(temporary)
+        home, cwd = scratch / "home", scratch / "work"
+        home.mkdir(mode=0o700)
+        cwd.mkdir(mode=0o700)
+        environment = {"HOME":str(home), "PATH":os.defpath, "LC_ALL":"C", "GIT_CONFIG_NOSYSTEM":"1",
+                       "GIT_CONFIG_GLOBAL":os.devnull, "GIT_TERMINAL_PROMPT":"0"}
+        for arguments in (("action","--catalog"), ("check","--system-only")):
+            with tempfile.TemporaryFile(dir=scratch) as output:
+                result = subprocess.run([str(Path(sys.executable).resolve()), "-I", "-B", str(entry), *arguments],
+                                        cwd=cwd, env=environment, stdin=subprocess.DEVNULL, stdout=output,
+                                        stderr=subprocess.DEVNULL, timeout=120)
+                if result.returncode:
+                    raise ValueError("Verified Core failed installed startup checks for " + " ".join(arguments))
+                if arguments[0] == "action":
+                    output.seek(0)
+                    data = output.read(MAX_MEMBER + 1)
+                    if (len(data) > MAX_MEMBER or not isinstance(expected, dict) or not expected.get("commands")
+                            or json.loads(data, object_pairs_hook=unique_object) != expected):
+                        raise ValueError("Installed public command discovery differs from the signed catalog")
+
+
 def read_state(store):
     path = store / STATE
     if not path.exists() and not path.is_symlink():
@@ -319,8 +348,7 @@ def install_locked(store, generations, archive, signature, key, previous, expect
         core = bundle / "core"
         core.mkdir(mode=0o700)
         manifest = unpack(signed, core)
-        if preactivate is not None:
-            preactivate(core)
+        (preactivate or verify_startup)(core)
         if previous and previous["digest"] == digest:
             # A retry reuses healthy bytes. A new generation repairs local drift without touching a Workspace.
             existing = local_path(generations / previous["generation"] / "core")

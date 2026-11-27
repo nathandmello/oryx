@@ -131,28 +131,38 @@ def deliver(path, job, base, token):
 
 
 def current_receipt(job):
-    return {name: job.get(name) for name in ("incident", "status", "version", "step", "recovery", "workspace_recovery", "delivery", "issue")}
+    receipt = {name: job.get(name) for name in ("incident", "status", "version", "step", "recovery", "workspace_recovery", "delivery", "issue")}
+    if job.get("workspace_only"):
+        receipt["workspace_only"] = True
+    return receipt
 
 
 def verify_health(core):
-    archive.check_runtime(core)
-    environment = {k: os.environ[k] for k in ("PATH", "LANG", "LC_ALL") if k in os.environ}
-    result = subprocess.run([sys.executable, "-I", "-B", str(core / "bin/oryx"), "check", "--system-only"],
-                            cwd=core, env=environment, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-                            timeout=120, check=False)
-    if result.returncode:
-        raise ValueError("Verified Core failed installed startup checks")
+    archive.verify_startup(core)
 
 
 def apply_job(job, *, undo=False):
     return workspace_update.apply(job.get("workspace"), reverse=bool(job.get("reverse")) != undo)
 
 
-def complete(store, generations, job):
+def verified_active(generations, active, key):
+    generation = archive.local_path(generations / active["generation"])
+    signed = archive.regular(generation / "archive.zip")
+    if archive.file_digest(signed) != active["digest"]:
+        raise ValueError("Active archive differs from the recorded release")
+    archive.verify_signature(signed, archive.regular(generation / "archive.sig"), key)
+    core = generation / "core"
+    with archive.zipfile.ZipFile(signed) as bundle:
+        if archive.manifest_for(bundle) != archive.check_runtime(core):
+            raise ValueError("Active runtime differs from the authenticated archive")
+    return core
+
+
+def complete(store, generations, job, key):
     active = archive.read_state(store)["active"]
     if not active or active["digest"] != job["candidate"]:
         raise ValueError("Active generation differs from this operation")
-    verify_health(generations / active["generation"] / "core")
+    verify_health(verified_active(generations, active, key))
     if not job["prior"] or active["generation"] != job["prior"]["generation"]:
         job["activated_generation"] = active["generation"]
     try:
@@ -166,9 +176,32 @@ def complete(store, generations, job):
     job.update(status="succeeded", recovery="unused", delivery="unused")
 
 
+def recover_workspace(job):
+    try:
+        job["workspace_recovery"] = apply_job(job, undo=True)
+    except (ValueError, KeyError, OSError, subprocess.SubprocessError):
+        job["workspace_recovery"] = "manual-reconciliation"
+        return "manual-reconciliation"
+    if job.get("preserved_conflict"):
+        job["workspace_recovery"] = "manual-reconciliation"
+        return "manual-reconciliation"
+    return "previous-verified"
+
+
 def recover(store, generations, key, job):
     current = archive.read_state(store)["active"]
     prior = job["prior"]
+    if job.get("workspace_only"):
+        # An already-current Core was never part of this change. Its recovery must
+        # neither reinstall a generation nor modify the activation history.
+        if current is None or current["digest"] != job.get("candidate"):
+            job["workspace_recovery"] = "manual-reconciliation"
+            return "superseded"
+        verify_health(verified_active(generations, current, key))
+        if job.get("kind") == "rollback":
+            job["workspace_recovery"] = "manual-reconciliation"
+            return "manual-reconciliation"
+        return recover_workspace(job)
     if current is not None and (prior is None or current["generation"] != prior["generation"]):
         if current["digest"] != job.get("candidate"):
             return "superseded"
@@ -188,15 +221,7 @@ def recover(store, generations, key, job):
         job["restored_generation"] = restored_state["active"]["generation"]
     if restored_state["previous"] != job.get("prior_previous"):
         archive.activate(store, restored_state["active"], job.get("prior_previous"))
-    try:
-        job["workspace_recovery"] = apply_job(job, undo=True)
-    except (ValueError, KeyError, OSError, subprocess.SubprocessError):
-        job["workspace_recovery"] = "manual-reconciliation"
-        return "manual-reconciliation"
-    if job.get("preserved_conflict"):
-        job["workspace_recovery"] = "manual-reconciliation"
-        return "manual-reconciliation"
-    return "previous-verified"
+    return recover_workspace(job)
 
 
 def inspect_jobs(store):
@@ -222,8 +247,8 @@ def reconcile(store, generations, key, base, token):
             # A process can die after activating but before the final health receipt.
             current = archive.read_state(store)["active"]
             try:
-                if current and job.get("candidate") == current["digest"]:
-                    complete(store, generations, job)
+                if current and job["step"] in {"activate", "health"} and job.get("candidate") == current["digest"]:
+                    complete(store, generations, job, key)
                 else:
                     job.update(status="failed", step="interrupted", recovery=recover(store, generations, key, job))
             except (OSError, ValueError, subprocess.SubprocessError, archive.zipfile.BadZipFile):
@@ -279,13 +304,15 @@ def update(store, base, key_path, download_token, report_token, workspace=None):
                     save(path, job)
                     job["workspace"] = workspace_update.prepare(workspace, job["incident"],
                                                                prior["version"] if prior else None, record["version"])
+                    job["workspace_only"] = bool(job["workspace"] and prior and prior["digest"] == record["archive"])
                 job["step"] = "activate"
                 save(path, job)
-                core = archive.install_locked(store, generations, bundle, signature, key, prior,
-                                              expected={"digest": record["archive"]}, preactivate=verify_health)
+                if not job.get("workspace_only"):
+                    archive.install_locked(store, generations, bundle, signature, key, prior,
+                                           expected={"digest": record["archive"]}, preactivate=verify_health)
                 job["step"] = "health"
                 save(path, job)
-                complete(store, generations, job)
+                complete(store, generations, job, key)
         except (ValueError, KeyError, OSError, URLError, subprocess.SubprocessError, archive.zipfile.BadZipFile):
             try:
                 outcome = recover(store, generations, key, job)
@@ -315,17 +342,60 @@ def transition(history, active, previous):
     return {}
 
 
-def rollback(store, key_path):
+def undo_workspace(store, generations, key, jobs, incident, selected):
+    """Reverse one named Workspace-only change. Repeating its receipt cannot undo a later edit."""
+    if not selected or not re.fullmatch(r"[0-9a-f]{32}", incident):
+        raise ValueError("Select the restored Workspace and its Workspace-only update incident")
+    history = {job["incident"]: job for _, job in jobs}
+    parent = history.get(incident)
+    if (not parent or parent.get("kind") != "update" or parent.get("status") != "succeeded"
+            or not parent.get("workspace_only") or not parent.get("workspace")):
+        raise ValueError("No completed Workspace-only update for the selected incident")
+    plan = parent["workspace"]
+    folder, identity = workspace_update.validate(selected, os.environ.get("ORYX_WORKSPACE_ID"))
+    if str(folder) != plan["path"] or identity != plan["id"]:
+        raise ValueError("The selected Workspace differs from the reviewed transition")
+    active = archive.read_state(store)["active"]
+    if not active or active["digest"] != parent["candidate"]:
+        raise ValueError("The active Core release changed since this Workspace-only transition")
+    undo = [(path, job) for path, job in jobs if job.get("undoes") == incident]
+    if len(undo) > 1:
+        raise ValueError("Conflicting Workspace-only rollback receipts")
+    if any(job["status"] == "running" and job.get("undoes") != incident for _, job in jobs):
+        raise ValueError("Resume the current release operation before a Workspace-only undo")
+    if undo:
+        path, job = undo[0]
+    else:
+        job = {"incident": uuid4().hex, "kind":"rollback", "undoes":incident, "workspace_only":True,
+               "status":"running", "step":"health", "version":active["version"], "candidate":active["digest"],
+               "prior":active, "channel":parent["channel"], "workspace":plan, "reverse":True,
+               "recovery":"unused", "delivery":"unused"}
+        path = operations(store) / (job["incident"]+".json")
+        save(path, job)
+    if job["status"] == "running":
+        complete(store, generations, job, key)
+        save(path, job)
+    if job["status"] != "succeeded":
+        raise ValueError("The interrupted Workspace-only undo requires reconciliation")
+    return {"core":str(archive.current(store)), "workspace_only":True, "workspace_recovery":job["workspace_recovery"],
+            "workspace_git_ref":plan["ref"], "incident":job["incident"], "undoes":incident}
+
+
+def rollback(store, key_path, *, workspace_only=None, workspace=None):
     store = archive.store_root(store)
     key = archive.trusted_key(key_path, store)
     with archive.locked(store) as generations:
         jobs = inspect_jobs(store)
+        if workspace_only is not None:
+            return undo_workspace(store, generations, key, jobs, workspace_only, workspace)
         # Resume a killed rollback from its durable intent on the same invocation.
         running = [(p, j) for p, j in jobs if j["status"] == "running"]
         if running:
             if len(running) != 1 or running[0][1].get("kind") != "rollback":
                 raise ValueError("Resume the interrupted update with retry-reports first")
             path, job = running[0]
+            if job.get("workspace_only"):
+                raise ValueError("Resume the Workspace-only undo with its original incident")
         else:
             state = archive.read_state(store)
             previous = state["previous"]
@@ -349,7 +419,7 @@ def rollback(store, key_path):
             archive.check_private_dir(source)
             archive.install_locked(store, generations, source / "archive.zip", source / "archive.sig", key,
                                    state["active"], expected=target, preactivate=verify_health)
-        complete(store, generations, job)
+        complete(store, generations, job, key)
         save(path, job)
         return {"core": str(archive.current(store)), "workspace_recovery": job["workspace_recovery"],
                 "workspace_git_ref": job["workspace"]["ref"] if job.get("workspace") else None}
@@ -363,8 +433,11 @@ def main(argv=None):
         command.add_argument("--store", type=Path, required=True)
         if action != "status":
             command.add_argument("--public-key", type=Path, required=True)
-        if action == "update":
+        if action in {"update", "rollback"}:
             command.add_argument("--workspace", type=Path)
+        if action == "rollback":
+            command.add_argument("--workspace-only", metavar="INCIDENT",
+                                 help="Undo one restored Workspace version change and retain the active Core")
         if action in {"update", "retry-reports"}:
             command.add_argument("--endpoint", required=True)
     args = parser.parse_args(argv)
@@ -372,7 +445,10 @@ def main(argv=None):
         result = update(args.store, args.endpoint, args.public_key, os.environ.get(TOKENS[0]), os.environ.get(TOKENS[1]),
                         workspace=args.workspace or os.environ.get("ORYX_WORKSPACE"))
     elif args.action == "rollback":
-        result = rollback(args.store, args.public_key)
+        if args.workspace is not None and not args.workspace_only:
+            raise ValueError("Use --workspace with a named --workspace-only rollback")
+        result = rollback(args.store, args.public_key, workspace_only=args.workspace_only,
+                          workspace=args.workspace or os.environ.get("ORYX_WORKSPACE"))
     elif args.action == "status":
         store = archive.store_root(args.store)
         result = {"core": archive.read_state(store), "updates": [current_receipt(j) for _, j in inspect_jobs(store)]}

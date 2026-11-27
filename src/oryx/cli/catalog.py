@@ -94,6 +94,22 @@ def validate_cli(key, entry, parser):
             raise ValueError(f"CLI target or example does not match the terminal parser for {key}.") from None
 
 
+def check_owner_routes(root, catalog):
+    """Resolve delegated public operations through their own parsers without performing them."""
+    from oryx.cli import application
+    owners = {*application.OWNERS, "resource", "recovery"}
+    for key, entry in catalog["commands"].items():
+        target = entry.get("cli", [])
+        if target and target[0] in owners:
+            try:
+                with redirect_stdout(StringIO()), redirect_stderr(StringIO()):
+                    result = application.dispatch(root, [*target, "--help"])
+            except SystemExit as exc:
+                result = exc.code
+            if result != 0:
+                raise ValueError(f"Installed operation is missing for {key}.")
+
+
 def expand_alias(catalog, args):
     for length in range(min(3, len(args)), 0, -1):
         replacement = catalog["aliases"].get(" ".join(args[:length]))
