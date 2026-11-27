@@ -97,4 +97,4 @@ Run `python3 tools/pm.py check` after changes. Run affected tests after tool cha
 
 Author shared skills under `.agents/skills/`. Run `python3 tools/pm.py sync-skills` to update Claude copies.
 
-Checks enforce measurable rules and repository integrity. They cannot certify full ASD-STE100 compliance, evidence quality, or good judgment.
+Run the full suite once. After fixes, run only the regression and affected callers’ tests. Reuse equivalent CI results.
