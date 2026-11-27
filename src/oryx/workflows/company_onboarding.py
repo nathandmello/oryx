@@ -49,8 +49,8 @@ PRODUCT_NEXT = {
 PRODUCT_SETUP = re.compile(r"\b(?:product (?:onboarding|setup|context|brief)|area (?:context|brief))\b", re.I)
 
 
-def checkpoint(kind):
-    return {"pm": PM_FILE, "company": FILE, "product": PRODUCT_FILE}[kind]
+def checkpoint(kind, private=None):
+    return layout.work_path({"pm": PM_FILE, "company": FILE, "product": PRODUCT_FILE}[kind], private)
 
 
 def pm_destination(destination):
@@ -63,7 +63,7 @@ DEFER = re.compile(r"\b(?:wait until|defer|skip|hold off|not now|don['’]t remi
 
 
 def read(private, kind="company"):
-    path = private / checkpoint(kind)
+    path = private / checkpoint(kind, private)
     if path.resolve() != path or (path.exists() and not path.is_file()):
         raise ValueError(f"Use a regular {kind} onboarding file in Studio")
     if not path.exists():
@@ -212,7 +212,7 @@ def reported_pm_event(cue, prompt):
 
 def followup(private, prompt, company_scope, kind="company", *, subject=None):
     setup_words = {"company": COMPANY_SETUP, "pm": PM_SETUP, "product": PRODUCT_SETUP}[kind]
-    if DEFER.search(prompt) or not (private / checkpoint(kind)).exists():
+    if DEFER.search(prompt) or not (private / checkpoint(kind, private)).exists():
         return None
     try:
         state = read(private, kind)[1]
@@ -535,7 +535,7 @@ def change(root, operation, payload, owner, lint, kind="company"):
         if (not isinstance(payload, dict) or type(payload.get("revision")) is not int
                 or payload["revision"] != state["revision"]):
             raise ValueError(f"The review revision is missing or stale. Read {kind}-onboarding status")
-        storage.require_visible(private, checkpoint(kind))
+        storage.require_visible(private, checkpoint(kind, private))
         data = {key: value for key, value in payload.items() if key != "revision"}
         assessments = None
         accept_finding = accept
@@ -614,7 +614,7 @@ def change(root, operation, payload, owner, lint, kind="company"):
         else:
             raise ValueError(f"Unknown {kind} onboarding operation")
         state["revision"] += 1
-        storage.replace_text(private / checkpoint(kind), original, json.dumps(state, indent=2, ensure_ascii=False) + "\n")
+        storage.replace_text(private / checkpoint(kind, private), original, json.dumps(state, indent=2, ensure_ascii=False) + "\n")
         result = view(private, state, kind, show_pending=operation == "propose")
         if assessments is not None:
             result["ingestion_reviews"] = assessments

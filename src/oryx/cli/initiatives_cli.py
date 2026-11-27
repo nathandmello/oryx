@@ -71,6 +71,14 @@ def confirm_on_terminal(product, proposal):
 
 
 def run(root, args):
+    from oryx.workspace import publication
+    if args.command in {"backlog", "roadmap"} or getattr(args, "operation", "") in {"show", "propose"}:
+        with publication.view(root):
+            return run_command(root, args)
+    return run_command(root, args)
+
+
+def run_command(root, args):
     if args.command == "initiative" and args.operation == "schema":
         print(json.dumps({
             "input": "array of objects with type and all required fields",

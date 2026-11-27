@@ -27,8 +27,10 @@ def enrollment(path=ENROLLMENT):
     return cfg
 
 
-def request(operation, payload, path=ENROLLMENT):
+def request(operation, payload, path=ENROLLMENT, *, expected_organization=None):
     cfg = enrollment(path)
+    if expected_organization is not None and cfg["organization"] != expected_organization:
+        raise PermissionError("Customer peer differs from the connected organization")
     with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as sock:
         sock.settimeout(20)
         sock.connect(cfg["socket"])

@@ -52,7 +52,7 @@ def forecast_id(data):
 def target_for(private, identifier):
     if not isinstance(identifier, str) or not ID.fullmatch(identifier):
         raise ValueError("Choose an existing forecast ID")
-    path = private / HOME / (identifier + ".json")
+    path = private / layout.work_path(HOME, private) / (identifier + ".json")
     if path.resolve() != path or (path.exists() and not path.is_file()):
         raise ValueError("Use regular files in the private forecast directory")
     return path
@@ -64,11 +64,11 @@ def evidence_path(private, reference):
     if initiative_events.is_url(reference):
         return None
     name = Path(reference)
-    if (name.as_posix() != reference or not name.parts or name.parts[0] not in {"context", "workspace"}
+    if (name.as_posix() != reference or not name.parts or layout.work_parts(name)[0] not in {"context", "workspace"}
             or name.suffix.lower() not in {".md", ".txt"} or "\\" in reference
             or any(part.startswith(".") or part == "secrets" for part in name.parts)):
         raise ValueError("Evidence needs an HTTPS source or a regular private Markdown or text file")
-    return private / name
+    return private / layout.work_path(name, private)
 
 
 def validate_evidence(private, evidence):
@@ -212,7 +212,7 @@ def read(private, identifier):
 
 
 def list_records(private):
-    folder = private / HOME
+    folder = private / layout.work_path(HOME, private)
     if folder.resolve() != folder or (folder.exists() and not folder.is_dir()):
         raise ValueError("Use a regular private forecast directory")
     if not folder.exists():

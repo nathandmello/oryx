@@ -21,7 +21,9 @@ def operate(c, op, b):
         fields("scope")
         return c.scope(b["scope"])
     if op == "sync":
-        fields("scope")
+        fields("scope", optional=("expected_actor",))
+        if "expected_actor" in b and c.actor != b["expected_actor"]:
+            raise PermissionError("The current principal differs from the connected scope")
         return c.sync(b["scope"])
     if op == "read":
         fields("scope","kind","id",optional=("revision",))
@@ -39,9 +41,11 @@ def operate(c, op, b):
         fields("scope","id","as_of")
         return c.report(b["scope"],b["id"],b["as_of"])
     if op == "reviews":
-        fields()
+        fields(optional=("scope",))
+        if "scope" in b:
+            c.require(b["scope"], "read")
         return [effects.proposal_info(c,r) for r in c.db.execute("SELECT * FROM proposals WHERE status='open' ORDER BY id")
-                if {"read","review"} <= c.rights(r["scope"]) and c.actor != r["actor"]
+                if ("scope" not in b or r["scope"] == b["scope"]) and {"read","review"} <= c.rights(r["scope"]) and c.actor != r["actor"]
                 and c.actor in json.loads(r["body"])["audience"]]
     if op in {"authorize", "disclosure-status"}:
         fields("scope","commitment","audience","base")

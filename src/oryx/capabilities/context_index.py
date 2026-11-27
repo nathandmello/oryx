@@ -22,6 +22,25 @@ def signature(path):
 
 
 def cache_path(private):
+    if os.environ.get("ORYX_WORKSPACE"):
+        from oryx.workspace.location import purpose_layout, selected_path
+        if selected_path(storage.core_for(private)) != private:
+            raise ValueError("Index only the selected Workspace")
+        if purpose_layout(private):
+            # A private cache may contain excerpts. Git and portable export must leave it out.
+            from oryx.governance.files import directory
+            root = directory(private, ".oryx/cache", create=True)
+            info = root.lstat()
+            if info.st_uid != os.getuid() or info.st_mode & 0o077:
+                raise ValueError("Unavailable private Workspace cache")
+            path = root / "context-v3.sqlite"
+            for suffix in ("", "-wal", "-shm", "-journal"):
+                side = root / (path.name + suffix)
+                if os.path.lexists(side):
+                    node = side.lstat()
+                    if not stat.S_ISREG(node.st_mode) or node.st_nlink != 1 or node.st_uid != os.getuid():
+                        raise ValueError("Unsafe Workspace cache entry")
+            return path
     if os.name == "posix":
         root = Path(tempfile.gettempdir()).resolve() / f"pm-hub-context-{os.getuid()}"
         if root.is_relative_to(private) or root.is_relative_to(storage.core_for(private)):

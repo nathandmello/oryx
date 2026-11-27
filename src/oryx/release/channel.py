@@ -157,7 +157,9 @@ def complete(store, generations, job):
         job["activated_generation"] = active["generation"]
     try:
         job["workspace_recovery"] = apply_job(job)
-    except (ValueError, KeyError, OSError, subprocess.SubprocessError):
+    except (ValueError, KeyError, OSError, subprocess.SubprocessError) as exc:
+        if isinstance(exc, workspace_update.ConcurrentEdit):
+            job["preserved_conflict"] = True
         if job.get("kind") != "rollback":
             raise
         job["workspace_recovery"] = "manual-reconciliation"
@@ -182,11 +184,16 @@ def recover(store, generations, key, job):
                                       current, expected=prior)
     verify_health(restored)
     restored_state = archive.read_state(store)
+    if restored_state["active"]["generation"] != prior["generation"]:
+        job["restored_generation"] = restored_state["active"]["generation"]
     if restored_state["previous"] != job.get("prior_previous"):
         archive.activate(store, restored_state["active"], job.get("prior_previous"))
     try:
         job["workspace_recovery"] = apply_job(job, undo=True)
     except (ValueError, KeyError, OSError, subprocess.SubprocessError):
+        job["workspace_recovery"] = "manual-reconciliation"
+        return "manual-reconciliation"
+    if job.get("preserved_conflict"):
         job["workspace_recovery"] = "manual-reconciliation"
         return "manual-reconciliation"
     return "previous-verified"
@@ -255,7 +262,7 @@ def update(store, base, key_path, download_token, report_token, workspace=None):
             if prior:
                 prior_version = tuple(map(int, prior["version"].split(".")))
                 version = tuple(map(int, record["version"].split(".")))
-                if version < prior_version or version == prior_version and record["archive"] != prior["digest"]:
+                if version < prior_version or (version == prior_version and record["archive"] != prior["digest"]):
                     raise ValueError("Advertised version conflicts with installed release history")
             with tempfile.TemporaryDirectory(dir=generations) as name:
                 folder = Path(name)
@@ -290,6 +297,24 @@ def update(store, base, key_path, download_token, report_token, workspace=None):
         return current_receipt(job)
 
 
+def transition(history, active, previous):
+    """Recover the exact Workspace transition across repaired copies of a generation."""
+    seen = set()
+    while active["generation"] not in seen:
+        generation = active["generation"]
+        seen.add(generation)
+        parent = next((job for _, job in history if (job.get("activated_generation") == generation
+                       and job["status"] == "succeeded") or job.get("restored_generation") == generation), None)
+        if not parent or not parent.get("prior"):
+            break
+        if parent["prior"]["digest"] == previous["digest"]:
+            return parent
+        if parent["prior"]["digest"] != active["digest"]:
+            break
+        active = parent["prior"]
+    return {}
+
+
 def rollback(store, key_path):
     store = archive.store_root(store)
     key = archive.trusted_key(key_path, store)
@@ -307,9 +332,7 @@ def rollback(store, key_path):
             if previous is None:
                 raise ValueError("No previous verified Core release")
             active = state["active"]
-            parent = next((j for _, j in jobs if j.get("activated_generation") == active["generation"]
-                           and j["status"] == "succeeded" and j.get("prior")
-                           and j["prior"]["digest"] == previous["digest"]), {})
+            parent = transition(jobs, active, previous)
             job = {"incident": uuid4().hex, "kind": "rollback", "status": "running", "step": "activate",
                    "version": previous["version"], "prior": active, "prior_previous": previous,
                    "target": previous, "channel": parent.get("channel"), "candidate": previous["digest"],

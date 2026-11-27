@@ -7,7 +7,8 @@ import tempfile
 from uuid import UUID, uuid5
 
 from oryx.recovery import snapshot
-from . import identity, citations
+from oryx.release.workspace_update import version_change
+from . import identity, citations, storage
 
 RECEIPT = identity.STATE / "adoption.json"
 HISTORY = identity.STATE / "record-git-history.json"
@@ -30,13 +31,19 @@ def purpose_path(name):
     return name
 
 
-def preview(source, destination):
+def preview(source, destination, release):
     source = snapshot.local(source)
     destination = destination_path(source, destination)
     manifest = snapshot.inspect(source)
-    metadata = json.loads(identity.read_regular(source / "settings.json"))
+    original = identity.read_regular(source / "settings.json")
+    metadata = json.loads(original)
     if metadata.get("workspace_format") != 2 or metadata.get("system_version") != "0.16.0":
         raise ValueError("This adoption is qualified for a 0.16.0 format-2 Workspace")
+    if release["workspace_format"] != 2:
+        raise ValueError("Adopting this Workspace requires the format-2 Core")
+    next_settings = version_change(original, "0.16.0", release["system_version"])
+    change = {"path": "settings.json", "from": "0.16.0", "to": release["system_version"],
+              "before_sha256": identity.checksum(original), "after_sha256": identity.checksum(next_settings)}
     if os.path.lexists(source / ".oryx"):
         raise ValueError("The source already has .oryx state; reconcile its identity before adoption")
     names = {}
@@ -54,12 +61,14 @@ def preview(source, destination):
         rows.append({"path": name, "kind": item["kind"], "mode": item["mode"],
                      "revision": item.get("sha256"), "disposition": "identity and history" if indexed else "preserve opaque",
                      "domain_path": purpose_path(name) if indexed else name})
+        if name == "settings.json" and original != next_settings:
+            rows[-1]["disposition"] = "update only system_version in the adopted working copy; retain exact original in backup"
     if len({r["domain_path"].casefold() for r in rows}) != len(rows):
         raise ValueError("Two existing files claim the same purpose-based path")
     digest = snapshot.digest(manifest)
     return {"schema": 1, "source": str(source), "destination": str(destination), "inventory": digest,
             "workspace_id": str(uuid5(NAMESPACE, str(source) + "\0" + digest)),
-            "records": rows, "operation": "separate format-2 adoption",
+            "settings_update": change, "records": rows, "operation": "separate format-2 adoption",
             "git": "Preserve original refs, objects, index, working files, ignored files and local preimage"}
 
 
@@ -126,11 +135,18 @@ def validate_receipt(root):
         return None
     data = json.loads(identity.read_regular(path))
     keys = {"schema","workspace_id","plan","source_inventory","source","destination","backup","status"}
-    if (not isinstance(data, dict) or set(data) - {"legacy_core"} != keys or data["schema"] != 1
+    if (not isinstance(data, dict) or set(data) - {"legacy_core", "settings_update"} != keys or data["schema"] != 1
             or data["workspace_id"] != identity.workspace_id(root) or data["status"] != "adopted-separate-copy"
             or any(not isinstance(data[k],str) or not identity.SHA.fullmatch(data[k]) for k in ("plan","source_inventory"))
             or any(not isinstance(data[k],str) or not Path(data[k]).is_absolute() for k in ("source","destination","backup"))):
         raise ValueError("Invalid adoption receipt")
+    if "settings_update" in data:
+        change = data["settings_update"]
+        if (not isinstance(change, dict) or set(change) != {"path", "from", "to", "before_sha256", "after_sha256"}
+                or change["path"] != "settings.json" or change["from"] != "0.16.0"
+                or not re.fullmatch(r"[0-9]+\.[0-9]+\.[0-9]+", change["to"])
+                or not all(identity.SHA.fullmatch(change[k]) for k in ("before_sha256", "after_sha256"))):
+            raise ValueError("Invalid adoption settings transition")
     check_proofs(data.get("legacy_core", {}))
     return data
 
@@ -196,7 +212,7 @@ def checked_paths(private):
     return included
 
 
-def adopt(source, destination, backup, expect):
+def adopt(source, destination, backup, expect, release):
     source = snapshot.local(source)
     destination = snapshot.local(destination)
     backup = snapshot.local(backup)
@@ -207,7 +223,7 @@ def adopt(source, destination, backup, expect):
             checked_paths(destination)
             return receipt
         raise ValueError("The destination already exists; preserve it and review separately")
-    plan = preview(source, destination)
+    plan = preview(source, destination, release)
     snapshot.verified(plan, expect)
     if source in backup.parents or destination == backup or destination in backup.parents:
         raise ValueError("Choose an independent private backup location")
@@ -220,6 +236,19 @@ def adopt(source, destination, backup, expect):
         snapshot.check_repository(staging)
         staging.chmod(0o700)  # Access to the separately published copy is personal to the PM.
         identity.write_json(staging / ".oryx/workspace.json", {"id": plan["workspace_id"]})
+        change = plan["settings_update"]
+        settings_path = identity.local_file(staging, change["path"])
+        before = identity.read_regular(settings_path)
+        after = version_change(before, change["from"], change["to"])
+        if (identity.checksum(before), identity.checksum(after)) != (change["before_sha256"], change["after_sha256"]):
+            raise ValueError("Restored settings differ from the reviewed adoption plan")
+        if after != before:
+            # The working copy is still unpublished. Keep its inode, modes, xattrs and original Git index.
+            with settings_path.open("r+b") as stream:
+                stream.write(after)
+                stream.truncate()
+                stream.flush()
+                os.fsync(stream.fileno())
         registry_before, registry, additions = identity.prepared(staging)
         for revision, name in additions.items():
             identity.put_blob(staging, revision, identity.read_regular(identity.local_file(staging, name)))
@@ -232,7 +261,7 @@ def adopt(source, destination, backup, expect):
         identity.write_json(staging / HISTORY, history)
         receipt = {"schema": 1, "workspace_id": plan["workspace_id"], "plan": expect, "source_inventory": digest,
                    "source": str(source), "destination": str(destination), "backup": str(backup),
-                   "status": "adopted-separate-copy"}
+                   "status": "adopted-separate-copy", "settings_update": change}
         proofs = {}
         for rid,row in registry["records"].items():
             if row["path"].endswith(".md"):
@@ -244,6 +273,7 @@ def adopt(source, destination, backup, expect):
         identity.write_json(staging / RECEIPT, receipt)
         citations.reconcile(staging, registry, history)
         checked_paths(staging)
+        storage.prepare_repository_lock(staging)
         with snapshot.idle_writer(source):
             current, _ = snapshot.inventory(source)
             snapshot.verified(current, digest)

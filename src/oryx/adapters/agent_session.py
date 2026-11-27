@@ -14,11 +14,18 @@ import workspace
 import storage
 
 
-def launch(root, client, *, context_statusline=False, setup=False):
+def launch(root, client, *, context_statusline=False, setup=False, check_host=False, notes=(), client_home=None):
     if context_statusline and client != "claude":
         raise ValueError("The optional native status line requires Claude Code")
     if storage.selected_workspace(root) is not None:
-        raise ValueError("External Workspace agent sessions require a qualified OS-isolated client adapter. Use the local PM terminal for review.")
+        if context_statusline:
+            raise ValueError("The native note session does not provide a status line")
+        if setup:
+            first_run.foreground_setup(root)
+        from oryx.adapters import external_host
+        return external_host.launch(root, client, selected=notes, check=check_host, client_home=client_home)
+    if check_host or notes or client_home:
+        raise ValueError("Select an external Workspace before using the native projection options")
     binary = shutil.which(client)
     if not binary:
         raise ValueError(f"Install {client} before starting a protected session")

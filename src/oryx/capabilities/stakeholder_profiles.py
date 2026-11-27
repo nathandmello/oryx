@@ -273,15 +273,26 @@ def lookup(private, query=None):
 
 
 def show(private, identifier, topic=None):
+    with storage.writer_lock(private):
+        return _show(private, identifier, topic)
+
+
+def _show(private, identifier, topic):
     if topic is not None and topic not in TOPICS:
         raise ValueError("Choose a supported stakeholder profile topic")
     original, doc = read(private, identifier)
     if doc is None:
         raise ValueError("No accepted profile for this ID")
     rows = [row for row in current_entries(doc["entries"]) if topic is None or row["topic"] == topic]
+    import stakeholder_signals
+    permitted = [row for row in rows if "evidence" not in row
+                 or stakeholder_signals.accepted_source_available(private, row["evidence"])]
+    withheld = len(rows) - len(permitted)
+    rows = permitted
     past_role = {row["id"] for row in doc["entries"][:doc.get("current_role_from", 0)]}
     rows = [{**row, **({"earlier_role": True} if row["id"] in past_role else {})} for row in rows]
-    return {**summary(doc, original), "entries": [row for row in rows if row["kind"] != "hypothesis"],
+    return {**summary(doc, original), **({"withheld": withheld} if withheld else {}),
+            "entries": [row for row in rows if row["kind"] != "hypothesis"],
             "pm_hypotheses": [row for row in rows if row["kind"] == "hypothesis"]}
 
 

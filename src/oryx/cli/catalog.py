@@ -138,9 +138,9 @@ def compatibility_errors(root, base, current, parser):
     return errors
 
 
-def show(catalog, parts):
+def show(catalog, parts, runner="pm.py"):
     if not parts:
-        print("Usage: /pm DOMAIN SUBJECT VERB [arguments] or pm.py action DOMAIN SUBJECT VERB [arguments]")
+        print(f"Usage: /pm DOMAIN SUBJECT VERB [arguments] or {runner} action DOMAIN SUBJECT VERB [arguments]")
         print("\nDomains")
         for domain, summary in catalog["domains"].items():
             print(f"  {domain:<12} {summary}")
@@ -161,6 +161,7 @@ def show(catalog, parts):
 def route(root, args, *, check_setup=None):
     """Return the CLI arguments, or print the catalog or a workflow handoff."""
     catalog = load(root)
+    runner = "oryx" if (root / "oryx-release-manifest.json").is_file() else "pm.py"
     if args == ["--catalog"]:
         print(json.dumps(catalog, indent=2))
         return None
@@ -178,20 +179,20 @@ def route(root, args, *, check_setup=None):
         parts.append(part)
     if len(parts) < 3:
         if parts and not any(path.startswith(" ".join(parts) + " ") for path in catalog["commands"]):
-            raise ValueError("Unknown oryx action. Run pm.py action to list domains.")
+            raise ValueError(f"Unknown oryx action. Run {runner} action to list domains.")
         if help_requested and len(args) != len(parts) + 1:
             raise ValueError("Use help on its own after a domain or subject.")
         if check_setup and not help_requested:
             check_setup(None, None)
-        show(catalog, parts)
+        show(catalog, parts, runner)
         return None
     path = " ".join(parts)
     if path not in catalog["commands"]:
         if parts[0] not in catalog["domains"]:
-            raise ValueError("Unknown oryx domain. Run pm.py action to list domains.")
+            raise ValueError(f"Unknown oryx domain. Run {runner} action to list domains.")
         subject = " ".join(parts[:2])
         menu = subject if any(key.startswith(subject + " ") for key in catalog["commands"]) else parts[0]
-        raise ValueError(f"Unknown oryx action. Run pm.py action {menu} to see the available paths.")
+        raise ValueError(f"Unknown oryx action. Run {runner} action {menu} to see the available paths.")
     entry = catalog["commands"][path]
     arguments = args[3:]
     if describe:

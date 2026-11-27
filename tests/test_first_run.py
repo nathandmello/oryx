@@ -1,6 +1,9 @@
 """Verify workspace setup before the company walkthrough."""
 
+import json
 import shutil
+
+import git_ops
 import unittest
 from unittest.mock import patch
 
@@ -47,6 +50,31 @@ class FirstRunTests(unittest.TestCase):
                 first_run.prepare(self.root, explicit=True)
         self.assertEqual(workspace.settings(self.root)["owner"], "Fixture PM")
         self.assertEqual(first_run.origin_urls(self.work), [])
+
+    def test_private_first_disclosure_rechecks_repository_and_pins_the_reviewed_history(self):
+        url = "https://github.com/example/fictional.git"
+        approved = {"id": "repo-123", "nameWithOwner": "example/fictional", "visibility": "PRIVATE",
+                    "viewerPermission": "ADMIN"}
+        self.commit = "a" * 40
+        with patch.object(git_ops, "origin_for_push", return_value=url), patch.object(
+            git_ops.workspace, "git", return_value=""
+        ) as local_git, patch.object(first_run, "github") as api, patch(
+            "oryx.review.cli.confirm_effect", return_value=True
+        ) as confirm:
+            api.side_effect = [json.dumps(approved), "fictional-user", json.dumps(approved), "fictional-user"]
+            git_ops.reviewed_first_push(self.work, "main", url, self.commit)
+            shown = confirm.call_args.args[1]
+            self.assertEqual((shown["repository_id"], shown["actor"], shown["commit"]),
+                             ("repo-123", "fictional-user", self.commit))
+            self.assertIn("files", shown)
+            local_git.assert_any_call(self.work, "ls-tree", "-r", self.commit)
+            api.side_effect = [json.dumps(approved), "fictional-user", json.dumps(dict(approved, visibility="PUBLIC"))]
+            with self.assertRaisesRegex(ValueError, "private and writable"):
+                git_ops.reviewed_first_push(self.work, "main", url, self.commit)
+            confirm.return_value = False
+            api.side_effect = [json.dumps(approved), "fictional-user"]
+            with self.assertRaisesRegex(ValueError, "local Workspace"):
+                git_ops.reviewed_first_push(self.work, "main", url, self.commit)
 
     def test_connection_persists_only_after_verifying_git_access(self):
         url = "https://github.com/example/private-work.git"

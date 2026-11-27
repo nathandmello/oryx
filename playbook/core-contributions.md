@@ -58,6 +58,8 @@ Verify direct shared Git pulls and released wrappers against the actual release 
 
 Follow [the prepublication gates](git.md#codex-review-before-publication). Open ready for Codex code and security review. Merge the verified head after both reviews and required CI pass. Retest fixes and state verification limits.
 
+The independent GitHub App reports archive qualification against the reviewed commit. Maintainers configure its numeric ID and approved harness commit in repository variables `ORYX_QUALIFICATION_APP_ID` and `ORYX_QUALIFICATION_COMMIT`. Both review and publication verify the exact tree, archive digest, harness revision and seven component totals. A retry reads the same claim from the release notes.
+
 The PM's request authorises work within its scope. Ask only for a missing decision or an action outside that authority.
 
 Use the placement map in `README.md`. Create templates only for requested artifact types; a future activity alone is insufficient.

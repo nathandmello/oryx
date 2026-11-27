@@ -49,7 +49,9 @@ def source(private, rid):
     after=path.stat()
     if (before.st_ino,before.st_mtime_ns)!=(after.st_ino,after.st_mtime_ns) or digest(data)!=row["revision"]:
         raise ValueError("Private record changed; review the current bytes")
-    return row, data, after.st_mtime
+    from oryx.workspace.portable import pending_timestamps, source_mtime
+    stamp = source_mtime(pending_timestamps(private), row["path"], row["id"], row["revision"], after.st_mtime_ns)
+    return row, data, after.st_mtime if stamp is not None else None
 
 
 def begin(private, intent, organization, actor):

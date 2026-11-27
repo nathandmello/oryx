@@ -75,7 +75,8 @@ class App:
         return {"products": ordered, "can_approve": not initiative_store.in_agent_session()}
 
     def preview(self, product, body):
-        with self.approval_lock:
+        from oryx.workspace import publication
+        with self.approval_lock, publication.view(self.root):
             comparison = None
             drafts = {}
             if body.get("mode") == "new":
@@ -144,6 +145,15 @@ class App:
                 reviewed_comparison(self.root, doc["path"], doc["revision"])
 
     def dispatch(self, path, body):
+        from oryx.workspace import publication
+        reads = {"/api/catalog", "/api/roadmap", "/api/roadmap-export", "/api/comparison",
+                 "/api/comparison-template", "/api/candidate"}
+        if path in reads or path == "/api/work" and body.get("operation") == "list":
+            with publication.view(self.root):
+                return self.dispatch_operation(path, body)
+        return self.dispatch_operation(path, body)
+
+    def dispatch_operation(self, path, body):
         self.require_setup()
         if path == "/api/catalog":
             return self.catalog()
@@ -288,7 +298,7 @@ def confirm_on_desktop(root, review):
 
 
 def serve(root, no_open, prepare_write, run_work, *, screen="roadmap"):
-    workspace.repo(root, "workspace")
+    private = workspace.repo(root, "workspace")
     workspace.settings(root)
     app = App(root, prepare_write, run_work, confirm_on_desktop)
     with make_server(app) as server:
@@ -297,7 +307,9 @@ def serve(root, no_open, prepare_write, run_work, *, screen="roadmap"):
         print(f"oryx is open at {address}", flush=True)
         if not no_open:
             webbrowser.open(address)
-        try:
-            server.serve_forever()
-        except KeyboardInterrupt:
-            pass
+        from oryx.adapters import session_sync
+        with session_sync.active(root, private):
+            try:
+                server.serve_forever()
+            except KeyboardInterrupt:
+                pass

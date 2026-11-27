@@ -146,6 +146,19 @@ def save_settings(private, settings):
             os.unlink(pending)
 
 
+def foreground_setup(root):
+    from oryx.review.cli import tty_session
+    if not sys.stdin.isatty() or not sys.stdout.isatty():
+        raise ValueError("Open the PM terminal for interactive setup, or use valet setup --owner for local setup")
+    with tty_session() as terminal:
+        if any(os.tcgetpgrp(fd) != os.getpgrp() for fd in (sys.stdin.fileno(), sys.stdout.fileno(), terminal.fileno())):
+            raise ValueError("Run interactive setup and first disclosure in the foreground PM terminal")
+        try:
+            prepare(root, explicit=True)
+        except EOFError as exc:
+            raise ValueError("Workspace setup ended. Open the PM terminal to resume.") from exc
+
+
 def prepare(root, *, explicit=False):
     path = workspace.private_root(root)
     exists = path.exists() or path.is_symlink()
@@ -198,7 +211,9 @@ def first_sync(root, private, url):
     print("Files available for the first commit:")
     for name in files:
         print(f"  {name!r}")
-    if not confirm(f"Commit these files and push to {url}?"):
+    question = ("Create the initial commit locally for review?" if storage.selected_workspace(root)
+                else f"Commit these files and push to {url}?")
+    if not confirm(question):
         return
     try:
         workspace.git(private, "var", "GIT_AUTHOR_IDENT")

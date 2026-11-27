@@ -42,6 +42,8 @@
     "init": "Initialize the local protected review store.",
     "stage": "Stage exact proposed wording for local PM review.",
     "decide": "Record the PM’s decision on the exact reviewed revision.",
+    "disconnect": "Stop using a saved customer scope connection in this Workspace.",
+    "connect": "Remember an already enrolled customer authority in the selected Workspace.",
     "sync": "Synchronize the applicable customer scope data.",
     "resolve": "Resolve an applicable governed definition and revision.",
     "run": "Check current governed dependencies and run the permitted report.",
@@ -328,6 +330,42 @@
       "cli": ["preferences", "reset"],
       "example": ["layout"]
     },
+    "workspace valet-scope list": {
+      "summary": "List local scope identities and remembered customer connections.",
+      "effect": "read",
+      "cli": ["valet", "scope", "list"],
+      "example": []
+    },
+    "workspace valet-scope create": {
+      "summary": "Create a local company, function, team or personal scope.",
+      "effect": "local-write",
+      "cli": ["valet", "scope", "create"],
+      "example": ["company"]
+    },
+    "workspace valet-scope show": {
+      "summary": "Inspect a customer scope under the current user’s effective access.",
+      "effect": "remote-read",
+      "cli": ["valet", "scope", "show"],
+      "example": ["growth"]
+    },
+    "workspace valet-scope connect": {
+      "summary": "Bind the selected Workspace to an already enrolled scope.",
+      "effect": "local-write",
+      "cli": ["valet", "scope", "connect"],
+      "example": ["growth"]
+    },
+    "workspace valet-scope disconnect": {
+      "summary": "Stop future synchronization of this local scope connection.",
+      "effect": "local-write",
+      "cli": ["valet", "scope", "disconnect"],
+      "example": ["growth"]
+    },
+    "workspace valet-scope sync": {
+      "summary": "Synchronize a connected customer scope under current access.",
+      "effect": "remote-write",
+      "cli": ["valet", "scope", "sync"],
+      "example": ["growth"]
+    },
     "workspace valet show": {
       "summary": "Inspect the installation and the next Workspace setup step.",
       "effect": "read",
@@ -515,8 +553,8 @@
       "example": []
     },
     "workspace scope sync": {
-      "summary": "Synchronize the applicable customer scope data.",
-      "effect": "remote-read",
+      "summary": "Synchronize customer scope data and opted-in live publications.",
+      "effect": "remote-write",
       "cli": ["governance", "sync"],
       "example": []
     },

@@ -102,6 +102,7 @@ test("an empty Studio opens its agent walkthrough from a task deep link", async 
   await page.goto(address.href);
   await expect(page.getByRole("heading", { name: "Continue onboarding" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Company context" })).toBeVisible();
+  await expect(page.getByText("oryx action context company capture", { exact: true })).toBeVisible();
   await expect(page.getByText("Continue in your oryx conversation.", { exact: false })).toBeVisible();
   await expect(page.getByRole("textbox")).toHaveCount(0);
   await expect(button(page, "New task")).toHaveCount(0);

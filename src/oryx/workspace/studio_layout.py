@@ -5,6 +5,7 @@ from pathlib import Path
 
 import layout_upgrade
 import storage
+import layout
 
 RULES = "customizations/rules.json"
 SETTINGS = "customizations/settings.json"
@@ -14,7 +15,9 @@ LEGACY = {RULES: ".hub-overrides.json", SETTINGS: ".hub-customizations.json", VI
 
 def location(private, name):
     """Use the existing home even before alignment, including on read-only requests."""
-    current = private / name
+    current = private / layout.work_path(name, private)
+    if current != private / name and (private / name).exists():
+        raise ValueError(f"Legacy customization at {name} conflicts with this Workspace layout")
     old = private / LEGACY[name]
     for path in (current, old):
         if path.resolve() != path:

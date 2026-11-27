@@ -3,8 +3,6 @@
 from hashlib import sha256
 import json
 import posixpath
-from pathlib import Path
-import sys
 import re
 from urllib.parse import unquote, urlsplit
 from uuid import uuid4
@@ -13,11 +11,7 @@ import layout
 import pm_profile
 import storage
 
-# Legacy script callers load tools directly; resolve the package in this Core.
-_src = str(Path(__file__).resolve().parents[3] / "src")
-if _src not in sys.path:
-    sys.path.insert(0, _src)
-from oryx.capabilities.evidence import LIMIT, local_name, read as read_local, target as source_target
+from oryx.capabilities.evidence import LIMIT, local_name, read as read_local, target as source_target, transferred_paths
 
 GRANTS = ".state/ingestion-grants.json"
 MAX_GRANTS = 512
@@ -151,9 +145,11 @@ def capture_material(private, source, binding=None):
         source_id, offset, length = binding["source_id"], binding["offset"], binding["length"]
     if not isinstance(source_id, str) or not IDENT.fullmatch(source_id):
         raise ValueError("Use a stable source identifier")
-    if revoked(state(private)[1], {"reference": reference, "source_id": source_id}):
+    if revoked(state(private)[1], {"reference": reference, "source_id": source_id}, private):
         raise ValueError("The reviewed source grant was revoked")
     raw, stat, _ = read_local(private, name, source["coverage"], offset, source.get("text"), length)
+    if revoked(state(private)[1], {"reference": reference, "source_id": source_id}, private):
+        raise ValueError("Source permission changed during its read")
     current = {"source_id": source_id, "reference": reference, "offset": offset, "length": len(raw),
                "digest": digest(raw), "version": fingerprint([stat.st_size, stat.st_mtime_ns])}
     if binding is not None and current != binding:
@@ -201,18 +197,24 @@ def write_state(private, original, doc):
     storage.replace_text(pm_profile.safe_path(private, GRANTS), original, json.dumps(doc, ensure_ascii=False) + "\n")
 
 
-def revoked(doc, info):
-    local = local_name(info["reference"])
-    fingerprints = {fingerprint(info["reference"])}
-    if local:
-        fingerprints.add(fingerprint(local))
-    return (info["source_id"] in doc["revoked"] or bool(fingerprints.intersection(doc["revoked"]))
-            or any(fingerprints.intersection(refs) for refs in doc["revoked"].values()))
+def revoked(doc, info, private=None):
+    denied = denied_references(private, doc)
+    reference = info["reference"]
+    return info["source_id"] in denied or withheld(denied, reference)
 
 
-def denied_references(private):
-    revoked_sources = state(private)[1]["revoked"]
-    return frozenset(revoked_sources).union(*(refs for refs in revoked_sources.values()))
+def denied_references(private, doc=None):
+    revoked_sources = (doc if doc is not None else state(private)[1])["revoked"]
+    blocked = set(revoked_sources).union(*(refs for refs in revoked_sources.values()))
+    if private is not None:
+        from oryx.workspace import identity
+        blocked.update(fingerprint(name) for name in transferred_paths(private))
+        if blocked and (private / identity.INDEX).exists():
+            for rid, record in identity.load(private)["records"].items():
+                aliases = {fingerprint(name) for name in record["aliases"]}
+                if rid in blocked or aliases & blocked:
+                    blocked.update(aliases)
+    return frozenset(blocked)
 
 
 def withheld(denied, reference, record=None):
@@ -253,7 +255,7 @@ def remember(private, info, purpose):
     grant = {**info, "purposes": [purpose]}
     with storage.writer_lock(private):
         original, doc = state(private)
-        if revoked(doc, info):
+        if revoked(doc, info, private):
             return None
         rows = doc["grants"]
         for key, other in list(rows.items()):

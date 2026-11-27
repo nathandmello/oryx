@@ -4,7 +4,7 @@ Use the PM’s local Linux terminal. Keep the original Workspace offline during 
 
 ## Adopt an existing 0.16.0 Workspace
 
-Adoption supports the 0.16.0 format-2 layout and self-contained Git repositories. The preview lists file paths, content revisions, logical names and opaque files. Read the plan locally and save its digest.
+Adoption supports the 0.16.0 format-2 layout and self-contained Git repositories. The preview lists file paths, content revisions, logical names and opaque files. It also identifies the new Core version and the before and after hashes of settings.json. Read the plan locally and save its digest.
 
 ```sh
 "$ORYX_CORE/bin/oryx" workspace adoption-preview "$ORIGINAL" "$NEW_WORKSPACE"
@@ -14,7 +14,7 @@ export ORYX_WORKSPACE="$NEW_WORKSPACE"
 "$ORYX_CORE/bin/oryx" workspace record-list
 ```
 
-Adoption creates and verifies a machine-local backup before publishing the separate owner-only copy. The copy retains Git objects, refs, the index, uncommitted and ignored files, and source bytes. Keep that backup and its reviewed inventory private. The backup contains private history and can include secrets.
+Adoption creates and verifies a machine-local backup before publishing the separate owner-only copy. The copy retains Git objects, refs, the index, uncommitted and ignored files, and original record bytes. In the new working copy, adoption updates only the Core version field in settings.json. The backup retains the original settings bytes. Keep that backup and its reviewed inventory private. The backup contains private history and can include secrets.
 
 The copy assigns IDs to eligible records. Existing callers and approval receipts keep their original paths. A purpose-based name can resolve to the same record. For an indexed record, request its current path, an exact historical revision or a link from that revision.
 
@@ -48,3 +48,7 @@ Take the manifest digest from the successful export. Carry it through a trusted 
 Restored protected notes retain their governing status in a fresh local generation. Select a still-pending note draft and its exact base notes to carry it into the local review queue. Select a source-independent workflow checkpoint and its owning handoff together to resume the reviewed step. Earlier approvals, writing grants and pending sends stay on the source machine.
 
 Old refs, raw Git objects, all host state, credentials and unselected historical revisions stay local. An old citation whose target revision was omitted reports that it cannot verify the target. Repeating a completed restore preserves later edits in the destination.
+
+Portable restore keeps the original modification time of each selected working file. For an earlier archive that omitted these times, a local rendition marks the source time as unavailable. A later recorded edit supplies its own time.
+
+For a fresh purpose-based Workspace, include `.oryx/state/handoffs/index.json` when exporting an independent workflow checkpoint. Include `.oryx/state/onboarding/review.json` if the second computer should retain the PM’s completed walkthrough. The preview lists each selected record. Approved audience and access checks still apply.

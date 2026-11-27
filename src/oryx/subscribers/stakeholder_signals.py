@@ -84,7 +84,7 @@ def authorized_grant(private, handle, *, optional=True):
     _, doc = source_evidence.state(private)
     grant = doc["grants"].get(handle["grant"])
     if (not grant or grant["purposes"] != [PURPOSE] or grant["retention"] != "review"
-            or source_evidence.revoked(doc, grant) or not source_evidence.retainable(grant["reference"])
+            or source_evidence.revoked(doc, grant, private) or not source_evidence.retainable(grant["reference"])
             or optional and not overrides.profile_suggestions_allowed(private, grant["kind"])):
         raise ValueError("Source permission for this stakeholder review is unavailable")
     if not grant["offset"] <= handle["start"] < handle["end"] <= grant["offset"] + grant["length"]:
@@ -98,6 +98,17 @@ def allowed_handle(private, handle):
         if source_evidence.local_ref(grant["reference"]):
             stat = pm_profile.safe_path(private, source_evidence.local_name(grant["reference"])).stat()
             return source_evidence.fingerprint([stat.st_size, stat.st_mtime_ns]) == grant["local_version"]
+        return True
+    except (ValueError, OSError, RuntimeError):
+        return False
+
+
+def accepted_source_available(private, handle):
+    """Use the positive filing grant for an accepted claim without enabling optional suggestions."""
+    try:
+        grant = authorized_grant(private, handle, optional=False)
+        if source_evidence.local_ref(grant["reference"]):
+            source_evidence.reread(private, grant, PURPOSE)
         return True
     except (ValueError, OSError, RuntimeError):
         return False

@@ -3,6 +3,7 @@
 import json
 from pathlib import Path
 import stat
+import layout
 
 import layout
 import storage
@@ -38,7 +39,7 @@ def parse(text):
 
 
 def installed_path(studio):
-    path = studio / FILE
+    path = studio / layout.work_path(FILE, studio)
     try:
         resolved = path.resolve()
     except RuntimeError as exc:  # pathlib reports symlink loops this way before Python 3.13.
@@ -102,7 +103,7 @@ def install(studio, text):
                 if bundle != current:
                     raise ValueError("A company revision must have identical content on every import")
                 return {"changed": False, "id": current["id"], "revision": current["revision"]}
-        storage.require_visible(studio, FILE)
+        storage.require_visible(studio, installed_path(studio).relative_to(studio))
         candidate = json.dumps(bundle, ensure_ascii=False, indent=2) + "\n"
         storage.replace_text(installed_path(studio), original, candidate)
         result = {"changed": True, "id": bundle["id"], "revision": bundle["revision"]}

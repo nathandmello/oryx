@@ -23,7 +23,7 @@ oryx workflow advance "$WORKFLOW" --scope product/billing --to decide \
   --expect "$WORKFLOW_REVISION" --handoff-revision "$HANDOFF_REVISION"
 ```
 
-The workflow rechecks the method, handoff, scope and attached evidence grants. Roadmap and initiative steps read the registered product. Launch review also checks its tasks and checklist. Onboarding reads the reviewed walkthrough.
+The workflow rechecks the method, handoff, scope and attached evidence grants. Roadmap and initiative steps read the registered product. Launch review reports readiness and up to eight outstanding checks with reasons. Use the returned checklist command for the full review. When product onboarding opens an area, resume with a handoff for that exact area and finish the area walkthrough.
 
 If an owning operation changed, open the workflow again. After reviewing that result, pass its current digest with `--readback`. A changed method requires a fresh checkpoint. A revoked grant can prevent resume. Reconcile changed work with its owner before continuing.
 

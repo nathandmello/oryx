@@ -9,6 +9,20 @@ from urllib.request import Request, urlopen
 
 
 BROWSER_WORKFLOW_FILES = {
+    "bin/oryx",
+    "src/oryx/adapters/browser.py",
+    "src/oryx/cli/command.py",
+    "src/oryx/cli/initiatives_cli.py",
+    "src/oryx/workspace/layout.py",
+    "src/oryx/workspace/studio_layout.py",
+    "src/oryx/workspace/publication.py",
+    "src/oryx/capabilities/customizations.py",
+    "src/oryx/capabilities/initiative_events.py",
+    "src/oryx/capabilities/initiative_store.py",
+    "src/oryx/capabilities/initiative_views.py",
+    "src/oryx/capabilities/initiative_work.py",
+    "src/oryx/capabilities/launch_readiness.py",
+    "src/oryx/capabilities/roadmap_edit.py",
     ".agents/skills/manage-initiative-work/SKILL.md",
     ".agents/skills/prioritize-roadmap/SKILL.md",
     "playbook/initiative-approvals.md",
@@ -81,7 +95,7 @@ def browser_impact(pr, api):
     if len(files) != count:
         raise ValueError("Could not verify all changed paths for the browser impact check")
     paths = files.keys() | {item["previous_filename"] for item in files.values() if item.get("previous_filename")}
-    if not (paths & BROWSER_WORKFLOW_FILES or any(path.startswith("tools/local_ui/") for path in paths)):
+    if not (paths & BROWSER_WORKFLOW_FILES or any(path.startswith(("tools/local_ui/", "src/oryx/review/")) for path in paths)):
         return
 
     body = (pr.get("body") or "").replace("\r\n", "\n")
@@ -135,6 +149,44 @@ def review(pr, api):
         raise ValueError(f"{key} needs a confirmed passing result for the current PR commit")
 
 
+QUALIFICATION_CHECK = "Oryx archive qualification"
+COMPONENT_TYPES = {"skills", "workflows", "capabilities", "adapters", "subscribers", "templates", "configuration"}
+
+
+def archive_qualification(head, tree, api):
+    """Accept only the configured independent app's unique result for this head and tree."""
+    app_id = os.environ.get("ORYX_QUALIFICATION_APP_ID", "")
+    harness = os.environ.get("ORYX_QUALIFICATION_COMMIT", "")
+    if not re.fullmatch(r"[1-9][0-9]*", app_id) or not re.fullmatch(r"[0-9a-f]{40}", harness):
+        raise ValueError("Configure the independent qualification app ID and approved harness commit")
+    query = urlencode({"check_name": QUALIFICATION_CHECK, "filter": "all", "per_page": 100})
+    page = api(f"commits/{head}/check-runs?" + query)
+    runs = page["check_runs"]
+    if len(runs) > 100 or len(runs) != page["total_count"]:
+        raise ValueError("Cannot verify the full set of archive qualification results")
+    matching = [row for row in runs if row.get("name") == QUALIFICATION_CHECK
+                and (row.get("app") or {}).get("id") == int(app_id) and row.get("head_sha") == head]
+    if len(matching) != 1:
+        raise ValueError("Require one archive qualification check from the configured app on the reviewed head")
+    run = matching[0]
+    if run.get("status") != "completed" or run.get("conclusion") != "success":
+        raise ValueError("Archive qualification must complete successfully on the reviewed head")
+    receipt = json.loads(run["output"]["summary"])
+    if (not isinstance(receipt, dict) or receipt.get("schema") != "oryx-qualified-archive/1" or receipt.get("commit") != head
+            or receipt.get("tree") != tree or receipt.get("harness_commit") != harness
+            or not all(isinstance(receipt.get(name), str) and re.fullmatch(r"[0-9a-f]{64}", receipt[name])
+                       for name in ("archive_sha256", "report_sha256"))):
+        raise ValueError("The archive qualification receipt differs from the reviewed tree or approved harness")
+    if not isinstance(receipt.get("components"), dict) or set(receipt["components"]) != COMPONENT_TYPES:
+        raise ValueError("Archive qualification requires all seven component types")
+    for counts in receipt["components"].values():
+        if (not isinstance(counts, dict) or set(counts) != {"passed", "required"}
+                or type(counts["required"]) is not int or type(counts["passed"]) is not int
+                or counts["required"] <= 0 or counts["passed"] != counts["required"]):
+            raise ValueError("Archive qualification requires every registered observation to pass")
+    return receipt
+
+
 def detached_pr_runs(pr, runs, api):
     head = pr["head"]
     repo = head.get("repo")
@@ -183,6 +235,7 @@ def publication(pr, branch, sha, api):
     tree = api("git/commits/" + sha)["tree"]["sha"]
     if api("git/commits/" + pr["head"]["sha"])["tree"]["sha"] != tree:
         raise ValueError("The merged tree differs from the reviewed tree")
+    receipt = archive_qualification(pr["head"]["sha"], tree, api)
     evidence = successful_run(pr, "review.yml", api)
     review_jobs = api(f"actions/runs/{evidence['id']}/jobs?filter=latest&per_page=100")["jobs"]
     if not any(job["name"] == "review" and job["conclusion"] == "success" for job in review_jobs):
@@ -193,6 +246,7 @@ def publication(pr, branch, sha, api):
                and any(step["name"] == "Tested tree " + tree and step["conclusion"] == "success"
                        for step in job["steps"]) for job in jobs):
         raise ValueError("Missing successful CI evidence for the merged tree")
+    return receipt
 
 
 def main():
@@ -205,6 +259,8 @@ def main():
             raise ValueError("The pull request commits changed. Run review on the current pull request")
     browser_impact(current, github)
     review(current, github)
+    head = current["head"]["sha"]
+    archive_qualification(head, github("git/commits/" + head)["tree"]["sha"], github)
     latest = github(endpoint)
     if (latest["head"]["sha"], latest["base"]["sha"], latest["body"]) != (
         current["head"]["sha"], current["base"]["sha"], current["body"]

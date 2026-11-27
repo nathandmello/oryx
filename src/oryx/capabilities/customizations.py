@@ -268,7 +268,7 @@ def template_text(kind, text, sections, *, notices=None, previous=None):
 def draft_template(root, kind, target, text, *, notices=None):
     import records
     config = effective(root, read(root)[1])
-    parts = target.relative_to(storage.private_root(root)).parts
+    parts = layout.work_parts(target.relative_to(storage.private_root(root)))
     if len(parts) >= 4 and (parts[:2] == ("context", "products")
                             or parts[0] == "workspace" and parts[1] in {"initiatives", "roadmaps", "experiments", "backlogs"}):
         config = for_product(config, parts[2])

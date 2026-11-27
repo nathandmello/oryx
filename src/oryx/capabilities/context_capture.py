@@ -162,9 +162,9 @@ def record_path(private, value, *, markdown=True):
     if (relative.is_absolute() or relative.as_posix() != value or (markdown and relative.suffix != ".md")
             or len(parts) < 2 or any(part.startswith(".") or part == "secrets" for part in parts)):
         raise ValueError("Use a direct workspace-relative record path")
-    if parts[0] not in {"context", "workspace"}:
+    if parts[0] not in {"context", "workspace"} and (parts[0] not in layout.WORK_DOMAINS or layout.work_path("workspace/" + value, private) != value):
         raise ValueError("Use context/ for reference or workspace/ for work")
-    target = private / relative
+    target = private / layout.work_path(relative, private)
     if target.resolve() != target or (target.exists() and not target.is_file()):
         raise ValueError("Select a regular workspace record")
     return target
@@ -516,7 +516,7 @@ def route_home(private, entry, scope, canonical, section):
     if not records.specific(line(record["reason"], "Record reason")):
         raise ValueError("Give a concrete reason to use this record")
     target = record_path(private, record["path"])
-    if target.relative_to(private).parts[0] == "workspace":
+    if layout.work_parts(target.relative_to(private))[0] == "workspace":
         if not target.is_file() or not layout.valid_work(record["path"]):
             raise ValueError("Use the existing workspace artifact's workflow")
         return record["path"], None, "existing"

@@ -374,7 +374,7 @@ def context_location(kind, path):
     elif kind in CONTEXT_KINDS and layout.brief_kind(path) != kind:
         return f"Use the canonical entity overview path for {kind}"
     elif kind in layout.WORK_FOLDERS and not layout.valid_work(path, kind):
-        return f"File {kind} work under workspace/{layout.WORK_FOLDERS[kind]}/"
+        return f"File {kind} work under {layout.work_path('workspace/' + layout.WORK_FOLDERS[kind])}/"
     return None
 
 
@@ -714,10 +714,9 @@ def validate(texts, *, legacy_structure=()):
     return errors + opportunities.validate(texts)
 
 
-def retarget_links(text, source, target, root, copies=None):
+def retarget_links(text, source, target, root, copies=None, *, selected=None):
     """Keep links to shared rules valid after a template enters the workspace."""
-    selected = None
-    if os.environ.get("ORYX_WORKSPACE") and root != Path(os.environ["ORYX_WORKSPACE"]):
+    if selected is None and os.environ.get("ORYX_WORKSPACE") and root != Path(os.environ["ORYX_WORKSPACE"]):
         selected = storage.selected_workspace(root)
     resources = None
 
@@ -752,10 +751,12 @@ def retarget_links(text, source, target, root, copies=None):
 
 def create(root, kind, destination, title=None, owner="", filing_contract=None, product_parent=None, initiative_id=None):
     root = root.resolve()
-    relative = Path(destination)
-    if relative.is_absolute() or relative.parts[:1] not in (("context",), ("workspace",)):
-        raise ValueError("Create PM artifacts under context/ or workspace/ with a private-relative path")
+    from oryx.workspace.location import purpose_layout
     workspace = storage.private_root(root)
+    relative = Path(layout.work_path(destination, workspace))
+    parts = layout.work_parts(relative) if purpose_layout(workspace) else relative.parts
+    if relative.is_absolute() or parts[:1] not in (("context",), ("workspace",)):
+        raise ValueError("Create PM artifacts under context/ or workspace/ with a private-relative path")
     if workspace.is_symlink() or not (workspace / ".git").is_dir() or (workspace / ".git").is_symlink():
         raise ValueError("Initialise the private repository before PM work")
     target = workspace / relative

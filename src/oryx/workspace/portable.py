@@ -10,7 +10,7 @@ import tempfile
 import zipfile
 
 from oryx.recovery import snapshot
-from . import identity, citations
+from . import identity, citations, location
 
 FORMAT = "oryx-reviewed-portable-v1"
 MANIFEST = "manifest.json"
@@ -33,6 +33,9 @@ def eligible(name):
         return False
     if DRAFT.fullmatch(name) or CHECKPOINT.fullmatch(name):
         return True
+    if name in {".oryx/customizations/rules.json", ".oryx/customizations/settings.json",
+                ".oryx/state/handoffs/index.json", ".oryx/state/onboarding/review.json"}:
+        return True
     if name == ".gitignore":
         return True
     if len(parts) == 2 and parts[0] == ".oryx-approvals":
@@ -54,14 +57,14 @@ def approved_bytes(name, content):
     if len(content) > identity.LIMIT or b"\0" in content or SENSITIVE.search(content):
         raise ValueError(f"Held nonportable or credential-like data in {name}")
     content.decode("utf-8")
-    if name == "customizations/rules.json":
+    if name in {"customizations/rules.json", ".oryx/customizations/rules.json"}:
         import overrides
         obj = json.loads(content)
         if (obj.get("reporting") is not False or obj.get("pending") or obj.get("reports")
                 or set(obj) - {"rules","retired","reporting","reports","pending"}):
             raise ValueError("Reporting grants, queues and prior external deliveries stay with the original Workspace")
         overrides.validate_rules(obj["rules"])
-    if name == "workspace/handoffs/index.json":
+    if name in {"workspace/handoffs/index.json", ".oryx/state/handoffs/index.json"}:
         obj = json.loads(content)
         if obj.keys() != {"work","grants"} or obj["grants"] or any(k in content for k in (
                 b'"journal"', b'"journal_reference_scope"', b'"journal_required"', b'"native"')):
@@ -139,9 +142,17 @@ def validate_durable(root, names):
                 raise ValueError("The workflow requires its verified, source-independent open handoff")
 
 
-def approved_pairs(files, blobs):
+def approved_pairs(files, blobs, *, purpose):
     """Only transfer an already-applied batch receipt paired with its exact register."""
     from oryx.capabilities import initiative_store
+    legacy_handoff = "workspace/handoffs/index.json"
+    handoff = ".oryx/state/handoffs/index.json" if purpose else legacy_handoff
+    for former, current in ((legacy_handoff, ".oryx/state/handoffs/index.json"),
+                            ("workspace/onboarding/review.json", ".oryx/state/onboarding/review.json"),
+                            ("customizations/settings.json", ".oryx/customizations/settings.json"),
+                            ("customizations/rules.json", ".oryx/customizations/rules.json")):
+        if (former if purpose else current) in files:
+            raise ValueError("Selected private records must use the source Workspace layout")
     for name, row in files.items():
         draft = DRAFT.fullmatch(name)
         checkpoint = CHECKPOINT.fullmatch(name)
@@ -157,12 +168,13 @@ def approved_pairs(files, blobs):
                     base = change["base"]
                     if base != files.get(change["path"], {}).get("working"):
                         raise ValueError("Select the exact protected note required by its pending draft")
-            elif "workspace/handoffs/index.json" not in files:
+            elif handoff not in files:
                 raise ValueError("Select the owning handoff before its workflow checkpoint")
         if not name.startswith(".oryx-approvals/"):
             continue
         product = Path(name).stem
-        match = files.get(f"workspace/backlogs/{product}/initiatives.json")
+        register_path = f"backlogs/{product}/initiatives.json"
+        match = files.get(register_path if purpose else "workspace/" + register_path)
         if not match:
             raise ValueError("Review the initiative approval and its bound register together")
         for layer in ("working", "head", "index"):
@@ -209,6 +221,53 @@ def exported_bindings(root, selected, registry):
     return bindings
 
 
+def pending_timestamps(root):
+    if identity.local_file(root, str(RECEIPT)).exists():
+        return check_receipt(root).get("missing_times", {})
+    return {}
+
+
+def source_mtime(missing, name, rid, revision, observed):
+    # Bind the uncertainty to the exact restored version, including after a record move.
+    at_path = missing.get(name)
+    if at_path is not None and (at_path["revision"], at_path["restore_mtime_ns"]) == (revision, observed):
+        return None
+    if rid and name not in missing:
+        for item in missing.values():
+            if (item["id"], item["revision"], item["restore_mtime_ns"]) == (rid, revision, observed):
+                return None
+    return observed
+
+
+def valid_time(value):
+    # Python's representable UTC years. The destination filesystem must also preserve the exact value.
+    return type(value) is int and -62135596800 * 10**9 <= value < 253402300800 * 10**9
+
+
+def restore_timestamps(root, files):
+    missing = {}
+    for name, row in files.items():
+        if row["working"] is None:
+            continue
+        path = identity.local_file(root, name)
+        fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+        try:
+            info = os.fstat(fd)
+            if not stat.S_ISREG(info.st_mode) or info.st_nlink != 1:
+                raise ValueError("A portable record changed during timestamp recovery")
+            when = row.get("mtime_ns")
+            if when is None:
+                missing[name] = {"id": row["id"], "revision": row["working"], "restore_mtime_ns": info.st_mtime_ns}
+            else:
+                os.utime(fd, ns=(info.st_atime_ns, when))
+                os.fsync(fd)
+                if os.fstat(fd).st_mtime_ns != when:
+                    raise ValueError("The destination filesystem cannot preserve the source modification time")
+        finally:
+            os.close(fd)
+    return missing
+
+
 def review(root, destination, policy, *, payload=False):
     root = snapshot.local(root)
     policy = approved_selection(policy)
@@ -219,6 +278,7 @@ def review(root, destination, policy, *, payload=False):
     head, index, old_head = git_files(root)
     entries = {r["path"]:r for r in current["entries"] if r["kind"] != "directory"}
     registry = identity.load(root)["records"]
+    missing_times = pending_timestamps(root)
     notes = [name for name in policy["files"] if name.startswith("notes/")]
     note_digests = {r["path"]: r["revision"] for r in protected_notes(root, "read", *notes)["records"]} if notes else {}
     governed = []
@@ -267,8 +327,10 @@ def review(root, destination, policy, *, payload=False):
         if identity.eligible(name) and row["working"] and (name not in by_name or by_name[name][1]["revision"] != row["working"]):
             raise ValueError("Review and refresh record identities before exporting changed records")
         row["id"] = by_name.get(name,(None,None))[0]
+        if row["working"]:
+            row["mtime_ns"] = source_mtime(missing_times, name, row["id"], row["working"], entries[name]["mtime_ns"])
         selected[name] = row
-    approved_pairs(selected, blobs)
+    approved_pairs(selected, blobs, purpose=location.purpose_layout(root))
     validate_durable(root, selected)
     grant_file = identity.local_file(root, ".state/ingestion-grants.json")
     if grant_file.exists():
@@ -286,6 +348,8 @@ def review(root, destination, policy, *, payload=False):
         omits[name] = "not selected" if eligible(name) else "restricted or opaque"
     manifest = {"format":FORMAT,"audience":policy["audience"],"lineage":"new-private-history","workspace_id":sid,
                 "source_head":old_head,"governing":governed,"settings":allowed,"files":selected,"bindings":exported_bindings(root, selected, registry)}
+    if location.purpose_layout(root):
+        manifest["layout"] = "purpose-v1"
     decision = {"destination":str(destination),"source_inventory":snapshot.digest(current),"manifest":manifest,
                 "omitted":omits,"exclusions":["raw Git history and refs","host and account state","unspecified historical versions",
                                              "unreviewed file classes, credentials, grants, pending sends and executable config"]}
@@ -357,7 +421,8 @@ def validate_archive(archive, expected):
             raise ValueError("Invalid portable archive size, format or entries")
         manifest = json.loads(z.read(MANIFEST))
         snapshot.verified(manifest,expected)
-        if (set(manifest) != {"format","audience","lineage","workspace_id","source_head","settings","files","bindings","governing"}
+        if ((set(manifest) - {"layout"}) != {"format","audience","lineage","workspace_id","source_head","settings","files","bindings","governing"}
+                or "layout" in manifest and manifest["layout"] != "purpose-v1"
                 or manifest["format"] != FORMAT or manifest["lineage"] != "new-private-history"):
             raise ValueError("Invalid portable manifest")
         from uuid import UUID
@@ -382,8 +447,11 @@ def validate_archive(archive, expected):
         needed = {MANIFEST, REVIEW}
         blobs = {}
         for name,row in manifest["files"].items():
-            if set(row) != {"working","index","head","history","id"} or row["id"] is not None and not identity.ID.fullmatch(row["id"]):
+            if set(row) - {"mtime_ns"} != {"working","index","head","history","id"} or row["id"] is not None and not identity.ID.fullmatch(row["id"]):
                 raise ValueError("Invalid portable record metadata")
+            when = row.get("mtime_ns")
+            if when is not None and (row["working"] is None or not valid_time(when)):
+                raise ValueError("Invalid portable source modification time")
             for sha in [row["working"],row["index"],row["head"],*row["history"]]:
                 if sha is None:
                     continue
@@ -398,7 +466,7 @@ def validate_archive(archive, expected):
         if not isinstance(governing,list) or governing != sorted(set(governing)) or any(
                 "notes/"+name not in manifest["files"] for name in governing):
             raise ValueError("Invalid governing note metadata")
-        approved_pairs(manifest["files"], blobs)
+        approved_pairs(manifest["files"], blobs, purpose=manifest.get("layout") == "purpose-v1")
         if needed != set(names):
             raise ValueError("Unexpected portable payload")
         return manifest,blobs
@@ -457,7 +525,8 @@ def restore(archive, destination, expected):
                     f.write(blobs[row["working"]]); f.flush(); os.fsync(f.fileno())
         settings={**manifest["settings"],"remotes":{"system":None,"workspace":None}}
         identity.write_json(root/"settings.json",settings)
-        identity.write_json(root/".oryx/workspace.json",{"id":manifest["workspace_id"]})
+        identity.write_json(root/".oryx/workspace.json", {"id": manifest["workspace_id"],
+                            **({"layout": manifest["layout"]} if "layout" in manifest else {})})
         # Start with a new customer-owned notes generation. No imported approval becomes actionable.
         notes = {name.removeprefix("notes/"): row["working"] for name, row in files.items() if name.startswith("notes/")}
         if notes or any(DRAFT.fullmatch(n) for n in files):
@@ -471,20 +540,15 @@ def restore(archive, destination, expected):
                     "receipts": {}, "governing": manifest["governing"]}
             store.Workspace.write_generation(folder, head, {name:blobs[sha].decode("utf-8") for name,sha in notes.items()})
             protected_notes(root, "read")
-        # Current Core starter materials are independent of the selected private records.
-        # Render them using public initialization so their Core resource URIs survive updates.
-        seed = Path(temp) / "seed"
+        from .repository import starter_texts
         core = Path(__file__).resolve().parents[3]
-        subprocess.run([sys.executable, "-B", str(core / "bin/oryx"), "init-workspace"],
-                       env={"PATH": os.defpath, "LC_ALL": "C", "ORYX_WORKSPACE": str(seed)},
-                       cwd=temp, stdin=subprocess.DEVNULL, capture_output=True, timeout=90, check=True)
-        for name in (".gitignore", "README.md", "context/README.md", "workspace/README.md"):
-            if name not in files:
-                target = identity.local_file(root, name)
+        for relative, text in starter_texts(core, root, purpose=manifest.get("layout") == "purpose-v1", selected=root):
+            if relative.as_posix() not in files:
+                target = identity.local_file(root, relative.as_posix())
                 identity.safe_directory(target.parent)
                 with target.open("xb") as output:
                     os.fchmod(output.fileno(), 0o600)
-                    output.write(identity.read_regular(seed/name))
+                    output.write(text.encode("utf-8"))
         # Recovery ledgers are initialized locally and never replay source actions.
         import upgrades, layout_upgrade
         upgrades.fresh(root)
@@ -510,13 +574,16 @@ def restore(archive, destination, expected):
             identity.put_blob(root, revision, identity.read_regular(identity.local_file(root, name)))
         identity.write_json(root / identity.INDEX, registry)
         citations.reconcile(root,registry)
-        identity.write_json(root/RECEIPT,{"schema":1,"workspace_id":manifest["workspace_id"],"manifest":expected,
+        missing_times = restore_timestamps(root, files)
+        identity.write_json(root/RECEIPT,{"schema":1,"missing_times":missing_times,"workspace_id":manifest["workspace_id"],"manifest":expected,
                             "lineage":"new-private-history","new_head":commit,"source_head":manifest["source_head"],
                             "legacy_core":{rid:row["legacy_core"] for rid,row in manifest["bindings"].items() if row.get("legacy_core")}})
         from . import adoption
         validate_durable(root, files)
         adoption.checked_paths(root)
         snapshot.check_repository(root)
+        from .storage import prepare_repository_lock
+        prepare_repository_lock(root)
         snapshot.publish_new(root,destination)
     return {"result":"restored-portable-copy","manifest_digest":expected,"files":len(files),
             "workspace_id":manifest["workspace_id"],"lineage":"new-private-history","head":commit}
@@ -524,7 +591,7 @@ def restore(archive, destination, expected):
 
 def check_receipt(root):
     record=json.loads(identity.read_regular(identity.local_file(root,str(RECEIPT))))
-    if (not isinstance(record,dict) or set(record) - {"legacy_core"} != {"schema","workspace_id","manifest","source_head","lineage","new_head"}
+    if (not isinstance(record,dict) or set(record) - {"legacy_core","missing_times"} != {"schema","workspace_id","manifest","source_head","lineage","new_head"}
             or record["schema"] != 1 or record["workspace_id"] != identity.workspace_id(root)
             or record["lineage"] != "new-private-history" or not identity.SHA.fullmatch(record["manifest"])
             or not re.fullmatch(r"[0-9a-f]{40}|[0-9a-f]{64}",record["new_head"])):
@@ -532,4 +599,13 @@ def check_receipt(root):
 
     from . import adoption
     adoption.check_proofs(record.get("legacy_core", {}))
+    missing = record.get("missing_times", {})
+    if not isinstance(missing, dict):
+        raise ValueError("Invalid portable source timestamp receipt")
+    for path, item in missing.items():
+        identity.relative(path)
+        if (not isinstance(item,dict) or item.keys() != {"id","revision","restore_mtime_ns"}
+                or item["id"] is not None and not identity.ID.fullmatch(item["id"])
+                or not identity.SHA.fullmatch(item["revision"]) or not valid_time(item["restore_mtime_ns"])):
+            raise ValueError("Invalid portable source timestamp receipt")
     return record

@@ -96,5 +96,12 @@ For remote sources, supply a current `source_read` from the authorized conversat
 A stored grant identifies the permitted range. It cannot prove continued external access.
 
 Use `ingestion revoke SOURCE_ID` when permission ends. This removes pending review authority for that original.
+An accepted profile claim keeps its exact historical bytes. Direct profile display and audience preparation
+withhold the claim when its filing grant has ended or the authorized local revision changed.
 After renewed permission, use `ingestion restore SOURCE_ID` and assess a fresh read.
 Changed sources, unavailable originals and expired grants need a new review before filing.
+
+Scoped task context can include `work_evidence` from indexed private artifacts. Resolve exact record IDs,
+current paths and known aliases. Cite the returned revision, section and work state. Read the owning workflow
+for an exact JSON record pointer. A changed revision requires a fresh record review. A pending or completed
+ownership transfer requires current permission from its authoritative owner.

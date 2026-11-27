@@ -954,11 +954,14 @@ function setupScreen() {
   } else if (!current.stage_available) {
     handoff = "You can keep your existing context up to date in your oryx conversation.";
   }
+  const terminalCommand = { company: "oryx action context company capture", pm: "oryx action context pm capture",
+    product: "oryx action context product capture" }[current.stage] || "oryx onboarding status";
   app.append(heading("Continue onboarding", `You can return to ${screenNames[state.screen]} after the walkthrough.`),
     node("section", { class: "panel stack" },
       node("h2", {}, stage || "Your walkthrough"),
       node("p", {}, current.prompt),
       node("p", {}, handoff),
+      node("p", {}, "Open the current step in your terminal with ", node("code", {}, terminalCommand), "."),
       actions(button("Check progress", event => attempt(event, openWorkspace)))));
 }
 

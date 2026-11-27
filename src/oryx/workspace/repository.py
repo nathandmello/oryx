@@ -11,7 +11,7 @@ from urllib.parse import urlsplit
 
 import records
 import upgrades
-from storage import PRIVATE_PATHSPECS, STUDIO, private_root, rename_exclusive, selected_workspace
+from storage import PRIVATE_PATHSPECS, STUDIO, private_root, rename_exclusive, selected_workspace, prepare_repository_lock
 
 
 def git(path, *args):
@@ -189,8 +189,9 @@ def initialise_selected(root, path, owner, delivery_system):
     with tempfile.TemporaryDirectory(dir=path.parent, prefix=".oryx-setup-") as scratch:
         pending = Path(scratch) / "workspace"
         pending.mkdir(mode=0o700)
-        seed(root, pending, owner, delivery_system, destination=path)
         create_identity(pending)
+        seed(root, pending, owner, delivery_system, destination=path)
+        prepare_repository_lock(pending)
         try:
             rename_exclusive(pending, path)
         except FileExistsError:
@@ -204,22 +205,45 @@ def seed(root, path, owner, delivery_system, destination=None):
                     remotes={"system": None, "workspace": None})
     (path / "settings.json").write_text(json.dumps(metadata, indent=2) + "\n", encoding="utf-8")
     read_settings(path / "settings.json")
+    for relative, text in starter_texts(root, destination or path, purpose=destination is not None, selected=destination):
+        target = path / relative
+        target.parent.mkdir(parents=True, exist_ok=True)
+        with target.open("x", encoding="utf-8") as output:
+            output.write(text)
+    if destination is None:
+        (path / "customizations").mkdir(exist_ok=True)
+    else:
+        for directory in ("customizations", "state", "staging"):
+            (path / ".oryx" / directory).mkdir(mode=0o700)
+    upgrades.fresh(path)
+    import layout_upgrade
+    layout_upgrade.mark_fresh(path)
+    return path
+
+
+def starter_texts(root, destination, *, purpose, selected=None):
+    """Render only the packaged starter documents for the requested, verified Workspace layout."""
     seed = root / "tools/workspace-seed"
     sources = sorted(seed.rglob("*"))
-    copies = {source.resolve(): (destination or path) / source.relative_to(seed)
+    if purpose:
+        # Links to the old nested placement guide now point to the Workspace home.
+        sources.remove(seed / "workspace/README.md")
+    copies = {source.resolve(): destination / source.relative_to(seed)
               for source in sources if source.is_file() and not source.is_symlink()}
+    if purpose:
+        copies[(seed / "workspace/README.md").resolve()] = destination / "README.md"
     for source in sources:
         if source.is_symlink():
             raise ValueError("Workspace seeds must use regular files")
         if not source.is_file():
             continue
-        target = path / source.relative_to(seed)
-        target.parent.mkdir(parents=True, exist_ok=True)
-        text = records.retarget_links(source.read_text(encoding="utf-8"), source, (destination or path) / source.relative_to(seed), root, copies)
-        with target.open("x", encoding="utf-8") as output:
-            output.write(text)
-    (path / "customizations").mkdir(exist_ok=True)
-    upgrades.fresh(path)
-    import layout_upgrade
-    layout_upgrade.mark_fresh(path)
-    return path
+        relative = source.relative_to(seed)
+        starter = source.read_text(encoding="utf-8")
+        if purpose and source == seed / "README.md":
+            starter = starter.replace("Use [workspace](workspace/README.md) to find what is being done.",
+                "\n\nDiscovery and initiative briefs live in `initiatives/`, planning comparisons in "
+                "`roadmaps/`, and experiment records in `experiments/`. Oryx creates a domain when you first use it.")
+            starter += "\nPersonal rules, template settings and views live under `.oryx/customizations/`. "
+            starter += "Oryx keeps checkpoints and receipts in `.oryx/state/`.\n"
+        text = records.retarget_links(starter, source, destination / relative, root, copies, selected=selected)
+        yield relative, text

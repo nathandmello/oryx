@@ -29,14 +29,14 @@ def read(path):
     return decode(path.read_bytes())
 
 
-def save(path, value, *, expected=None):
+def save(path, value, *, expected=None, staging=None):
     with DirLock(path.parent):
         previous = read(path) if os.path.lexists(path) else None
         if previous == value:
             return
         if previous != expected:
             raise ValueError("Private sharing state changed; refresh the current revision")
-        with tempfile.NamedTemporaryFile(dir=path.parent, prefix=".pending-", delete=False) as out:
+        with tempfile.NamedTemporaryFile(dir=staging or path.parent, prefix=".pending-", delete=False) as out:
             temp = Path(out.name)
             try:
                 out.write(canonical(value))

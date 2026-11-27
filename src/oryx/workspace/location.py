@@ -8,12 +8,13 @@ from uuid import UUID, uuid4
 IDENTITY = Path(".oryx/workspace.json")
 
 
-def workspace_id(folder):
+def workspace_marker(folder):
     marker = folder / IDENTITY
     if marker.resolve() != marker or not marker.is_file() or marker.stat().st_size > 1024:
         raise ValueError("The selected Workspace needs a regular .oryx/workspace.json identity")
     record = json.loads(marker.read_text(encoding="utf-8"))
-    if not isinstance(record, dict) or record.keys() != {"id"}:
+    if (not isinstance(record, dict) or set(record) not in ({"id"}, {"id", "layout"})
+            or "layout" in record and record["layout"] != "purpose-v1"):
         raise ValueError("Invalid Workspace identity")
     value = record["id"]
     if not isinstance(value, str) or str(UUID(value)) != value:
@@ -21,7 +22,23 @@ def workspace_id(folder):
     expected = os.environ.get("ORYX_WORKSPACE_ID")
     if expected is not None and value != expected:
         raise ValueError("The selected Workspace identity changed")
-    return value
+    return record
+
+
+def workspace_id(folder):
+    return workspace_marker(folder)["id"]
+
+
+def purpose_layout(folder=None):
+    if folder is None:
+        supplied = os.environ.get("ORYX_WORKSPACE")
+        if not supplied:
+            return False
+        folder = Path(supplied)
+    marker = folder / IDENTITY
+    if not os.path.lexists(marker):
+        return False
+    return workspace_marker(folder).get("layout") == "purpose-v1"
 
 
 def selected_path(core, *, explicit=None):
@@ -73,5 +90,5 @@ def create_identity(folder):
     marker = folder / IDENTITY
     marker.parent.mkdir(mode=0o700)
     with marker.open("x", encoding="utf-8") as stream:
-        json.dump({"id": str(uuid4())}, stream)
+        json.dump({"id": str(uuid4()), "layout": "purpose-v1"}, stream)
         stream.write("\n")

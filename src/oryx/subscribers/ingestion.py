@@ -104,7 +104,7 @@ def for_task(private, payload, *, consumers=None, other_offers=()):
 
 
 def permitted_now(private, info, name):
-    if source_evidence.revoked(source_evidence.state(private)[1], info):
+    if source_evidence.revoked(source_evidence.state(private)[1], info, private):
         return False
     if name != "source-coverage" and not offer_queue.approved(private, name, info["kind"]):
         return False
@@ -157,7 +157,7 @@ def dispatch(private, payload, consumers, other_offers):
     if not active:
         return {"consumers": results}
     _, grants = source_evidence.state(private)
-    if source_evidence.revoked(grants, source):
+    if source_evidence.revoked(grants, source, private):
         return {"consumers": {**results, **{name: {"status": "revoked"} for name in active}}}
     info, text = source_evidence.material(private, source, payload["source"].get("text"))
     if info["kind"] == "chat" and source_evidence.PRIVATE_TURN.search(text):

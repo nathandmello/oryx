@@ -15,8 +15,36 @@ INITIATIVE_WORK_RESERVED = {"sources", "secrets"}
 MAX_TOPICS = 6
 
 
+WORK_DOMAINS = set(WORK_FOLDERS.values()) | {"initiatives", "backlogs", "forecasts"}
+STATE_DOMAINS = {"onboarding", "handoffs"}
+
+
+def work_path(name, private=None):
+    """Resolve the producer's compatible logical path against the selected physical layout."""
+    from oryx.workspace.location import purpose_layout
+    if not purpose_layout(private):
+        return str(name)
+    parts = Path(name).parts
+    if parts[:1] == ("workspace",) and len(parts) >= 2:
+        if parts[1] in WORK_DOMAINS:
+            return Path(*parts[1:]).as_posix()
+        if parts[1] in STATE_DOMAINS:
+            return (Path(".oryx/state") / Path(*parts[1:])).as_posix()
+    if parts[:1] == ("customizations",):
+        return (Path(".oryx") / name).as_posix()
+    return str(name)
+
+
+def work_parts(name):
+    """Represent either visible filing convention in the original validation coordinate system."""
+    parts = Path(name).parts
+    if parts and parts[0] in WORK_DOMAINS:
+        return ("workspace", *parts)
+    return parts
+
+
 def is_customization(name):
-    return Path(name).parts[:1] == ("customizations",)
+    return Path(name).parts[:1] == ("customizations",) or Path(name).parts[:2] == (".oryx", "customizations")
 
 
 def slug(value):
@@ -54,13 +82,13 @@ def initiative(name, product_name=None):
 
 
 def initiative_register(product_name):
-    return f"workspace/backlogs/{slug(product_name)}/initiatives.json"
+    return work_path(f"workspace/backlogs/{slug(product_name)}/initiatives.json")
 
 
 def initiative_brief(product_name, initiative_slug, kind):
     if kind not in INITIATIVE_BRIEFS:
         raise ValueError("Choose a Discovery Brief or Initiative Brief")
-    return f"workspace/initiatives/{slug(product_name)}/{slug(initiative_slug)}/{kind}.md"
+    return work_path(f"workspace/initiatives/{slug(product_name)}/{slug(initiative_slug)}/{kind}.md")
 
 
 def initiative_work_path(product_name, initiative_slug, filename):
@@ -69,11 +97,11 @@ def initiative_work_path(product_name, initiative_slug, filename):
     product_name, initiative_slug = slug(product_name), slug(initiative_slug)
     if {product_name, initiative_slug} & INITIATIVE_WORK_RESERVED:
         raise ValueError("Choose an initiative outside reserved sources and secrets paths")
-    return Path("workspace/initiatives") / product_name / initiative_slug / filename
+    return Path(work_path("workspace/initiatives")) / product_name / initiative_slug / filename
 
 
 def initiative_work_identity(name):
-    parts = Path(name).parts
+    parts = work_parts(name)
     if (len(parts) == 5 and parts[:2] == ("workspace", "initiatives") and parts[4] in INITIATIVE_WORK
             and not INITIATIVE_WORK_RESERVED.intersection(parts[2:4])
             and all(SLUG.fullmatch(part) for part in parts[2:4])):
@@ -81,17 +109,17 @@ def initiative_work_identity(name):
 
 
 def prioritization(product_name, cycle):
-    return f"workspace/roadmaps/{slug(product_name)}/{slug(cycle)}.md"
+    return work_path(f"workspace/roadmaps/{slug(product_name)}/{slug(cycle)}.md")
 
 
 def experiment_draft_home(product_name, initiative_slug):
-    return f"workspace/experiments/{slug(product_name)}/{slug(initiative_slug)}"
+    return work_path(f"workspace/experiments/{slug(product_name)}/{slug(initiative_slug)}")
 
 
 def governed_kind(name):
     """Identify product-qualified records. Format-2 standalone files keep their original routes."""
     path = Path(name)
-    parts = path.parts
+    parts = work_parts(name)
     if (len(parts) not in (4, 5) or parts[0] != "workspace" or not SLUG.fullmatch(parts[2])
             or (isinstance(name, str) and path.as_posix() != name)):
         return None
@@ -153,7 +181,7 @@ def brief_kind(name):
 
 def valid_work(name, kind=None):
     path = Path(name)
-    parts = path.parts
+    parts = work_parts(name)
     if len(parts) < 3 or parts[0] != "workspace" or path.suffix != ".md" or not SLUG.fullmatch(path.stem):
         return False
     governed = governed_kind(name)

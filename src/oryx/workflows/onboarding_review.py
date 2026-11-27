@@ -38,7 +38,7 @@ def manifest(root):
 
 
 def read(private, *, for_status=False):
-    path = private / FILE
+    path = private / layout.work_path(FILE, private)
     if path.resolve() != path:
         raise ValueError("Use a regular walkthrough checkpoint inside Studio")
     if not path.exists():
@@ -247,8 +247,8 @@ def status(private):
 
 def write(private, original, state):
     state["revision"] += 1
-    storage.require_visible(private, FILE)
-    storage.replace_text(private / FILE, original, json.dumps(state, indent=2) + "\n")
+    storage.require_visible(private, layout.work_path(FILE, private))
+    storage.replace_text(private / layout.work_path(FILE, private), original, json.dumps(state, indent=2) + "\n")
 
 
 def check_response(payload, state):

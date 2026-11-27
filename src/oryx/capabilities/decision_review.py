@@ -180,7 +180,7 @@ def review(root, product=None):
         else:
             continue
         candidates.append((rank, {"kind": kind, "product": slug, "subject": forecast["id"], "finding": message,
-                                  "sources": [f"workspace/forecasts/{forecast['id']}.json", forecast["authority"]["record"]]},
+                                  "sources": [layout.work_path(f"workspace/forecasts/{forecast['id']}.json", private), forecast["authority"]["record"]]},
                            check))
     candidates.sort(key=lambda item: (item[0], item[1]["product"] or "", item[1]["subject"],
                                       item[1]["kind"], item[1]["finding"], item[1]["sources"]))

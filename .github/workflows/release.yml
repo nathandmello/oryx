@@ -33,4 +33,6 @@ jobs:
       - name: Verify candidate, publish, and reconcile Latest
         env:
           GH_TOKEN: ${{ github.token }}
+          ORYX_QUALIFICATION_APP_ID: ${{ vars.ORYX_QUALIFICATION_APP_ID }}
+          ORYX_QUALIFICATION_COMMIT: ${{ vars.ORYX_QUALIFICATION_COMMIT }}
         run: python3 tools/publish_release.py

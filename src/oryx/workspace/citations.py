@@ -150,15 +150,15 @@ def reconcile(root, registry, versions=None):
     identity.write_json(root / FILE, {"schema":1,"workspace_id":registry["workspace_id"],"records":edges})
 
 
-def lookup(root, record, href, revision=None):
-    owner = identity.resolve(root, record, revision)
+def lookup(root, record, href, revision=None, *, resolve=identity.resolve):
+    owner = resolve(root, record, revision)
     if owner["transfer_status"] == "transferred":
         return owner
     row = load(root).get(owner["id"],{}).get(owner["revision"],{}).get(href)
     if row is None:
         raise ValueError("This link was not recorded for that source revision")
     if row.get("status") == "record":
-        target = identity.resolve(root, row["id"], row["revision"])
+        target = resolve(root, row["id"], row["revision"])
         if row["anchor"] and target.get("source_path"):
             from conversion import markdown_anchors
             text = identity.read_regular(identity.local_file(root, target["source_path"])).decode("utf-8")

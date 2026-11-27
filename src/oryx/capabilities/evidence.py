@@ -35,9 +35,27 @@ def local_name(reference):
         return None
     if (parsed.scheme or parsed.netloc or parsed.query or path.as_posix() != name or path.is_absolute()
             or len(path.parts) < 2 or path.suffix.lower() not in (".md", ".txt")
+            or path.parts[0] in {"handoffs", "onboarding"}
+            or path.parts[:2] in {("workspace", "handoffs"), ("workspace", "onboarding")}
             or any(part.casefold() in _EXCLUDED or not _COMPONENT.fullmatch(part) for part in path.parts)):
         raise ValueError("Use an eligible private evidence document")
     return path.as_posix()
+
+
+def transferred_paths(private):
+    """Historical private bytes cannot answer for an owner whose transfer has begun."""
+    from oryx.workspace import identity
+    directory = identity.local_file(private, ".oryx/state/transfers")
+    if not directory.exists():
+        return set()
+    if not directory.is_dir():
+        raise ValueError("Invalid transfer record directory")
+    registry = identity.load(private)
+    blocked = set()
+    for rid, row in registry["records"].items():
+        if (identity.transfer_status(private, rid) or {}).get("status") in {"pending", "transferred"}:
+            blocked.update(row["aliases"])
+    return blocked
 
 
 def _stamp(info):
@@ -59,6 +77,8 @@ def read(private, name, coverage, offset, supplied=None, length=None):
         raise ValueError("A partial local read needs a bounded passage")
     if supplied_bytes is not None and len(supplied_bytes) > LIMIT:
         raise ValueError("The supplied passage exceeds the read limit")
+    if name in transferred_paths(private):
+        raise ValueError("Obtain current permission from the authoritative record owner")
     flags = os.O_RDONLY | os.O_NOFOLLOW
     parts = PurePosixPath(name).parts
     directory = os.open(private, flags | os.O_DIRECTORY)
@@ -84,5 +104,7 @@ def read(private, name, coverage, offset, supplied=None, length=None):
         raise ValueError("The authorized original passage is missing or too large")
     if supplied_bytes is not None and raw != supplied_bytes:
         raise ValueError("The supplied passage differs from the authorized original")
+    if name in transferred_paths(private):
+        raise ValueError("Record authority changed during its read")
     raw.decode("utf-8")
     return raw, after, offset + len(raw) == after.st_size

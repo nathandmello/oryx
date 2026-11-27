@@ -22,3 +22,5 @@ jobs:
       - run: python3 tools/release_review.py
         env:
           GH_TOKEN: ${{ github.token }}
+          ORYX_QUALIFICATION_APP_ID: ${{ vars.ORYX_QUALIFICATION_APP_ID }}
+          ORYX_QUALIFICATION_COMMIT: ${{ vars.ORYX_QUALIFICATION_COMMIT }}

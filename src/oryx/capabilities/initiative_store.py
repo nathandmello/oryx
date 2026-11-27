@@ -337,6 +337,12 @@ def live_errors(root, register, initiative=None, *, investment=False, area=None,
 
 
 def read(root, product):
+    from oryx.workspace import publication
+    with publication.view(root):
+        return read_locked(root, product)
+
+
+def read_locked(root, product):
     target = register_path(root, product)
     private = storage.private_root(root)
     for old_path in layout_upgrade.legacy_initiative_registers(private):
@@ -656,6 +662,27 @@ def apply(root, product, proposal, *, approved_revision, confirmations=(), compa
         if reviewed_comparison is not None:
             receipt["comparison"] = reviewed_comparison
             validate_receipt_comparison(product, receipt)
+        if storage.selected_workspace(root) is not None:
+            from oryx.workspace import publication
+            updates = [publication.change(private, receipt_path, receipt_original, formatted(receipt), receipt_mode),
+                       publication.change(private, target, original, formatted(envelope), target_mode)]
+            if reviewed_comparison is not None:
+                path, before_text, after_text = comparison
+                storage.require_visible(private, path.relative_to(private))
+                updates.append(publication.change(private, path, before_text, after_text))
+            for item, metric, path, draft, status in draft_changes:
+                if status == "missing file":
+                    contents = {**experiment_drafts.identity(item, metric), **dict.fromkeys(experiment_drafts.DETAILS)}
+                    updates.append(publication.change(private, path, None, json.dumps(contents, indent=2) + "\n",
+                                                      storage.initiative_mode(path, draft=True)))
+                else:
+                    original_draft = path.read_bytes().decode("utf-8")
+                    if json_input(original_draft) != draft:
+                        raise ValueError(f"{path.name} changed before draft cleanup")
+                    updates.append(publication.change(private, path, original_draft, None))
+            publication.publish(private, updates, approval={
+                "path": receipt_path.relative_to(private).as_posix(), "revision": approved_revision})
+            return expected["revision"]
         # The protected receipt commits approval. Its latest batch can finish an interrupted register write.
         storage.replace_text(receipt_path, receipt_original, formatted(receipt), mode=receipt_mode,
                              durable=reviewed_comparison is not None)
@@ -676,7 +703,7 @@ def apply(root, product, proposal, *, approved_revision, confirmations=(), compa
 def products(root):
     private = storage.private_root(root)
     layout_upgrade.require_supported_registers(private)
-    home = private / "workspace" / "backlogs"
+    home = private / layout.work_path("workspace/backlogs", private)
     if home.resolve() != home:
         raise ValueError("Use a regular workspace/backlogs directory")
     products = {path.parent.name for path in home.glob(f"*/{FILENAME}")}
@@ -711,7 +738,7 @@ def registrations(root, product=None, require_current=False):
 
 
 def verify_draft_home(root, kind, name):
-    parts = PurePosixPath(name).parts
+    parts = layout.work_parts(name)
     if (kind == "roadmap" and len(parts) == 3 and parts[:2] == ("workspace", "roadmaps")
             and register_path(root, PurePosixPath(name).stem).is_file()):
         raise ValueError("Use pm.py roadmap for a product with an approved initiative register")

@@ -28,9 +28,9 @@ def location_error(kind, name):
     if path_kind(name) == kind:
         return None
     if kind in BRIEFS:
-        return f"use workspace/initiatives/<product>/<initiative>/{BRIEFS[kind]}"
+        return "use " + layout.work_path(f"workspace/initiatives/<product>/<initiative>/{BRIEFS[kind]}")
     if kind == "prioritization":
-        return "use workspace/roadmaps/<product>/<planning-cycle>.md"
+        return "use " + layout.work_path("workspace/roadmaps/<product>/<planning-cycle>.md")
 
 
 def brief_parent_error(name, text, expected):

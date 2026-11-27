@@ -7,6 +7,7 @@ import stat
 import sys
 
 from . import store
+from oryx.workspace import layout
 
 
 def legacy():
@@ -18,7 +19,7 @@ def legacy():
 
 
 def receipt_state(ws):
-    folder = ws.root / "workspace/handoffs"
+    folder = ws.root / layout.work_path("workspace/handoffs", ws.root)
     if not os.path.lexists(folder):
         return folder, {}
     store.checked_directory(folder)
@@ -91,7 +92,7 @@ def inspect(ws, identifier, request):
             "current_behavior": "The current handoff remains available to the next session.",
             "reason": "The PM requested this checkpoint for later work.",
             "effect": "Saving replaces the displayed handoff index and makes the reviewed task available to resume.",
-            "changes": [{"path": legacy().FILE, "base": request["base"],
+            "changes": [{"path": layout.work_path(legacy().FILE, ws.root), "base": request["base"],
                          "before": None if old is None else old.decode(), "text": new.decode(),
                          "after_sha256": store.sha(new)}]}
 
@@ -99,13 +100,13 @@ def inspect(ws, identifier, request):
 def commit(ws, identifier, reviewed, request, actor):
     h = legacy()
     with h.storage.writer_lock(ws.root):
-        h.storage.require_visible(ws.root, h.FILE)
+        h.storage.require_visible(ws.root, layout.work_path(h.FILE, ws.root))
         folder, receipts = receipt_state(ws)
         if store.encoded(inspect(ws, identifier, request)) != reviewed or ws.proposal(identifier) != request:
             raise ValueError("Handoff review is stale")
         _, updated = effects(ws, request)
         receipt = {"id": identifier, "workspace": ws.identity, "actor": actor, "review": store.sha(reviewed),
-                   "paths": [h.FILE], "record": request["review"]["id"], "revision": request["review"]["revision"]}
+                   "paths": [layout.work_path(h.FILE, ws.root)], "record": request["review"]["id"], "revision": request["review"]["revision"]}
         generation = ws.generation()
         store.publish_file(generation / "index.json", updated, mode=0o600)
         store.publish_file(generation / store.HEAD, store.encoded({"workspace": ws.identity,

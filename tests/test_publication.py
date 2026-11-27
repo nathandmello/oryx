@@ -19,6 +19,7 @@ class CandidateTests(unittest.TestCase):
         self.assertFalse(candidate.needs_native(["README.md", "playbook/release.json", "playbook/updates.md", "templates/brief.md"]))
         for path in ("tools/snapshots.py", "tools/workspace.py", "tools/git_ops.py", "tools/storage.py",
                      "tools/release_candidate.py", ".github/workflows/check.yml", "tests/test_layout_upgrade.py",
+                     "src/oryx/workspace/location.py", "src/oryx/review/store.py", "bin/oryx",
                      "tools/studio_layout.py", "tools/company_source.py", "tests/test_studio_contract.py"):
             with self.subTest(path=path):
                 self.assertTrue(candidate.needs_native(["playbook/release.json", path]))
@@ -48,9 +49,9 @@ class CandidateTests(unittest.TestCase):
             api = responses.__getitem__
             event = {"repository": {"default_branch": "main"}, "before": before, "after": first}
             with patch.object(publisher, "publication") as verify:
-                self.assertEqual(publisher.select_candidate(event, "refs/heads/main", first, api), (pr, first, "0.3.6"))
+                self.assertEqual(publisher.select_candidate(event, "refs/heads/main", first, api), (pr, first, "0.3.6", verify.return_value))
                 retry = {"repository": event["repository"], "inputs": {"release_pr": "11"}}
-                self.assertEqual(publisher.select_candidate(retry, "refs/heads/main", second, api), (pr, first, "0.3.6"))
+                self.assertEqual(publisher.select_candidate(retry, "refs/heads/main", second, api), (pr, first, "0.3.6", verify.return_value))
                 self.assertEqual(verify.call_count, 2)
                 for changed in (dict(event, forced=True), dict(event, before=second)):
                     with self.assertRaises(ValueError):
@@ -106,7 +107,7 @@ class PublicationTests(unittest.TestCase):
         self.assertIn("Use backup.", notes)
         self.assertIn("Ship tags.", notes)
         release = {"id": len(self.releases) + 1, "tag_name": tag, "html_url": "https://example.invalid/" + tag,
-                   "draft": False, "prerelease": False}
+                   "draft": False, "prerelease": False, "body": notes}
         self.releases.append(release)
         self.responses["releases/tags/" + tag] = release
 
@@ -126,6 +127,15 @@ class PublicationTests(unittest.TestCase):
         api.reset_mock()
         publisher.ensure_tag("v1.2.3", "first", api)
         self.assertTrue(all(len(call.args) == 1 for call in api.call_args_list))
+
+    def test_published_tag_reports_the_qualified_digest_on_creation_and_retry(self):
+        proof = {"archive_sha256": "c" * 64}
+        publisher.publish(self.pr, "first", "0.3.6", self.api, self.create, qualification=proof)
+        publisher.publish(self.pr, "first", "0.3.6", self.api, self.create, qualification=proof)
+        self.assertEqual(len(self.releases), 1)
+        with self.assertRaisesRegex(ValueError, "qualified archive"):
+            publisher.publish(self.pr, "first", "0.3.6", self.api, self.create,
+                              qualification={"archive_sha256": "e" * 64})
 
     def test_partial_failure_and_delayed_retry_preserve_all_releases_and_latest(self):
         with self.assertRaises(OSError):

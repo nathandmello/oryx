@@ -28,9 +28,18 @@ def observe(root, private, command, scope):
         import onboarding_review
         name = ONBOARDING[command]
         journey = onboarding_review.status(private)
-        walk = journey["walkthroughs"][name]
-        return {"owner": "onboarding", "stage": name, "revision": journey["revision"],
-                "complete": walk["complete"], "next_topic": (walk["next_topic"] or {}).get("id"),
+        stage = "area" if name == "product" and journey["stage"] == "area" else name
+        walk = journey["walkthroughs"][stage]
+        complete = walk["complete"]
+        subject = (journey.get("product_scope") or {}).get("subject")
+        if name == "product" and scope.startswith("product/"):
+            subject = subject or journey.get("reviewed_product_subject")
+            if stage == "area" and scope != subject:
+                raise ValueError("Resume this area walkthrough with a handoff scoped to its selected area")
+            if stage != "area" and "/area/" in scope:
+                complete = scope in journey.get("reviewed_areas", [])
+        return {"owner": "onboarding", "stage": stage, "revision": journey["revision"],
+                "complete": complete, "next_topic": (walk["next_topic"] or {}).get("id"),
                 "capture": onboarding_capture(private, name)}
     if command not in INITIATIVE | {"portfolio roadmap plan", "initiative intake capture"}:
         return {"owner": "reviewed-handoff"}
@@ -59,8 +68,14 @@ def observe(root, private, command, scope):
     if command == "delivery launch review":
         import initiative_work
         task_data, check_data = initiative_work.load_work(root, product, slug)
-        result.update(tasks_revision=initiative_work.revision(task_data[1]),
-                      checklist_revision=initiative_work.revision(check_data[1]))
+        _, raw_tasks, tasks, task_history = task_data
+        target, raw_checks, checks, check_history = check_data
+        readiness = initiative_work.view(initiative_work.CHECKLIST, target, raw_checks, checks, check_history, tasks, task_history)
+        outstanding = readiness["outstanding"]
+        result.update(tasks_revision=initiative_work.revision(raw_tasks), checklist_revision=readiness["revision"],
+                      readiness_revision=readiness["readiness_revision"], readiness=readiness["launch_readiness"],
+                      outstanding_count=len(outstanding), outstanding=dict(sorted(outstanding.items())[:8]),
+                      full_review_command=["launch-checklist", "list", product, slug])
     return result
 
 

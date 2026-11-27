@@ -1,4 +1,5 @@
 """Remember a PM's optional profile walkthrough independently of required onboarding."""
+import layout
 
 import json
 
@@ -12,7 +13,7 @@ CHOICES = {"start": "active", "later": "deferred", "skip": "skipped", "finish": 
 
 
 def read(private):
-    path = private / FILE
+    path = private / layout.work_path(FILE, private)
     if path.resolve() != path or (path.exists() and not path.is_file()):
         raise ValueError("Use a regular stakeholder walkthrough checkpoint in Studio")
     if not path.exists():
@@ -35,8 +36,8 @@ def status(private):
 
 def save(private, original, state, disposition):
     updated = {"revision": state["revision"] + 1, "status": disposition}
-    storage.require_visible(private, FILE)
-    storage.replace_text(private / FILE, original, json.dumps(updated, indent=2) + "\n")
+    storage.require_visible(private, layout.work_path(FILE, private))
+    storage.replace_text(private / layout.work_path(FILE, private), original, json.dumps(updated, indent=2) + "\n")
     return updated
 
 

@@ -44,6 +44,27 @@ Use the full local backup and the inventory digest retained separately when the 
 
 ## Supported environment
 
-Protected publication requires a personal PM-owned Workspace on Linux. The local filesystem must support atomic rename exchange, exclusive creation, file locks and directory synchronization. Native Codex and Claude sessions against an external Workspace remain held pending qualification of an OS-isolated client adapter. Shell environment markers and PM-owned file modes alone cannot isolate programs running as the same user.
+Protected publication requires a personal PM-owned Workspace on Linux. The local filesystem must support atomic rename exchange, exclusive creation, file locks and directory synchronization. External Codex and Claude sessions require an installed Core and an OS-isolated native process. Shell markers alone cannot isolate programs running as the same user.
 
-The four legacy writers above and managed note groups have distinct transaction boundaries. A full same-machine backup preserves private drafts and recovery history. Keep those internal files out of ordinary Git synchronization.
+Saving an external roadmap cycle publishes its comparison, register, approval receipt and affected experiment drafts as one group. Reopen the roadmap after an interruption. Oryx completes the approved group or holds a conflict for reconciliation. Keep the recovery history and later edits when resolving a conflict.
+
+Use `oryx workspace publication REVISION` to reopen the approved group. Its immutable local Git tree contains the approval receipt and the exact reviewed files. The response supplies the Git directory and tree for `git show`.
+
+A full same-machine backup preserves private drafts and recovery history. Keep those internal files out of ordinary Git synchronization.
+
+
+## Launch a native client
+
+Run `oryx agent codex --check-host` or `oryx agent claude --check-host` to exercise the actual native binary. The check verifies Linux namespaces, read-only files, private staging and absence of a controlling PM terminal. The default profile is offline and uses temporary account storage.
+
+Choose `--note notes/launch.md` for each note the agent may read or propose changing. Each invocation handles one request. Type it at the prompt or supply it on standard input. The client receives its selected note copies and Core tools. Saving a proposed change still requires the PM’s separate review decision.
+
+For hosted inference, select a dedicated absolute account directory with `--client-home`. Start with an empty, PM-owned directory. The first successful check provisions its client identity. Use the native client’s normal sign-in and tool configuration with that directory as its home. Keep the PM's personal account, credentials and browser profile separate.
+
+```sh
+oryx agent codex --check-host --client-home /private/native-codex
+HOME=/private/native-codex codex login
+oryx agent codex --client-home /private/native-codex --note notes/launch.md
+```
+
+The account profile requires rootless Bubblewrap, slirp4netns and Linux packet filtering. It permits DNS and public IPv4 TLS, and blocks host addresses, private networks and inbound connections. An unavailable kernel or client dependency holds startup. Installed native or connector capabilities depend on that dedicated account. A successful startup check verifies the local boundary. Model responses and connector permissions require their own qualification.

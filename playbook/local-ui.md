@@ -7,7 +7,7 @@ Use the [shared command menu](commands.md) to start the app:
 /pm workspace browser open
 ```
 
-An incomplete Studio shows the current [onboarding](company-context.md) stage. Continue the walkthrough in your oryx conversation.
+An incomplete Studio shows the current [onboarding](company-context.md) stage. Continue the walkthrough in your oryx conversation or use the terminal command shown for the current stage.
 The conversation guides company, PM and [parent product](product-context.md) setup. The optional area walkthrough leaves the requested view available.
 Use **Check progress** to reopen the requested view after onboarding.
 
@@ -15,7 +15,7 @@ Once ready, the app opens to Roadmap by default. Add `--screen tasks` or `--scre
 From a terminal, run the same action:
 
 ```sh
-python3 tools/pm.py action workspace browser open
+oryx action workspace browser open
 ```
 
 For roadmap approval, run the terminal command above yourself with a Python installation that supports Tk.
@@ -48,7 +48,7 @@ If the app closes during an approved save, use [initiative recovery](initiative-
 ## Tasks and launch checklists
 
 Open **Tasks** or **Launch checklists**, then choose a product and initiative.
-Add or edit items. Preview changes and save them to the same lists the terminal commands use.
+Add or edit items and preview the changes. In a selected external Workspace, saving a preview stages it for local PM review. Use the displayed `oryx review decide ID` command in your terminal, then refresh the browser to see the saved result.
 
 Start a launch checklist from the [workspace starter](customization.md). Record evidence to verify a check.
 A task edit preview names launch checks affected by withdrawn evidence. The checklist shows each outstanding reason and the earlier verification.

@@ -208,16 +208,16 @@ def adopt_private_migration(path, branch, incoming, settings):
 
 
 def check_review_history(path, revision):
-    local_only = (":(icase,literal).oryx/staging", ":(icase,literal).oryx/state/review")
+    local_only = (":(icase,literal).oryx/staging", ":(icase,literal).oryx/state/review", ":(icase,literal).oryx/cache")
     if workspace.git(path, "rev-list", "--full-history", "--max-count=1", revision, "--", *local_only):
-        raise ValueError("The Workspace branch includes local drafts or review state. Preserve its history and review what may be shared.")
+        raise ValueError("The Workspace branch includes local drafts or review state, or a private search cache. Preserve its history and review what may be shared.")
 
 
 def check_workspace_revision(root, path, revision):
     """A remote handoff must preserve the selected Workspace identity."""
     if storage.selected_workspace(root) is None:
         return
-    from oryx.workspace.location import IDENTITY, workspace_id
+    from oryx.workspace.location import IDENTITY, workspace_marker
     name = IDENTITY.as_posix()
     entry = workspace.git(path, "ls-tree", revision, "--", name)
     if not entry.startswith("100644 blob "):
@@ -225,8 +225,46 @@ def check_workspace_revision(root, path, revision):
     blob = f"{revision}:{name}"
     if int(workspace.git(path, "cat-file", "-s", blob)) > 1024:
         raise ValueError("Invalid Workspace identity size")
-    if storage.json_input(workspace.git(path, "cat-file", "blob", blob)) != {"id": workspace_id(path)}:
+    if storage.json_input(workspace.git(path, "cat-file", "blob", blob)) != workspace_marker(path):
         raise ValueError("Git revision belongs to a different Workspace")
+
+
+def reviewed_first_push(path, branch, url, commit):
+    """Bind the first GitHub disclosure to immutable bytes, destination and the signed-in PM."""
+    from oryx.review.cli import confirm_effect
+    from oryx.workflows.first_run import github
+    remote = identity(url)
+    if not remote.startswith("github.com/"):
+        return
+    ref = "refs/heads/" + branch
+    slug = remote.removeprefix("github.com/")
+
+    def audience():
+        repo = json.loads(github("repo", "view", slug, "--json", "id,nameWithOwner,visibility,viewerPermission"))
+        if (repo["nameWithOwner"].casefold() != slug or repo["visibility"] != "PRIVATE" or not repo["id"]
+                or repo["viewerPermission"] not in {"WRITE", "MAINTAIN", "ADMIN"}):
+            raise ValueError("The selected GitHub repository must be private and writable by the signed-in PM")
+        return {"repository": repo["nameWithOwner"], "repository_id": repo["id"], "visibility": repo["visibility"],
+                "actor": github("api", "user", "--jq", ".login"), "audience": "Accounts and integrations with repository read access"}
+
+    target = audience()
+    if workspace.git(path, "ls-remote", "--heads", url, ref):
+        return
+    shown = {**target, "branch": ref, "commit": commit, "tree": workspace.git(path, "rev-parse", commit + "^{tree}"),
+             "files": workspace.git(path, "ls-tree", "-r", commit).splitlines(),
+             "history": workspace.git(path, "log", "--format=%H %an <%ae> %s", commit).splitlines()}
+    if not confirm_effect("This first push makes the listed Git history available to the private repository's readers.",
+                          shown, "PUSH"):
+        raise ValueError("Kept the commit in the local Workspace")
+    if audience() != target or origin_for_push(path) != url:
+        raise ValueError("GitHub identity, visibility or push destination changed during review")
+
+
+def origin_for_push(path):
+    urls = workspace.git(path, "remote", "get-url", "--push", "--all", "origin").splitlines()
+    if len(urls) != 1:
+        raise ValueError("Confirm one Workspace push destination")
+    return urls[0]
 
 
 def run(root, role, operation):
@@ -251,24 +289,37 @@ def run(root, role, operation):
     if tracking and (tracking != "origin" or tracked_branch != f"refs/heads/{branch}"):
         raise ValueError(f"{role}: branch tracks another destination; inspect it before synchronisation")
     if operation == "push":
+        external = role == "workspace" and storage.selected_workspace(root) is not None
+        reviewed = workspace.git(path, "rev-parse", "--verify", "HEAD^{commit}") if external else "HEAD"
         if role == "system":
             check_system_history(path, "HEAD")
         else:
-            check_workspace_revision(root, path, "HEAD")
-            if storage.selected_workspace(root) is not None:
-                check_review_history(path, "HEAD")
-            committed = subprocess.run(["git", "-C", str(path), "show", f"HEAD:{upgrades.LEDGER}"], capture_output=True)
+            check_workspace_revision(root, path, reviewed)
+            if external:
+                check_review_history(path, reviewed)
+            committed = subprocess.run(["git", "-C", str(path), "show", f"{reviewed}:{upgrades.LEDGER}"], capture_output=True)
             local = upgrades.read_state(path)[1]
             published = {} if committed.returncode else json.loads(committed.stdout)
             if (upgrades.TRANSACTIONS in published or upgrades.TRANSACTIONS in local) and published != local:
                 raise ValueError("Save the current private filing ledger before sharing it")
             for identifier, expected in published.get(upgrades.TRANSACTIONS, {}).items():
                 rel = conversion.archive_path(path, identifier).relative_to(path).as_posix()
-                blob = subprocess.run(["git", "-C", str(path), "cat-file", "blob", f"HEAD:{rel}"], capture_output=True)
+                blob = subprocess.run(["git", "-C", str(path), "cat-file", "blob", f"{reviewed}:{rel}"], capture_output=True)
                 if blob.returncode or conversion.digest(blob.stdout) != expected:
                     raise ValueError(f"Save the verified recovery archive in the private commit: {rel}")
-        workspace.git(path, "-c", "push.followTags=false", "push", "--set-upstream", "origin",
-                      f"HEAD:refs/heads/{branch}")
+        if external:
+            url = origin_for_push(path)
+            if identity(url) != identity(settings["remotes"]["workspace"]):
+                raise ValueError("The Workspace push destination differs from the confirmed repository")
+            reviewed_first_push(path, branch, url, reviewed)
+            # Send the reviewed commit to the verified URL even if HEAD or origin changes concurrently.
+            workspace.git(path, "-c", "push.followTags=false", "push", url, f"{reviewed}:refs/heads/{branch}")
+            if origin_for_push(path) == url:
+                workspace.git(path, "config", "--local", f"branch.{branch}.remote", "origin")
+                workspace.git(path, "config", "--local", f"branch.{branch}.merge", f"refs/heads/{branch}")
+        else:
+            workspace.git(path, "-c", "push.followTags=false", "push", "--set-upstream", "origin",
+                          f"HEAD:refs/heads/{branch}")
         return f"Pushed {role} branch {branch} to its confirmed origin."
     workspace.git(path, "fetch", "origin", f"refs/heads/{branch}")
     fetched = workspace.git(path, "rev-parse", "FETCH_HEAD^{commit}")

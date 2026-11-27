@@ -79,7 +79,7 @@ def work_input(value):
 
 
 def read(private):
-    path = pm_profile.safe_path(private, FILE)
+    path = pm_profile.safe_path(private, layout.work_path(FILE, private))
     raw = path.read_bytes() if path.is_file() else None
     state = storage.json_input(raw) if raw is not None else {"work": {}, "grants": {}}
     fields(state, ("work", "grants"))
@@ -102,8 +102,8 @@ def read(private):
 
 
 def write(private, raw, state):
-    storage.require_visible(private, FILE)
-    storage.replace_text(pm_profile.safe_path(private, FILE), raw, json.dumps(state, indent=2) + "\n", mode=0o600)
+    storage.require_visible(private, layout.work_path(FILE, private))
+    storage.replace_text(pm_profile.safe_path(private, layout.work_path(FILE, private)), raw, json.dumps(state, indent=2) + "\n", mode=0o600)
 
 
 def citation(private, grant):

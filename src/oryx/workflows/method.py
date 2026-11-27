@@ -93,6 +93,10 @@ def entry(root, command, private=None):
     step = {"company": {"plan": "assess", "gather": "assess", "review": "review"},
             "pm": {"plan": "scope", "gather": "scope", "review": "review", "paused": "pause"},
             "product": {"review": "review"}}[kind].get(capture["phase"])
+    if kind == "product" and step is None:
+        import onboarding_review
+        if onboarding_review.status(private)["stage"] == "area":
+            step = "area"
     result = prepare(root, command, step)
     result["owning_capture"] = capture
     return result

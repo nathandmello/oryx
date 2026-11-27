@@ -334,6 +334,15 @@ def hook_errors(texts: dict[str, str]) -> list[str]:
 
 
 def check_workspace(root: Path, system_texts: dict[str, str], *, validate_profiles=True) -> list[str]:
+    from oryx.workspace import publication
+    try:
+        with publication.view(root):
+            return check_workspace_locked(root, system_texts, validate_profiles=validate_profiles)
+    except (OSError, ValueError) as exc:
+        return [f"PM repository: {exc}"]
+
+
+def check_workspace_locked(root, system_texts, *, validate_profiles):
     errors, texts = [], {}
     try:
         private = workspace.repo(root, "workspace")
@@ -397,17 +406,18 @@ def check_workspace(root: Path, system_texts: dict[str, str], *, validate_profil
         from oryx.governance import cli as governance_cli
         from oryx.review import store as review_store
         from oryx.capabilities import roadmap_edit
-        from oryx.workspace import adoption
+        from oryx.workspace import adoption, connections
         for validator in (adoption.checked_paths, review_store.checked_paths, workflow_cli.checked_paths, roadmap_edit.checked_paths,
-                          governance_cli.checked_paths):
+                          governance_cli.checked_paths, connections.checked_paths):
             try:
                 admitted.update(validator(private))
             except (OSError, ValueError, TypeError, KeyError, RuntimeError) as exc:
                 errors.append(f"{private.name}: invalid state ({validator.__module__}): {exc}")
+    from oryx.workspace.location import purpose_layout
+    purpose = purpose_layout(private)
     files = inventory(private)
     initiative_work_homes = set()
-    captures = {company_onboarding.FILE: "company", company_onboarding.PM_FILE: "pm",
-                company_onboarding.PRODUCT_FILE: "product"}
+    captures = {company_onboarding.checkpoint(kind, private): kind for kind in ("company", "pm", "product")}
     for path in files:
         rel = path.relative_to(private).as_posix()
         label = f"{private.name}/{rel}"
@@ -419,7 +429,7 @@ def check_workspace(root: Path, system_texts: dict[str, str], *, validate_profil
             continue
         if not path.is_file():
             continue
-        parts = path.relative_to(private).parts
+        parts = layout.work_parts(rel) if purpose else path.relative_to(private).parts
         if rel in admitted:
             continue
         if rel == ".oryx/workspace.json" and storage.selected_workspace(root) == private:
@@ -430,28 +440,28 @@ def check_workspace(root: Path, system_texts: dict[str, str], *, validate_profil
             continue  # The forecast checker validates every receipt in this directory.
         if path.parent == private / stakeholder_profiles.HOME and path.suffix == ".json":
             continue  # Profile checks validate identities, sources, and accepted revisions.
-        if rel == work_handoffs.FILE:
+        if rel == layout.work_path(work_handoffs.FILE, private):
             try:
                 work_handoffs.read(private)
             except (ValueError, OSError) as exc:
                 errors.append(f"{label}: {exc}")
             continue
-        if rel == onboarding_profile_step.FILE:
+        if rel == layout.work_path(onboarding_profile_step.FILE, private):
             try:
                 onboarding_profile_step.read(private)
             except (ValueError, OSError) as exc:
                 errors.append(f"{label}: {exc}")
             continue
-        if rel in captures or rel == onboarding_review.FILE:
+        if rel in captures or rel == layout.work_path(onboarding_review.FILE, private):
             try:
-                if rel == onboarding_review.FILE:
+                if rel == layout.work_path(onboarding_review.FILE, private):
                     onboarding_review.status(private)
                 else:
                     company_onboarding.read(private, captures[rel])
             except (ValueError, OSError) as exc:
                 errors.append(f"{label}: {exc}")
             continue
-        if parts[0] == "customizations" or rel in {metric_registry.PRIVATE, *studio_layout.LEGACY.values()}:
+        if layout.is_customization(rel) or rel in {metric_registry.PRIVATE, *studio_layout.LEGACY.values()}:
             continue
         if parts[0] in {"context", "products", "workspace"} and any(part.startswith(".") for part in parts[1:]):
             continue  # Editor metadata and private local files are outside the artifact inventory.
@@ -510,6 +520,8 @@ def check_workspace(root: Path, system_texts: dict[str, str], *, validate_profil
                 errors.append(f"{label}: cannot read text: {exc}")
     errors.extend(f"{private.name}/{error}" for error in filing.topic_structure_errors(private))
     for required in ("README.md", ".gitignore", "settings.json", "context/README.md", "workspace/README.md"):
+        if required == "workspace/README.md" and purpose:
+            continue
         if not (private / required).is_file():
             errors.append(f"{private.name}/{required}: required file is missing")
     try:
@@ -912,6 +924,9 @@ def build_parser():
     commands.add_parser("action", help="Discover and run published oryx actions")
     agent = commands.add_parser("agent")
     agent.add_argument("client", choices=("codex", "claude"))
+    agent.add_argument("--check-host", action="store_true", help="Verify native client startup inside the selected protection profile")
+    agent.add_argument("--note", action="append", default=[], help="Expose a named managed note to this native turn")
+    agent.add_argument("--client-home", type=Path, help="Use a dedicated native account home with restricted public TLS networking")
     agent.add_argument("--setup", action="store_true", help="Run workspace setup again")
     agent.add_argument("--context-statusline", action="store_true", help="Use the Claude context status line for this launch")
     company_source.add_commands(commands)
@@ -941,7 +956,7 @@ def build_parser():
         commands.add_parser("sync-skills")
     new = commands.add_parser("new")
     new.add_argument("kind", choices=(*records.KINDS, "pm-context"))
-    new.add_argument("path", help="Path inside studio/, starting with context/ or workspace/")
+    new.add_argument("path", help="Workspace-relative path in context/ or the appropriate work domain")
     new.add_argument("--title")
     new.add_argument("--parent")
     new.add_argument("--basis", choices=filing.BASES)
@@ -1203,7 +1218,8 @@ def main() -> int:
             print(json.dumps(session_journal.run(private, args), indent=2, ensure_ascii=False))
             return 0
         if args.command == "agent":
-            agent_session.launch(ROOT, args.client, context_statusline=args.context_statusline, setup=args.setup)
+            agent_session.launch(ROOT, args.client, context_statusline=args.context_statusline, setup=args.setup,
+                                 check_host=args.check_host, notes=args.note, client_home=args.client_home)
             return 0
         if args.command == "customize":
             if args.operation == "apply":
@@ -1288,6 +1304,7 @@ def main() -> int:
             local_ui.serve(ROOT, args.no_open, prepare_private_write, run_initiative_work, screen=args.screen)
             return 0
         if args.command == "new":
+            args.path = layout.work_path(args.path)
             workspace.repo(ROOT, "workspace")
             settings = prepare_private_write(ROOT)
             if any(ARTIFACT.search(Path(part).stem) for part in Path(args.path).parts):
@@ -1399,7 +1416,8 @@ def main() -> int:
                 if company_onboarding.active(private, kind="pm"):
                     raise ValueError("Finish the active PM capture before separately confirming the structured remit")
                 context_capture.write_remit(private, remit)
-            print(f"Saved studio/{context_capture.REMIT_PATH}.")
+            saved = context_capture.REMIT_PATH if storage.selected_workspace(ROOT) else f"studio/{context_capture.REMIT_PATH}"
+            print(f"Saved {saved}.")
             return 0
         if args.command in {"company-onboarding", "pm-onboarding", "product-onboarding"}:
             kind = args.command.split("-", 1)[0]

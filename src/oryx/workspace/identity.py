@@ -293,6 +293,9 @@ def move(root, rid, destination, expected):
         else:
             # Existing governed files have path-bound readers and approval hashes.
             # New independent domain documents can move without invalidating those readers.
+            from . import layout
+            if any(layout.governed_kind(n) or layout.initiative_work_identity(n) for n in (source_name, name)):
+                raise ValueError("This product workflow binds its domain path. Retain the original home")
             if source_name.split("/")[0] in {"workspace","context","customizations","notes","README.md"} or name.split("/")[0] in {"workspace","context","customizations","notes","README.md"}:
                 raise ValueError("A legacy caller binds this path; retain the original while migrating that caller")
             if any(name in other["aliases"] for other in registry["records"].values()):

@@ -8,9 +8,13 @@ import re
 import stat
 import subprocess
 import tempfile
-from uuid import UUID
 
+from oryx.workspace.location import workspace_id
 from . import archive
+
+
+class ConcurrentEdit(ValueError):
+    """The PM's displaced settings need explicit reconciliation."""
 
 
 FIELD = re.compile(rb'("system_version"\s*:\s*)"([0-9]+\.[0-9]+\.[0-9]+)"')
@@ -34,9 +38,8 @@ def validate(folder, identifier=None):
     marker = archive.regular(archive.local_path(folder / ".oryx/workspace.json"))
     if marker.stat().st_size > 1024:
         raise ValueError("Invalid Workspace identity")
-    record = json.loads(marker.read_bytes(), object_pairs_hook=archive.unique_object)
-    actual = record.get("id") if isinstance(record, dict) and set(record) == {"id"} else None
-    if not isinstance(actual, str) or str(UUID(actual)) != actual or identifier and actual != identifier:
+    actual = workspace_id(folder)
+    if identifier and actual != identifier:
         raise ValueError("Selected Workspace identity changed")
     metadata = folder / ".git"
     if metadata.resolve() != metadata or not metadata.is_dir():
@@ -119,17 +122,33 @@ def apply(plan, *, reverse=False):
                 return "unchanged"
             target = version_change(live, initial, final)
         mode = stat.S_IMODE(path.stat().st_mode)
-        with tempfile.NamedTemporaryFile(dir=folder, delete=False) as stage:
+        # Keep the actual displaced inode in Git metadata. An editor can
+        # replace a path between its last checksum check and our atomic swap,
+        # or finish editing through an already-open descriptor after the swap.
+        from oryx.workspace.publication import swap
+        backup = archive.local_path(folder / ".git/oryx-update-settings" / ref.rsplit("/", 1)[1])
+        backup.parent.mkdir(mode=0o700, exist_ok=True)
+        archive.check_private_dir(backup.parent)
+        backup.mkdir(mode=0o700, exist_ok=True)
+        archive.check_private_dir(backup)
+        archive.sync_directory(backup.parent.parent)
+        archive.sync_directory(backup.parent)
+        with tempfile.NamedTemporaryFile(dir=backup, prefix="settings-", delete=False) as stage:
             temp = Path(stage.name)
-            try:
-                os.fchmod(stage.fileno(), mode)
-                stage.write(target)
-                stage.flush()
-                os.fsync(stage.fileno())
-                if read_settings(folder)[1] != live:
-                    raise ValueError("Concurrent Workspace edit needs reconciliation")
-                os.replace(temp, path)
-                archive.sync_directory(folder)
-            finally:
-                temp.unlink(missing_ok=True)
+            os.fchmod(stage.fileno(), mode)
+            stage.write(target)
+            stage.flush()
+            os.fsync(stage.fileno())
+            if read_settings(folder)[1] != live:
+                raise ValueError("Concurrent Workspace edit needs reconciliation")
+            swap(temp, path)
+            archive.sync_directory(folder)
+            archive.sync_directory(backup)
+            # A changed preimage stays available for reconciliation.
+            info = temp.lstat()
+            if not stat.S_ISREG(info.st_mode) or info.st_nlink != 1 or info.st_size != len(live):
+                raise ConcurrentEdit("Concurrent Workspace settings edit preserved in the update preimages")
+            with archive.regular(temp).open("rb") as displaced:
+                if displaced.read(len(live) + 1) != live:
+                    raise ConcurrentEdit("Concurrent Workspace settings edit preserved in the update preimages")
     return "reverted" if reverse else "updated"

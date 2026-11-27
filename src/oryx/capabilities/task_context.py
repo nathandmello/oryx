@@ -40,12 +40,15 @@ FOLLOW_UP = re.compile(r"^(?:please\s+)?(?:(?:can|could|would) you\s+(?:please\s
 SWITCH = re.compile(
     r"^(?:(?:please|now|let's|let’s)\s+)*(?:switch|move)\s+(?:from\b.+?\b)?to\s+", re.I
 )
-WORK_RECORD = re.compile(r"(?:(?:studio|private|workspace)/)?(workspace/[\w./-]+?\.md)\b")
+WORK_RECORD = re.compile(
+    r"(?:(?:studio|private|workspace)/)?(workspace/[\w./-]+?\.md)\b"
+    r"|(?<![\w./-])(?:(?:studio|private)/)?((?:initiatives|roadmaps|goals|problems|strategies|experiments|backlogs)/[\w./-]+?\.md)\b"
+)
 # Personal methods can contain examples with the same names as real PM records.
 CUSTOMIZATION_PATH = re.compile(
-    r"""(["'`])(?:(?:/[^"'\x60\n]*/)?(?:studio|private|workspace)/)?customizations/[^"'\x60\n]+\1"""
-    r"|<(?:(?:/[^<>\n]*/)?(?:studio|private|workspace)/)?customizations/[^<>\n]+>"
-    r"|(?:(?<![\w.-])(?:studio|private|workspace)/|(?<![\w./-]))customizations/[\w./%+-]+", re.I)
+    r"""(["'`])(?:(?:/[^"'\x60\n]*/)?(?:studio|private|workspace)/)?(?:\.oryx/)?customizations/[^"'\x60\n]+\1"""
+    r"|<(?:(?:/[^<>\n]*/)?(?:studio|private|workspace)/)?(?:\.oryx/)?customizations/[^<>\n]+>"
+    r"|(?:(?<![\w.-])(?:studio|private|workspace)/|(?<![\w./-]))(?:\.oryx/)?customizations/[\w./%+-]+", re.I)
 STAKEHOLDER_QUERY = re.compile(
     r"\bstakeholder (?:map|context)\b|\b(?:list|show|map|who are) (?:me )?(?:the |my |our )?stakeholders\b|"
     r"\breporting (?:lines?|relationships?|structure)\b|"
@@ -168,7 +171,7 @@ def resolved_artifact(name, documents):
         if doc["company"]:
             return {"company": True, "product": None, "area": None, "initiative": None}
         return {key: doc[key] for key in ("product", "area", "initiative")}
-    parts = Path(name).parts
+    parts = layout.work_parts(name)
     products = {doc["product"] for doc in documents.values() if doc["product"]}
     if len(parts) >= 3 and parts[0] == "workspace":
         product = parts[2] if len(parts) >= 4 else Path(parts[2]).stem
@@ -559,6 +562,15 @@ def resolve(private, prompt="", *, cwd=None, previous=None, explicit=None, expla
 
 def resolve_inventory(private, prompt, *, cwd, previous, explicit, explain, include_history,
                       work_record=None, new_owner=None, allow_profiles=True, prior_audience=None, audience_state=None):
+    from oryx.workspace import publication
+    with publication.view(storage.core_for(private)):
+        return resolve_locked(private, prompt, cwd=cwd, previous=previous, explicit=explicit, explain=explain,
+                              include_history=include_history, work_record=work_record, new_owner=new_owner,
+                              allow_profiles=allow_profiles, prior_audience=prior_audience, audience_state=audience_state)
+
+
+def resolve_locked(private, prompt, *, cwd, previous, explicit, explain, include_history, work_record,
+                   new_owner, allow_profiles, prior_audience, audience_state):
     prompt = CUSTOMIZATION_PATH.sub(" ", prompt)
     through = as_of(prompt)
 
@@ -596,6 +608,11 @@ def resolve_inventory(private, prompt, *, cwd, previous, explicit, explain, incl
                 result["stakeholder_profiles"] = profiles
         if result["status"] != "ambiguous" and conversation.strategy_activity(prompt, result["scope"].get("product")):
             result["activity_check"] = conversation.strategy_prerequisite(result)
+        if result["status"] != "ambiguous":
+            from oryx.capabilities import work_retrieval
+            supporting = work_retrieval.search(private, prompt, result["scope"], tokens, IDENTIFIER, record=work_record)
+            if supporting:
+                result["work_evidence"] = supporting
         return result, docs
 
     denied = source_evidence.denied_references(private)
@@ -994,10 +1011,11 @@ def resolve_current(private, prompt, cwd, previous, explicit, explain, include_h
 
 
 def catalog(private):
-    denied = source_evidence.denied_references(private)
+    from oryx.capabilities import work_retrieval
+    denied = work_retrieval.permitted_references(private)
     docs = context_documents(private)
     items = []
-    for relative, path in private_files(private, {"context", "workspace"}):
+    for relative, path in private_files(private, {"context", "workspace", *work_retrieval.WORK}, denied=denied):
         name = relative.as_posix()
         text = docs[name]["text"] if name in docs else path.read_text(encoding="utf-8")
         if denied:
@@ -1005,11 +1023,13 @@ def catalog(private):
             if any(source_evidence.withheld(denied, row[1], name) for row in sources):
                 continue
         marker = records.MARKER.match(text)
+        if relative.parts[0] in work_retrieval.WORK and (not marker or marker[1] not in records.KINDS):
+            continue
         state, _ = records.work_state(text)
         items.append({"record": name, "title": title(relative, text),
                       "type": marker[1] if marker else "pm-context" if name == layout.PROFILE else "working-notes",
                       "id": state.get("ID"), "state": state.get("State"), **resolved_artifact(name, docs)})
-    if denied != source_evidence.denied_references(private):
+    if denied != work_retrieval.permitted_references(private):
         raise ValueError("Source permissions changed during retrieval. Open the catalog again.")
     return items
 
@@ -1073,7 +1093,7 @@ def turn_context(private, prompt, *, cwd=None, saved=None, explicit=None, work_r
         prior_scope = {}
         can_continue = True
     named = WORK_RECORD.search(CUSTOMIZATION_PATH.sub(" ", prompt)) if work_record is None else None
-    selected_owner = work_record or (named[1] if named else None)
+    selected_owner = work_record or ((named[1] or named[2]) if named else None)
     selected_new_owner = selected_owner is not None and selected_owner != previous.get("record")
     checkpoint = conversation.read_checkpoint(private, work_record) if work_record is not None else None
     audience_state = {}

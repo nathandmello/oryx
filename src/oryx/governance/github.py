@@ -294,7 +294,28 @@ class Connection:
         return {"ruleset":rule_id,"check_run":positive(trusted[0]["id"]),"github_review_decision":"APPROVED",
                 "require_current_base":effective.get("required_status_checks",{}).get("strict_required_status_checks_policy") is True}
 
+    def sync_inventory(self, scope, repository, organization, branch):
+        reg, path, _ = self.repo(scope)
+        if (reg["id"], reg["owner_id"], reg["branch"]) != (repository, organization, branch):
+            raise PermissionError("GitHub repository differs from the connected scope")
+        head = self.tip(path, reg)
+        rows = []
+        for rid in sorted(reg.get("records", {})):
+            record = self.registered_record(reg, path, rid, head)
+            rows.append({"id":record["id"], "revision":record["source_revision"]})
+        confirmed, path, _ = self.repo(scope)
+        if ((confirmed["id"], confirmed["owner_id"], confirmed["branch"]) != (repository, organization, branch)
+                or self.tip(path, confirmed) != head):
+            raise ValueError("The GitHub scope changed during synchronization")
+        return {"scope":scope, "repository_id":repository, "official_revision":head, "records":rows}
+
     def perform(self,op,body):
+        if op == "github-sync":
+            shape(body, ("scope", "repository", "organization", "expected_actor", "branch"))
+            if self.account != positive(body["expected_actor"]):
+                raise PermissionError("The current GitHub user differs from the connected scope")
+            return self.sync_inventory(body["scope"], positive(body["repository"]), positive(body["organization"]),
+                                       identifier(body["branch"]))
         candidate=op in {"github-policy","github-verify"}
         if op=="github-record":
             shape(body,("scope","id"),("revision",))
@@ -308,7 +329,8 @@ class Connection:
         reg,path,current=self.repo(body["scope"])
         result={"scope":body["scope"],"destination":reg["slug"],"actor":self.login}
         if op=="github-status":
-            return {**result,"repository_id":reg["id"],"official_revision":self.tip(path,reg),
+            return {**result,"repository_id":reg["id"],"organization_id":reg["owner_id"],"actor_id":self.account,
+                    "official_branch":reg["branch"],"official_revision":self.tip(path,reg),
                     "visibility":current["visibility"],"observed_permissions":current["permissions"],
                     "repository_settings":{key:current[key] for key in ("has_pull_requests","pull_request_creation_policy","allow_forking","role_name") if key in current},
                     "pull_request_creation":"requires provider decision","merge":"requires provider decision"}
@@ -633,6 +655,8 @@ def draft_input(client,private,body):
         if row["id"]!=body["id"]:
             raise ValueError("Supply the stable private source ID")
         data=raw.decode("utf-8")
+        if stamp is None:
+            raise ValueError("The earlier portable archive did not record the source update time")
         when=datetime.fromtimestamp(stamp,timezone.utc)
     else:
         raise ValueError("Choose the enrolled destination-first draft or private transfer source")

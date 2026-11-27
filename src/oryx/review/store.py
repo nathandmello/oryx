@@ -198,12 +198,18 @@ class Workspace:
             os.close(fd)
 
     @staticmethod
-    def write_generation(path, head, texts):
+    def write_generation(path, head, texts, *, unchanged=None):
         metadata = encoded(head)
         if len(metadata) > MAX_METADATA:
             raise ValueError("Review metadata exceeds the supported limit")
         for name, value in texts.items():
-            publish_file(path / name, value.encode("utf-8"), mode=0o400)
+            target = path / name
+            publish_file(target, value.encode("utf-8"), mode=0o400)
+            if unchanged and name in unchanged:
+                info = unchanged[name]
+                os.utime(target, ns=(info.st_atime_ns, info.st_mtime_ns), follow_symlinks=False)
+                with target.open("rb") as stream:
+                    os.fsync(stream.fileno())
         publish_file(path / HEAD, metadata, mode=0o400)
         # Linux needs directory write permission to move its parent entry across directories.
         # The private PM directory and restricted host mounts are the access boundary.
@@ -296,9 +302,15 @@ class Workspace:
             next_head = {**head, "governing": sorted(governed), "files": {k: sha(v.encode()) for k, v in updated.items()},
                          "receipts": {**head["receipts"], identifier: receipt}}
             generation = self.generation()
-            self.write_generation(generation, next_head, updated)
+            unchanged = {name: (self.official / name).lstat()
+                         for name, value in updated.items() if name in texts and value == texts[name]}
+            self.write_generation(generation, next_head, updated, unchanged=unchanged)
             if self.proposal(identifier) != request or self.snapshot() != (head, texts):
                 raise ValueError("A draft or official record changed during preparation")
+            for name, previous in unchanged.items():
+                latest = (self.official / name).lstat()
+                if not os.path.samestat(previous, latest) or latest.st_mtime_ns != previous.st_mtime_ns:
+                    raise ValueError("An unchanged sibling was edited during review. Review its current revision")
             rename_dir(generation, self.official, exchange=True)
             return {"state": "applied", "receipt": receipt}
 
@@ -382,7 +394,8 @@ def checked_paths(private):
         for name in [HEAD, *head["files"]]:
             remember(ws.official / name)
     from . import handoff
-    handoff_head = private / "workspace/handoffs" / HEAD
+    from oryx.workspace import layout
+    handoff_head = private / layout.work_path("workspace/handoffs", private) / HEAD
     if handoff_head.exists():
         handoff.receipt_state(ws)
         remember(handoff_head)

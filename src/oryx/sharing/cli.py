@@ -24,6 +24,8 @@ def prepare(private, body, call=request):
             "kind":body.get("kind","record"),"id":body["id"],"references":body.get("references",[])}
     if op=="transfer" or (op in {"send","publish"} and "source_scope" not in body):
         source,data,modified=transfer.source(private,body["id"])
+        if modified is None:
+            raise ValueError("The earlier portable archive did not record the source update time")
         intent.update(source={k:source[k] for k in ("workspace_id","id","revision")},content=data.decode(),
                       last_updated=datetime.fromtimestamp(modified,timezone.utc).isoformat())
     elif op in {"send","publish"}:
@@ -77,8 +79,9 @@ def export(private,body,call=request):
         text,stamp=src["record"]["content"],src["record"]["last_updated"]
     else:
         _,data,modified=transfer.source(private,body["id"])
-        text,stamp=data.decode(),datetime.fromtimestamp(modified,timezone.utc).isoformat()
-    rendered=rendition(fmt,text,stamp)
+        text = data.decode()
+        stamp = datetime.fromtimestamp(modified,timezone.utc).isoformat() if modified is not None else None
+    rendered=rendition(fmt,text,stamp or "Unavailable in the earlier portable archive")
     result={"format":fmt,"mime":MIME[fmt],"source_last_updated":stamp,"sha256":digest(rendered),"size":len(rendered)}
     if body.get("output"):
         path=Path(body["output"])

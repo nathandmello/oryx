@@ -149,6 +149,12 @@ def repository_lock(private):
             _repository_handles.reset(token)  # Closing the descriptor releases its lock.
 
 
+def prepare_repository_lock(private):
+    """Create the permanent lock inode during activation, before the first read-only request."""
+    with repository_lock(private):
+        pass
+
+
 @contextmanager
 def snapshot_reader(path):
     """Read the exact bytes of a held lock without reopening its mandatory Windows range."""
@@ -180,6 +186,9 @@ def writer_lock(private):
     with _writer_locks(private):
         token = _writer_scope.set(scope)
         try:
+            if os.environ.get("ORYX_WORKSPACE"):
+                from . import publication
+                publication.recover(private)
             yield
         finally:
             _writer_scope.reset(token)

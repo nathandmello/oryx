@@ -18,6 +18,7 @@ The installer prints the active Core directory. Resolve it again when opening a 
 
 ```sh
 ORYX_CORE=$(python3 "$TRUSTED_BOOTSTRAP" current --store "$INSTALL_STORE")
+export PATH="$ORYX_CORE/bin:$PATH"
 export ORYX_WORKSPACE=/absolute/path/to/my-workspace
 "$ORYX_CORE/bin/oryx" check --system-only
 ```
@@ -27,8 +28,9 @@ For an existing Workspace, select its original identity and location. Keep older
 
 ## Start or resume work
 
-Use the local CLI for this candidate. Protected Codex and Claude sessions require a qualified review writer for external Workspaces.
-Initialize a fresh Workspace explicitly.
+Run `oryx valet setup` in your foreground terminal to choose local storage, connect an existing private GitHub repository or create one. Setup offers to restore an existing remote Workspace into your selected directory. Creating a repository and sending the first commit require separate decisions. Protected host startup and its platform requirements are described in [local review](external-review.md).
+
+For local setup, you can also supply the owner directly.
 
 ```sh
 "$ORYX_CORE/bin/oryx" init-workspace --owner "Your name"
@@ -36,6 +38,8 @@ Initialize a fresh Workspace explicitly.
 ```
 
 Workspace paths in the playbooks start at your selected private Git root. A checkout example using `studio/context/` means its `context/`.
+Fresh Workspaces use visible work domains such as `initiatives/`, `roadmaps/` and `experiments/`. Personal rules and views live in `.oryx/customizations/`. Fresh search indexes live in `.oryx/cache/` and rebuild from permitted source records. Existing Workspaces keep their original paths.
+
 Core resources such as `playbook/`, `templates/` and host skills stay in Core. From any directory, use the printed launcher path for commands.
 
 ## Update and recover

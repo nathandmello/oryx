@@ -186,7 +186,7 @@ def structure_review(root, private, state, originals):
     for path in storage.inventory(private):
         relative = path.relative_to(private)
         name = relative.as_posix()
-        if (relative.parts[0] not in {"context", "workspace"} or path.suffix != ".md"
+        if (layout.work_parts(relative)[0] not in {"context", "workspace"} or path.suffix != ".md"
                 or relative.name == "README.md" or name in originals
                 or any(part.startswith(".") or part in {"secrets", "sources"} for part in relative.parts)
                 or path.resolve() != path or not path.is_file()):
