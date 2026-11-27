@@ -921,7 +921,8 @@ def build_parser():
     align.add_argument("--digest")
     align.add_argument("--note")
     align.add_argument("--backup", nargs="+", metavar="PATH")
-    commands.add_parser("sync-skills")
+    if not (ROOT / "oryx-release-manifest.json").exists():
+        commands.add_parser("sync-skills")
     new = commands.add_parser("new")
     new.add_argument("kind", choices=(*records.KINDS, "pm-context"))
     new.add_argument("path", help="Path inside studio/, starting with context/ or workspace/")
