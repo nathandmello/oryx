@@ -10,7 +10,6 @@ Keep each repository's history, branches, staging area, and remotes separate. Op
 | --- | --- |
 | Save, commit, sync, pull, or push my PM work | `workspace` |
 | Update the toolkit, system, skills, or templates | `system` |
-| Contribute a shared system improvement | `system`, on a contribution branch |
 | Check for system updates | `system fetch`; review before a pull |
 
 The command name `workspace` selects the whole private repository, including context.
@@ -47,7 +46,7 @@ The destinations must differ. Match the remote URL to its confirmed setting befo
 
 Pass an explicit owner and repository to GitHub tools and CLI commands. Derive them from the confirmed target, never the current directory.
 
-Shared pull requests use system contribution branches. Private PM work remains in its private repository.
+Private PM work remains in its private repository.
 
 ## Pull and push
 
@@ -80,46 +79,3 @@ Use explicit private paths when the agent searches or checks PM work. Root Git c
 Record system and workspace format versions together. Structural changes need a tested migration and a recovery point in the private repository.
 
 Keep migrations small. Session-start alignment applies local upgrades after backup. Network operations require an authorised Git action.
-
-## Existing workspaces at release
-
-For each shipped change, state which existing records it affects and how a consumer can verify alignment.
-
-| Effect | Release requirement |
-| --- | --- |
-| New work only | Explain why existing records remain valid. |
-| Existing records need review | Define how to find candidates, inspect original evidence, resolve each finding, and verify the affected records. |
-| Stored format changes | Supply a tested migration, compatibility requirements, a read-only preview, and a recovery procedure. |
-
-Test direct shared Git pulls and released updaters on populated installations. Include supported skipped releases and same-format updates.
-
-Check whether older supported clients can read newly written records. For incompatible changes, document how the previous updater reaches the migration.
-
-For a cleanup, test an affected record, a legitimate exception, an interrupted run, and a second run after completion.
-
-Ship each required cleanup's identifier, detection rule, and instructions inside the shared checkout. Track progress privately, separately from the installed system version.
-
-Provide a read-only check after a system pull and at session start. Support direct Git updates, restored workspaces, and clients with hooks disabled.
-
-Preview affected paths and reasons. Preserve local edits and untracked records in a recoverable snapshot before applying approved changes.
-
-Explain the update's benefits and offer the user a choice before transforming existing artifacts.
-
-Verify links, stable IDs, citations, and the intended outcome. Keep missing evidence or deferred work visible at the affected record.
-
-Follow [the installed-workspace upgrade procedure](updates.md) for all existing private records, regardless of filename.
-
-## Codex review before publication
-
-Merging to the default branch makes changes available to consumers who pull it. Apply this process to every oryx release. Compare the candidate with the last published version and the PM requirements.
-
-| Stage | Evidence required to advance |
-| --- | --- |
-| Implement | Contribution branch, dependency review, passing system check and full test suite. |
-| Pull request | Open ready for review. Describe consumer impact, recovery and verification limits. |
-| Code review | Codex reviews the current PR head. Address findings, test fixes and obtain a fresh review. |
-| Security review | Codex Security reviews the same head. Require an explicit passing security result. |
-| Merge | The agent may merge the exact reviewed SHA when both reviews and required CI pass. Respect repository protections. |
-| Publication | An authorised merge starts publication. Verify the tested tree and publish the version in the merged commit. |
-
-Require `check` and `review` before merging. Follow [release setup and recovery](publication.md).

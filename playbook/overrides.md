@@ -15,7 +15,7 @@ python3 tools/pm.py agent claude
 Linux and WSL2 require bubblewrap with working user namespaces. macOS uses sandbox-exec.
 The launcher aligns Studio before startup. Core and [initiative approval receipts](initiative-approvals.md) are read-only during the session.
 
-Run system updates from the PM's terminal. Use a separate development checkout for shared contributions.
+Run system updates from the PM's terminal.
 Review and trust the project hooks. Use local filesystem tools for edits to oryx files.
 Remote connectors and external services have their own permissions.
 

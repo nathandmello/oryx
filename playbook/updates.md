@@ -13,10 +13,10 @@ Private format 2 applies.
 | 0.10.0 | Adds [decision coaching](conversation.md), [weekly review](decision-review.md), and [forecasts](decision-forecasts.md). |
 | 0.8.1 | Keeps [dated backlog reviews](initiative-views.md#read-the-views) visible when an approval is stale. |
 | 0.8.0 | Adds launch evidence history, decision conflict reviews, guardrail readings, and measurement corrections. |
-| 0.6.1 | Requires [browser impact evidence](local-ui.md#review-workflow-changes) for changes to roadmap, task, and launch checklist workflows. |
+| 0.6.1 | Requires browser impact evidence for changes to roadmap, task, and launch checklist workflows. |
 | 0.6.0 | Opens [roadmaps, PM tasks, and launch checklists](local-ui.md) in a local browser. The app reads and updates existing private records. |
 | 0.5.0 | Adds [oryx commands](commands.md) and optional [reply preferences](working.md#reply-preferences). Existing profiles use oryx defaults. |
-| 0.4.2 | Automates [publication](publication.md). |
+| 0.4.2 | Automates publication. |
 
 Release 0.4.1 adds [initiative tasks and launch checklists](initiative-work.md) on demand.
 
